@@ -23,7 +23,9 @@ export function TunerDemo() {
   const [reading, setReading] = useState<Reading | null>(null)
   const [inTuneStreak, setInTuneStreak] = useState(0)
   const streamRef = useRef<MediaStream | null>(null)
+  const nodesRef = useRef<{ source: MediaStreamAudioSourceNode; analyser: AnalyserNode } | null>(null)
   const timerRef = useRef<number | null>(null)
+  const startingRef = useRef(false)
 
   useEffect(() => {
     return () => {
@@ -33,8 +35,11 @@ export function TunerDemo() {
   }, [])
 
   function stop(): void {
+    startingRef.current = false
     if (timerRef.current !== null) window.clearInterval(timerRef.current)
     timerRef.current = null
+    nodesRef.current?.source.disconnect()
+    nodesRef.current = null
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
     setRunning(false)
@@ -43,17 +48,27 @@ export function TunerDemo() {
   }
 
   async function start(): Promise<void> {
+    // 防重入：getUserMedia 挂起期间再点会导致流与 interval 双份泄漏
+    if (startingRef.current || streamRef.current) return
+    startingRef.current = true
+    let stream: MediaStream | null = null
     try {
       setError('')
       const ctx = getCtx()
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       })
+      // 等待授权期间可能已被 stop/卸载
+      if (!startingRef.current) {
+        stream.getTracks().forEach((t) => t.stop())
+        return
+      }
       streamRef.current = stream
       const source = ctx.createMediaStreamSource(stream)
       const analyser = ctx.createAnalyser()
       analyser.fftSize = 2048
       source.connect(analyser)
+      nodesRef.current = { source, analyser }
 
       const buf = new Float32Array(analyser.fftSize)
       const detector = PitchDetector.forFloat32Array(analyser.fftSize)
@@ -77,6 +92,9 @@ export function TunerDemo() {
       setRunning(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      stream?.getTracks().forEach((t) => t.stop())
+    } finally {
+      startingRef.current = false
     }
   }
 

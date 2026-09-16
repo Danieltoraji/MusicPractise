@@ -13,6 +13,13 @@ const COUNT_IN = 4 // 拍
 
 type Phase = 'idle' | 'playing' | 'done'
 
+/** 输入防御：非数字保持原值，越界 clamp */
+function parseNum(raw: string, lo: number, hi: number, prev: number): number {
+  const v = Number(raw)
+  if (!Number.isFinite(v)) return prev
+  return Math.min(hi, Math.max(lo, v))
+}
+
 export function RhythmDemo() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [activeBeat, setActiveBeat] = useState(-1)
@@ -91,6 +98,7 @@ export function RhythmDemo() {
     const onKey = (e: KeyboardEvent): void => {
       if (e.code === 'Space') {
         e.preventDefault()
+        if (e.repeat) return // 长按自动重复会灌入大量假 tap
         registerTap()
       }
     }
@@ -107,10 +115,28 @@ export function RhythmDemo() {
 
       <div className="rhythm-controls">
         <label>
-          容差 <input type="number" value={toleranceMs} min={30} max={400} step={10} onChange={(e) => setToleranceMs(Number(e.target.value))} /> ms
+          容差{' '}
+          <input
+            type="number"
+            value={toleranceMs}
+            min={30}
+            max={400}
+            step={10}
+            onChange={(e) => setToleranceMs(parseNum(e.target.value, 30, 400, toleranceMs))}
+          />{' '}
+          ms
         </label>
         <label>
-          延迟校准 <input type="number" value={latencyMs} min={-200} max={200} step={10} onChange={(e) => setLatencyMs(Number(e.target.value))} /> ms
+          延迟校准{' '}
+          <input
+            type="number"
+            value={latencyMs}
+            min={-200}
+            max={200}
+            step={10}
+            onChange={(e) => setLatencyMs(parseNum(e.target.value, -200, 200, latencyMs))}
+          />{' '}
+          ms
         </label>
       </div>
 

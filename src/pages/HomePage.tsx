@@ -13,24 +13,27 @@ export function HomePage({ levels }: { levels: Record<string, LevelDoc> }) {
 
       <h2>示例关卡</h2>
       <div className="cards">
-        {Object.entries(levels).map(([id, doc]) => (
-          <a key={id} className="card" href={`#/level/${id}`}>
-            <div className="card-kind">关卡 · {doc.meta.difficulty ? '★'.repeat(Number(doc.meta.difficulty ?? 1)) : ''}</div>
-            <h3>{String(doc.meta.title)}</h3>
-            <p>{String(doc.meta.description ?? '')}</p>
-            <div className="tags">
-              {(Array.isArray(doc.meta.tags) ? (doc.meta.tags as string[]) : []).map((t) => (
-                <span key={t} className="tag">
-                  {t}
-                </span>
-              ))}
-            </div>
-            <div className="card-meta">
-              {doc.content.components.length} 个组件 · {doc.content.logic.rules.length} 条规则 ·{' '}
-              {doc.content.questions.length} 道题
-            </div>
-          </a>
-        ))}
+        {Object.entries(levels).map(([id, doc]) => {
+          const diff = Math.min(5, Math.max(1, Number(doc.meta.difficulty) || 1))
+          return (
+            <a key={id} className="card" href={`#/level/${id}`}>
+              <div className="card-kind">关卡 · {'★'.repeat(diff)}</div>
+              <h3>{String(doc.meta.title)}</h3>
+              <p>{String(doc.meta.description ?? '')}</p>
+              <div className="tags">
+                {(Array.isArray(doc.meta.tags) ? (doc.meta.tags as string[]) : []).map((t) => (
+                  <span key={t} className="tag">
+                    {t}
+                  </span>
+                ))}
+              </div>
+              <div className="card-meta">
+                {doc.content.components.length} 个组件 · {doc.content.logic.rules.length} 条规则 ·{' '}
+                {doc.content.questions.length} 道题
+              </div>
+            </a>
+          )
+        })}
       </div>
 
       <h2>风险验证 Demo</h2>
