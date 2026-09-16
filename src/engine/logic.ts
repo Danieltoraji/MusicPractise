@@ -62,44 +62,106 @@ interface DispatchCtx {
 export class LogicEngine {
   vars: Record<string, Json>
   private host: LogicHost
+  private baseRules: Rule[]
   private byEvent: Map<string, Rule[]>
   private initialVars: Record<string, Json>
 
   constructor(program: LogicProgram, host: LogicHost) {
     this.host = host
+    this.baseRules = program.rules
     this.initialVars = structuredClone(program.variables ?? {})
     this.vars = structuredClone(this.initialVars)
-    this.byEvent = new Map()
-    for (const rule of program.rules) {
-      const list = this.byEvent.get(rule.on) ?? []
-      list.push(rule)
-      this.byEvent.set(rule.on, list)
-    }
+    this.byEvent = this.indexRules(this.baseRules)
   }
 
-  /** 装载期校验：所有表达式可解析（提前暴露语法错误） */
-  static lint(program: LogicProgram): string[] {
+  private indexRules(rules: Rule[]): Map<string, Rule[]> {
+    const map = new Map<string, Rule[]>()
+    for (const rule of rules) {
+      const list = map.get(rule.on) ?? []
+      list.push(rule)
+      map.set(rule.on, list)
+    }
+    return map
+  }
+
+  /**
+   * 替换动态规则集（题目 logicPatch.appendRules 用）：
+   * 以基础规则 + 追加规则重建索引，变量不受影响。
+   */
+  setDynamicRules(rules: Rule[]): void {
+    this.byEvent = this.indexRules(rules)
+  }
+
+  /** 装载期校验上下文：提供组件 id 集合时可做悬空引用检查 */
+  static lint(program: LogicProgram, ctx?: { componentIds?: Iterable<string> }): string[] {
     const errors: string[] = []
-    const check = (src: string, where: string) => {
+    const compIds = ctx?.componentIds ? new Set(ctx.componentIds) : null
+
+    // 1) 表达式语法（解析期错误前置）
+    const checkSyntax = (src: string, where: string) => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
         evalExpr(src, { event: {}, q: null, v: {} })
       } catch (e) {
-        // 只区分语法错误（解析期）；求值期错误（未知属性等）留给运行时
         if (e instanceof Error && /未闭合|无法识别|期望|意外|多余内容|嵌套过深|过长/.test(e.message)) {
           errors.push(`${where}: ${e.message}`)
         }
       }
     }
+
+    // 2) on/cmd 的组件引用存在性（内部事件 名字:名字 与 level 伪组件除外）
+    const checkCompRef = (cid: string, where: string) => {
+      if (!compIds || cid === 'level' || cid.includes(':')) return
+      if (!compIds.has(cid)) errors.push(`${where}: 引用不存在的组件 "${cid}"`)
+    }
+
     for (const rule of program.rules) {
-      rule.when?.forEach((w, i) => check(w, `规则 ${rule.id} when[${i}]`))
-      for (const [phase, list] of [['do', rule.do], ['else', rule.else ?? []]] as const) {
+      if (!rule.on.includes(':')) checkCompRef(rule.on.split('.')[0], `规则 ${rule.id} on`)
+      rule.when?.forEach((w, i) => checkSyntax(w, `规则 ${rule.id} when[${i}]`))
+      const isSetAction = (a: Action): a is Extract<Action, { set: string }> => 'set' in a
+      for (const [phase, list] of [
+        ['do', rule.do],
+        ['else', rule.else ?? []],
+      ] as const) {
         list.forEach((a, i) => {
           const where = `规则 ${rule.id} ${phase}[${i}]`
-          if ('expr' in a) check(a.expr, where)
+          if ('expr' in a) {
+            checkSyntax(a.expr, where)
+          } else if ('cmd' in a) {
+            checkCompRef(a.cmd.split('.')[0], where)
+          } else if (isSetAction(a)) {
+            if (program.variables && !(a.set in program.variables)) {
+              errors.push(`${where}: set 未声明变量 "${a.set}"（请在 variables 中声明）`)
+            }
+          }
         })
       }
     }
+
+    // 3) emit 触发图环检测（规则 A 发事件点亮规则 B、B 又发事件回到 A）
+    const byEvent = new Map<string, Rule[]>()
+    for (const rule of program.rules) {
+      const list = byEvent.get(rule.on) ?? []
+      list.push(rule)
+      byEvent.set(rule.on, list)
+    }
+    const emitTargets = (rule: Rule): string[] =>
+      [...rule.do, ...(rule.else ?? [])].filter((a): a is Extract<Action, { emit: string }> => 'emit' in a).map((a) => a.emit)
+    const state = new Map<string, 1 | 2>()
+    const visit = (rule: Rule): void => {
+      state.set(rule.id, 1)
+      for (const ev of emitTargets(rule)) {
+        for (const next of byEvent.get(ev) ?? []) {
+          if (state.get(next.id) === 1) {
+            errors.push(`规则触发环: ${rule.id} → ${next.id}（运行时会被级联预算拦截，应修正逻辑）`)
+          } else if (!state.has(next.id)) {
+            visit(next)
+          }
+        }
+      }
+      state.set(rule.id, 2)
+    }
+    for (const rule of program.rules) if (!state.has(rule.id)) visit(rule)
+
     return errors
   }
 

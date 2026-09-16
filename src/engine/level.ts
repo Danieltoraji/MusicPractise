@@ -33,8 +33,10 @@ export interface Question {
   hints?: { text: string }[]
   explanation?: string
   logicPatch?: {
+    /** 装载本题时 merge 进引擎变量（覆盖初值） */
     variables?: Record<string, Json>
-    appendRules?: never[] // v1 预留：追加规则（schema 已定义，运行时后续支持）
+    /** 本题期间生效的追加规则，换题/重开时移除 */
+    appendRules?: import('./logic').Rule[]
   }
 }
 
