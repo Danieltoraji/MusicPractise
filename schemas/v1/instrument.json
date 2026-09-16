@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://music-practise.local/schemas/v1/instrument.json",
+  "title": "乐器档案 v1（指法/把位显示器的数据源，本身可 UGC）",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "instrument" },
+    "id": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "meta": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Meta" },
+    "refs": { "type": "array", "items": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Ref" } },
+    "content": { "$ref": "#/$defs/InstrumentContent" }
+  },
+  "required": ["schemaVersion", "kind", "id", "version", "meta", "content"],
+  "additionalProperties": false,
+
+  "$defs": {
+    "Position": {
+      "type": "object",
+      "description": "一个可视位置：fretboard 为 {string,fret}；keyboard 为 {key}（相对档案几何的索引）",
+      "properties": {
+        "string": { "type": "integer", "minimum": 1 },
+        "fret": { "type": "integer", "minimum": 0 },
+        "key": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "InstrumentContent": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["fretboard", "keyboard", "custom"] },
+        "tuning": {
+          "type": "array",
+          "description": "fretboard：各弦空弦音（1弦在前）；keyboard：忽略",
+          "items": { "type": "object", "properties": { "midi": { "type": "integer", "minimum": 0, "maximum": 127 } }, "required": ["midi"], "additionalProperties": false }
+        },
+        "frets": { "type": "integer", "minimum": 1, "maximum": 36 },
+        "keyCount": { "type": "integer", "description": "keyboard：白键数量", "minimum": 1 },
+        "noteMap": {
+          "type": "object",
+          "description": "midi → 可视位置列表（同一音多个把位）",
+          "propertyNames": { "pattern": "^(12[0-7]|1[01][0-9]|[0-9]{1,2})$" },
+          "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/Position" }, "minItems": 1 }
+        },
+        "shapes": {
+          "type": "object",
+          "description": "命名指法/和弦把位库",
+          "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/Position" }, "minItems": 1 }
+        },
+        "geometry": { "description": "custom：自由几何描述，由对应渲染器解释" }
+      },
+      "required": ["type"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "fretboard" } } },
+          "then": { "required": ["tuning", "frets", "noteMap"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "keyboard" } } },
+          "then": { "required": ["keyCount", "noteMap"] }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://music-practise.local/schemas/v1/topic.json",
+  "title": "专题文档 v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "topic" },
+    "id": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "meta": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Meta" },
+    "refs": { "type": "array", "items": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Ref" } },
+    "content": {
+      "type": "object",
+      "properties": {
+        "levelIds": { "type": "array", "items": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" }, "minItems": 1 },
+        "brief": { "type": "string" }
+      },
+      "required": ["levelIds"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schemaVersion", "kind", "id", "version", "meta", "content"],
+  "additionalProperties": false
+}

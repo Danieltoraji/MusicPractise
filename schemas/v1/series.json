@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://music-practise.local/schemas/v1/series.json",
+  "title": "系列文档 v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "series" },
+    "id": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "meta": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Meta" },
+    "refs": {
+      "type": "array",
+      "description": "通常列出全部 topic（以及被 topic 间接引用的资源，导出时按闭包展开）",
+      "items": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Ref" }
+    },
+    "content": {
+      "type": "object",
+      "properties": {
+        "topicIds": { "type": "array", "items": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" }, "minItems": 1 },
+        "coverAsset": { "type": "string" }
+      },
+      "required": ["topicIds"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schemaVersion", "kind", "id", "version", "meta", "content"],
+  "additionalProperties": false
+}

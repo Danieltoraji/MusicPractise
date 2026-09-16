@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://music-practise.local/schemas/v1/level.json",
+  "title": "关卡文档 v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "level" },
+    "id": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "meta": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Meta" },
+    "refs": { "type": "array", "items": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Ref" } },
+    "content": {
+      "type": "object",
+      "properties": {
+        "components": { "type": "array", "items": { "$ref": "#/$defs/ComponentInstance" }, "maxItems": 64 },
+        "logic": { "$ref": "https://music-practise.local/schemas/v1/logic.json" },
+        "questions": { "type": "array", "items": { "$ref": "#/$defs/Question" }, "minItems": 1, "maxItems": 512 },
+        "flow": { "$ref": "#/$defs/Flow" }
+      },
+      "required": ["components", "logic", "questions"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schemaVersion", "kind", "id", "version", "meta", "content"],
+  "additionalProperties": false,
+
+  "$defs": {
+    "ComponentInstance": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "maxLength": 32 },
+        "type": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "visible": { "type": "boolean", "default": true },
+        "layout": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Layout" },
+        "props": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/JsonValue" },
+        "bindings": {
+          "type": "object",
+          "description": "绑定槽位 → 随题目注入的值",
+          "additionalProperties": { "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/BindingValue" }
+        }
+      },
+      "required": ["id", "type"],
+      "additionalProperties": false
+    },
+    "Question": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "prompt": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string" },
+            "audio": { "type": "string" },
+            "image": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "data": { "description": "任意 JSON，$q.data 供 bindings 与逻辑表达式读取" },
+        "scoring": {
+          "type": "object",
+          "properties": { "max": { "type": "number", "minimum": 0 } },
+          "additionalProperties": false
+        },
+        "hints": { "type": "array", "items": { "type": "object", "properties": { "text": { "type": "string" } }, "required": ["text"], "additionalProperties": false } },
+        "explanation": { "type": "string" },
+        "logicPatch": {
+          "type": "object",
+          "description": "单题逻辑补丁 v1：追加规则/覆盖变量初值",
+          "properties": {
+            "variables": { "type": "object", "additionalProperties": { "type": ["number", "string", "boolean", "null"] } },
+            "appendRules": { "type": "array", "items": { "$ref": "https://music-practise.local/schemas/v1/logic.json#/$defs/Rule" } }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["id", "data"],
+      "additionalProperties": false
+    },
+    "Flow": {
+      "type": "object",
+      "properties": {
+        "order": { "enum": ["sequential", "shuffle"], "default": "sequential" },
+        "count": { "type": ["integer", "null"], "minimum": 1 },
+        "pass": {
+          "type": "object",
+          "properties": { "expr": { "$ref": "https://music-practise.local/schemas/v1/logic.json#/$defs/Expr" } },
+          "required": ["expr"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

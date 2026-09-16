@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://music-practise.local/schemas/v1/common.json",
+  "title": "音乐练习平台 · 公共定义 v1",
+  "$defs": {
+    "JsonValue": {},
+    "Note": {
+      "type": "object",
+      "description": "单个音符。midi 是唯一音高真相；dur 用时值记法（4n=四分音符）；vel 0..1",
+      "properties": {
+        "midi": { "type": "integer", "minimum": 0, "maximum": 127 },
+        "dur": { "type": "string", "pattern": "^[1-8]n\\.?$" },
+        "vel": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": ["midi"],
+      "additionalProperties": false
+    },
+    "NoteList": { "type": "array", "items": { "$ref": "#/$defs/Note" }, "minItems": 1 },
+    "MusicDoc": {
+      "type": "object",
+      "description": "谱面渲染器与发声器共享的最小音乐数据",
+      "properties": {
+        "notes": { "$ref": "#/$defs/NoteList" },
+        "clef": { "enum": ["treble", "bass"] },
+        "timeSig": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 32 }, "minItems": 2, "maxItems": 2 },
+        "tempo": { "type": "number", "minimum": 20, "maximum": 300 },
+        "key": { "type": "string" }
+      },
+      "required": ["notes"],
+      "additionalProperties": false
+    },
+    "Meta": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "author": {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "contact": { "type": "string" } },
+          "required": ["name"]
+        },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "locale": { "type": "string" },
+        "license": { "type": "string" },
+        "difficulty": { "type": "integer", "minimum": 1, "maximum": 5 }
+      },
+      "required": ["title"],
+      "additionalProperties": false
+    },
+    "Ref": {
+      "type": "object",
+      "description": "弱引用：id + 版本范围（semver range），导入/导出时按闭包解析",
+      "properties": {
+        "id": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" },
+        "kind": { "enum": ["series", "topic", "level", "instrument", "assetPack"] },
+        "version": { "type": "string" }
+      },
+      "required": ["id", "kind", "version"],
+      "additionalProperties": false
+    },
+    "Layout": {
+      "type": "object",
+      "description": "画布绝对布局（编辑器拖放产生），单位为关卡画布像素",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "w": { "type": "number", "exclusiveMinimum": 0 },
+        "h": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "required": ["x", "y", "w", "h"],
+      "additionalProperties": false
+    },
+    "BindingValue": {
+      "description": "绑定值：\"$q.…\" 路径引用（相对题目对象）或字面量",
+      "type": ["string", "number", "boolean", "array", "object", "null"]
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://music-practise.local/schemas/v1/logic.json",
+  "title": "逻辑程序（LogicProgram）v1：事件驱动 ECA 规则 + 安全表达式",
+  "$defs": {
+    "Expr": {
+      "type": "string",
+      "description": "安全表达式：算术/比较/逻辑/三元/成员访问(.)/白名单函数。作用域根：event、q、v。无赋值、无循环。运行时另有步数预算（默认 1000 节点）",
+      "minLength": 1
+    },
+    "ResolvedValue": {
+      "description": "动作参数值：\"$q.…\"/$event.…/$v.… 路径引用、\"$expr:…\" 表达式，或字面量",
+      "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/JsonValue"
+    },
+    "RefString": {
+      "type": "string",
+      "pattern": "^\\$(q|event|v)(\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+    },
+    "ArgValue": {
+      "oneOf": [
+        { "type": "string", "not": { "pattern": "^\\$" } },
+        { "$ref": "#/$defs/RefString" },
+        { "type": "string", "pattern": "^\\$expr:.+" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        { "type": "array", "items": { "$ref": "#/$defs/ArgValue" } },
+        { "type": "object", "additionalProperties": { "$ref": "#/$defs/ArgValue" } }
+      ]
+    },
+    "Action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "调用组件命令（组件id.命令）",
+          "properties": {
+            "cmd": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$" },
+            "args": { "type": "object", "additionalProperties": { "$ref": "#/$defs/ArgValue" } }
+          },
+          "required": ["cmd"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "写变量",
+          "properties": {
+            "set": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+            "expr": { "$ref": "#/$defs/Expr" }
+          },
+          "required": ["set", "expr"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "发内部事件（作者事件用 名字:名字 命名，避免与组件事件混淆）",
+          "properties": {
+            "emit": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*:[A-Za-z_][A-Za-z0-9_]*$" },
+            "payload": { "$ref": "#/$defs/ArgValue" }
+          },
+          "required": ["emit"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Rule": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "on": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*([.:][A-Za-z_][A-Za-z0-9_]*)?$" },
+        "when": { "type": "array", "items": { "$ref": "#/$defs/Expr" }, "maxItems": 16 },
+        "do": { "type": "array", "items": { "$ref": "#/$defs/Action" }, "maxItems": 64 },
+        "else": { "type": "array", "items": { "$ref": "#/$defs/Action" }, "maxItems": 64 }
+      },
+      "required": ["id", "on", "do"],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "variables": {
+      "type": "object",
+      "description": "关卡级变量与初始值（初始值必须是标量字面量）",
+      "additionalProperties": { "type": ["number", "string", "boolean", "null"] }
+    },
+    "rules": { "type": "array", "items": { "$ref": "#/$defs/Rule" }, "maxItems": 128 }
+  },
+  "required": ["rules"],
+  "additionalProperties": false
+}
