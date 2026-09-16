@@ -40,9 +40,12 @@ function ensurePiano(): Promise<SplendidGrandPiano> {
 export function durToSeconds(dur: string, tempo = 90): number {
   const dotted = dur.endsWith('.')
   const base = dotted ? dur.slice(0, -1) : dur
-  const map: Record<string, number> = { '1n': 4, '2n': 2, '4n': 1, '8n': 0.5, '16n': 0.25 }
+  const map: Record<string, number> = { '1n': 4, '2n': 2, '4n': 1, '8n': 0.5, '16n': 0.25, '32n': 0.125 }
   const quarters = map[base]
-  if (quarters === undefined) return 1
+  if (quarters === undefined) {
+    console.warn(`[audio] 未知时值 "${dur}"，按四分音符处理`)
+    return 60 / tempo
+  }
   return (quarters * 60) / tempo * (dotted ? 1.5 : 1)
 }
 

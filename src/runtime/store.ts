@@ -22,9 +22,25 @@ const DEFS: Record<string, ComponentDef<never>> = {
   sound: SOUND_DEF as ComponentDef<never>,
 }
 
+/** 未知组件类型的占位 def：状态/命令全部 no-op，视图层渲染"组件缺失"占位框 */
+const UNKNOWN_DEF: ComponentDef<Record<string, never>> = {
+  contract: { type: 'unknown', displayName: '未知组件', category: 'ui', events: {}, commands: {} },
+  initialState: () => ({}),
+  applyBinding: (s) => s,
+  applyCommand: (s) => ({ state: s }),
+}
+
+const warnedTypes = new Set<string>()
+
 export function getDef(type: string): ComponentDef<never> {
   const def = DEFS[type]
-  if (!def) throw new Error(`未知组件类型: ${type}`)
+  if (!def) {
+    if (!warnedTypes.has(type)) {
+      warnedTypes.add(type)
+      console.warn(`[store] 未知组件类型 "${type}"，已降级为占位组件（不影响其余组件运行）`)
+    }
+    return UNKNOWN_DEF as ComponentDef<never>
+  }
   return def
 }
 
@@ -36,6 +52,8 @@ export interface Snapshot<S = unknown> {
   state: S
   version: number
 }
+
+const MISSING_SNAPSHOT: Snapshot = { state: null, version: -1 }
 
 export class ComponentStore {
   private specs = new Map<string, ComponentInstance>()
@@ -66,7 +84,8 @@ export class ComponentStore {
   }
 
   snapshot(id: string): Snapshot {
-    return this.snaps.get(id) ?? { state: null, version: -1 }
+    // 必须返回稳定引用：新对象会让 useSyncExternalStore 无限重渲染
+    return this.snaps.get(id) ?? MISSING_SNAPSHOT
   }
 
   subscribe = (listener: () => void): (() => void) => {

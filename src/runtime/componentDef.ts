@@ -18,6 +18,8 @@ export interface ContractDoc {
   commands: Record<string, string>
   /** 绑定槽位 → 值类型说明 */
   bindings?: Record<string, string>
+  /** 可读状态（编辑器展示用；表达式 v1 经事件即可覆盖） */
+  state?: Record<string, string>
 }
 
 export interface ComponentDef<S = unknown> {
@@ -60,6 +62,7 @@ export const LABEL_DEF: ComponentDef<LabelState> = {
     category: 'ui',
     events: {},
     commands: { show: '{ text: string, tone?: "info"|"success"|"error" }' },
+    state: { text: 'string', tone: '"info"|"success"|"error"' },
   },
   initialState: (spec) => ({ text: str(spec.props && (spec.props as Record<string, Json>).text, ''), tone: 'info' }),
   applyBinding: (s) => s,
@@ -81,6 +84,7 @@ export const BUTTON_DEF: ComponentDef<ButtonState> = {
     category: 'ui',
     events: { clicked: '无负载' },
     commands: { setEnabled: '{ enabled: boolean }', setText: '{ text: string }' },
+    state: { text: 'string', enabled: 'boolean' },
   },
   initialState: (spec) => {
     const p = (spec.props ?? {}) as Record<string, Json>
@@ -102,6 +106,7 @@ export const CHOICE_DEF: ComponentDef<ChoiceState> = {
     events: { chosen: '{ index: number, value: string }' },
     commands: { reveal: '{ correctIndex: number }', reset: '无参数' },
     bindings: { options: 'string[]' },
+    state: { options: 'string[]', revealed: 'number?' },
   },
   initialState: () => ({ options: [], revealed: null }),
   applyBinding: (s, key, value) => {
@@ -128,6 +133,7 @@ export const STAFF_DEF: ComponentDef<StaffState> = {
     events: { noteClicked: '{ midi: number, name: string }' },
     commands: { highlight: '{ target: number(midi), style: "correct"|"wrong" }', clear: '无参数' },
     bindings: { music: 'MusicDoc' },
+    state: { music: 'MusicDoc', highlights: 'Record<midi, "correct"|"wrong">' },
   },
   initialState: () => ({ music: null, highlights: {}, clearToken: 0 }),
   applyBinding: (s, key, value) => {
@@ -152,6 +158,7 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
     category: 'music',
     events: {},
     commands: { play: '{ notes: Note[], tempo?: number }', stop: '无参数' },
+    state: { lastPlay: 'Json' },
   },
   initialState: () => ({ lastPlay: null }),
   applyBinding: (s) => s,

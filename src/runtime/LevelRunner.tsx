@@ -63,9 +63,20 @@ function RunnerCore({ doc, onRetry }: { doc: LevelDoc; onRetry: () => void }) {
     }
 
     const finish = (): void => {
-      let passed = true
-      if (content.flow?.pass?.expr) passed = Boolean(engine.evaluate(content.flow.pass.expr))
+      // 幂等守卫：已结算后再次 level.next/finish 直接忽略，
+      // 否则 UGC 规则「on level.finished → level.next」会引发无界同步递归
+      if (finishedRef.current) return
       finishedRef.current = true
+      let passed = true
+      if (content.flow?.pass?.expr) {
+        try {
+          passed = Boolean(engine.evaluate(content.flow.pass.expr))
+        } catch (err) {
+          // 通过线表达式出错时降级为"未通过"，绝不能卡死用户
+          console.error('[runner] flow.pass 求值失败，按未通过处理:', err)
+          passed = false
+        }
+      }
       const score = engine.vars.score ?? 0
       setFinished({ score, passed })
       engine.dispatch('level.finished', { score, passed })

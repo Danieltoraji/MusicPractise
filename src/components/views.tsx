@@ -3,7 +3,7 @@
  * 视图不包含业务判定——一切判定都在逻辑引擎的规则里（数据即关卡）。
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Accidental, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
+import { Accidental, Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
 import { Note } from 'tonal'
 import type { ComponentInstance } from '../engine/level'
 import type { Json } from '../engine/expr'
@@ -30,7 +30,7 @@ function boxStyle(spec: ComponentInstance): React.CSSProperties {
 
 // ---------------------------------------------------------------------------
 
-const DUR_MAP: Record<string, string> = { '1n': 'w', '2n': 'h', '4n': 'q', '8n': '8', '16n': '16' }
+const DUR_MAP: Record<string, string> = { '1n': 'w', '2n': 'h', '4n': 'q', '8n': '8', '16n': '16', '32n': '32' }
 const HIGHLIGHT_FILL: Record<string, string> = { correct: '#16a34a', wrong: '#dc2626' }
 
 export function StaffView({ spec, store, emit }: ViewProps) {
@@ -58,17 +58,23 @@ export function StaffView({ spec, store, emit }: ViewProps) {
     const staveNotes = doc.notes.map((n) => {
       const name = Note.fromMidi(n.midi) ?? 'C4'
       const info = Note.get(name)
+      // 音位由 StaveNote 自身的 clef 决定（与 Stave 上画的谱号无关），必须显式传入
+      const clef = doc.clef ?? 'treble'
+      const dur = n.dur ?? '4n'
+      const dotted = dur.endsWith('.')
       const sn = new StaveNote({
         keys: [`${info.letter.toLowerCase()}${info.acc ?? ''}/${info.oct}`],
-        duration: DUR_MAP[n.dur ?? '4n'] ?? 'q',
+        duration: DUR_MAP[dotted ? dur.slice(0, -1) : dur] ?? 'q',
+        clef,
       })
       if (info.acc) sn.addModifier(new Accidental(info.acc), 0)
+      if (dotted) sn.addModifier(new Dot(), 0)
       return sn
     })
 
     const voice = new Voice({ numBeats: Math.max(1, staveNotes.length), beatValue: 4 }).setStrict(false)
     voice.addTickables(staveNotes)
-    new Formatter().joinVoices([voice]).format([voice], w - 120)
+    new Formatter().joinVoices([voice]).format([voice], Math.max(120, w - 120))
     voice.draw(rc, stave)
 
     // 命中区域：VexFlow 5 不再暴露 attrs.el；voice.draw 按顺序把每个音符画成
@@ -158,7 +164,7 @@ export function ChoiceView({ spec, store, emit }: ViewProps) {
               emit('chosen', { index: i, value: opt })
             }}
           >
-            <span className="choice-index">{String.fromCharCode(65 + i)}</span>
+            <span className="choice-index">{String.fromCharCode(65 + (i % 26))}</span>
             {opt}
           </button>
         )
@@ -182,6 +188,11 @@ export function ComponentView(props: ViewProps): React.ReactNode {
     case 'choice':
       return <ChoiceView {...props} />
     default:
-      return null
+      // 未知组件类型：降级为占位框而不是崩溃（docs §7 承诺）
+      return (
+        <div style={boxStyle(spec)} className="comp-unknown">
+          组件缺失：{spec.type}
+        </div>
+      )
   }
 }

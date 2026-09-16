@@ -243,6 +243,16 @@ a {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.comp-unknown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed var(--warn);
+  border-radius: 10px;
+  background: #fffbeb;
+  color: var(--warn);
+  font-size: 14px;
+}
 .choice-item {
   display: flex;
   align-items: center;
