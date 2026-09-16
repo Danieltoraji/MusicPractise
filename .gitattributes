@@ -1,0 +1,2 @@
+# 统一以 LF 入库，避免 Windows/macOS 混合开发时的行尾漂移
+* text=auto eol=lf
