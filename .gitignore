@@ -9,5 +9,6 @@ dist/
 # 编辑器与系统文件
 .idea/
 .vscode/
+.zcode/
 .DS_Store
 Thumbs.db
