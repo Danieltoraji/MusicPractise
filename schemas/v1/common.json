@@ -6,11 +6,11 @@
     "JsonValue": {},
     "Note": {
       "type": "object",
-      "description": "单个音符。midi 是唯一音高真相；dur 用时值记法（4n=四分音符）；vel 0..1",
+      "description": "单个音符。midi 是唯一音高真相；dur 用时值记法（4n=四分音符）；vel 为 MIDI 力度 0-127（缺省 100）",
       "properties": {
         "midi": { "type": "integer", "minimum": 0, "maximum": 127 },
         "dur": { "type": "string", "pattern": "^[1-8]n\\.?$" },
-        "vel": { "type": "number", "minimum": 0, "maximum": 1 }
+        "vel": { "type": "integer", "minimum": 0, "maximum": 127 }
       },
       "required": ["midi"],
       "additionalProperties": false

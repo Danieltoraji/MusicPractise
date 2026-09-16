@@ -101,7 +101,7 @@ function RunnerCore({ doc, onRetry }: { doc: LevelDoc; onRetry: () => void }) {
       try {
         const effects = store.applyCommand(cid, cmd, args as Record<string, Json>)
         for (const eff of effects) {
-          if (eff.type === 'audio.play') playNotes(eff.notes)
+          if (eff.type === 'audio.play') playNotes(eff.notes, eff.tempo)
         }
       } catch (err) {
         console.error(`[runner] 命令执行失败 ${path}:`, err)

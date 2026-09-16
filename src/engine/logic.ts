@@ -165,14 +165,15 @@ export class LogicEngine {
     }
   }
 
-  /** 深度解析动作参数中的 "$q.…"/"$event.…"/"$v.…"/"$expr:…" 引用 */
+  /** 深度解析动作参数中的 "$q.…"/"$event.…"/"$v.…"/"$expr:…" 引用；其余字符串（含 "$100"）一律字面量 */
   resolve(value: Json, ctx?: DispatchCtx): Json {
     const scope: ExprScope = ctx?.scope ?? { event: {}, q: this.host.getQuestion(), v: this.vars }
     const ectx: ExprContext = ctx?.ctx ?? { getNowSeconds: this.host.getNowSeconds }
+    const refRe = /^\$(q|event|v)(\.[A-Za-z_]\w*)+$/
     const walk = (v: Json): Json => {
       if (typeof v === 'string') {
         if (v.startsWith('$expr:')) return evalExpr(v.slice(6), scope, ectx)
-        if (v.startsWith('$')) return evalExpr(v.slice(1), scope, ectx)
+        if (refRe.test(v)) return evalExpr(v.slice(1), scope, ectx)
         return v
       }
       if (Array.isArray(v)) return v.map(walk)

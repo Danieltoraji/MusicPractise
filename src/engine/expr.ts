@@ -69,7 +69,8 @@ function tokenize(src: string): Tok[] {
       let out = ''
       while (j < src.length && src[j] !== c) {
         if (src[j] === '\\' && j + 1 < src.length) {
-          out += src[j + 1]
+          const next = src[j + 1]
+          out += next === 'n' ? '\n' : next === 't' ? '\t' : next === 'r' ? '\r' : next
           j += 2
         } else {
           out += src[j]
@@ -347,6 +348,7 @@ const FUNCS: Record<string, FuncDef> = {
     fn: ([f, m]) => {
       const freq = num(f, 'cents')
       const midi = num(m, 'cents')
+      if (!(freq > 0)) throw new ExprError('cents 频率必须为正数')
       const target = 440 * Math.pow(2, (midi - 69) / 12)
       return Math.round(1200 * Math.log2(freq / target))
     },
@@ -433,8 +435,11 @@ class Evaluator {
         if (d === 0) throw new ExprError('除以零')
         return num(a, '/') / d
       }
-      case '%':
-        return num(a, '%') % num(b, '%')
+      case '%': {
+        const d = num(b, '%')
+        if (d === 0) throw new ExprError('取模为零')
+        return num(a, '%') % d
+      }
       case '==':
         return a === b
       case '!=':

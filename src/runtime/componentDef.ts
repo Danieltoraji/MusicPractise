@@ -6,7 +6,7 @@
 import type { ComponentInstance, Note } from '../engine/level'
 import type { Json } from '../engine/expr'
 
-export type Effect = { type: 'audio.play'; notes: Note[] } | { type: 'none' }
+export type Effect = { type: 'audio.play'; notes: Note[]; tempo?: number } | { type: 'none' }
 
 export interface ContractDoc {
   type: string
@@ -150,15 +150,19 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
     type: 'sound',
     displayName: '发声器',
     category: 'music',
-    events: { playDone: '无负载' },
-    commands: { play: '{ notes: Note[] }', stop: '无参数' },
+    events: {},
+    commands: { play: '{ notes: Note[], tempo?: number }', stop: '无参数' },
   },
   initialState: () => ({ lastPlay: null }),
   applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'play') {
       const notes = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
-      return { state: { lastPlay: args.notes ?? null }, effects: [{ type: 'audio.play', notes }] }
+      const tempo = typeof args.tempo === 'number' ? args.tempo : undefined
+      return {
+        state: { lastPlay: args.notes ?? null },
+        effects: [{ type: 'audio.play', notes, tempo }],
+      }
     }
     return { state: s }
   },

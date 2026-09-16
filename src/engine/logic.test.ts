@@ -73,6 +73,15 @@ describe('LogicEngine', () => {
     ])
   })
 
+  it('resolve 只认合法引用形态，其余保持字面量', () => {
+    const { host } = makeHost({ data: { x: 42 } })
+    const engine = new LogicEngine({ rules: [] }, host)
+    expect(engine.resolve('$100')).toBe('$100')
+    expect(engine.resolve('$foo.bar')).toBe('$foo.bar')
+    expect(engine.resolve('$q.data.x')).toBe(42)
+    expect(engine.resolve({ a: ['$q.data.x', 'plain$'] })).toEqual({ a: [42, 'plain$'] })
+  })
+
   it('死循环被级联预算拦截', () => {
     let errors: unknown[] = []
     const host: LogicHost = {

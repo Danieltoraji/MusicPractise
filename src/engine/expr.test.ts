@@ -24,7 +24,27 @@ describe('表达式求值', () => {
     expect(evalExpr("false ? 'a' : 'b'", base)).toBe('b')
     expect(evalExpr("0 ? 'a' : 'b'", base)).toBe('b')
     expect(evalExpr("'x' ? 1 : 2", base)).toBe(1)
-    expect(evalExpr("1 < 2 ? 'lt' : 'gte'", base)).toBe('lt')
+    expect(evalExpr('1 < 2 ? "lt" : "gte"', base)).toBe('lt')
+  })
+
+  it('&&/|| 返回值语义（文档约定：与 JS 不同，&& falsy 返回 false，|| 返回首个真值）', () => {
+    expect(evalExpr('0 && 5', base)).toBe(false)
+    expect(evalExpr('7 && 9', base)).toBe(9)
+    expect(evalExpr('false || 7', base)).toBe(7)
+    expect(evalExpr('0 || 0', base)).toBe(0)
+  })
+
+  it('取模与除法的零守卫', () => {
+    expect(evalExpr('5 % 3', base)).toBe(2)
+    expect(() => evalExpr('5 % 0', base)).toThrow(/取模为零/)
+    expect(() => evalExpr('5 / 0', base)).toThrow(/除以零/)
+  })
+
+  it('字符串转义', () => {
+    expect(evalExpr("'a\\nb'", base)).toBe('a\nb')
+    expect(evalExpr("'a\\tb'", base)).toBe('a\tb')
+    expect(evalExpr("'a\\\\b'", base)).toBe('a\\b')
+    expect(evalExpr("'\\d'", base)).toBe('d')
   })
 
   it('作用域与成员访问', () => {
@@ -46,6 +66,7 @@ describe('表达式求值', () => {
     expect(evalExpr('nameToMidi("A4")', base)).toBe(69)
     expect(evalExpr('cents(440, 69)', base)).toBe(0)
     expect(evalExpr('cents(466.16, 69)', base)).toBe(100)
+    expect(() => evalExpr('cents(0, 69)', base)).toThrow(/正数/)
     const ri = evalExpr('randomInt(2, 2)', base)
     expect(ri).toBe(2)
   })

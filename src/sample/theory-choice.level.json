@@ -128,7 +128,7 @@
         "data": {
           "options": [ "大三和弦", "小三和弦", "减三和弦", "增三和弦" ],
           "correctIndex": 0,
-          "listenNotes": [ { "midi": 60 }, { "midi": 64 }, { "midi": 67 } ],
+          "listenNotes": [ { "midi": 60, "vel": 100 }, { "midi": 64, "vel": 100 }, { "midi": 67, "vel": 100 } ],
           "rewardChord": [ { "midi": 60 }, { "midi": 64 }, { "midi": 67 }, { "midi": 72 } ],
           "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
         },

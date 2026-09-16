@@ -148,9 +148,9 @@
         "prompt": { "text": "听 —— 点击你听到的那个音" },
         "data": {
           "music": { "notes": [ { "midi": 60 }, { "midi": 62 }, { "midi": 64 }, { "midi": 65 } ], "clef": "treble" },
-          "listenNotes": [ { "midi": 64, "dur": "2n" } ],
+          "listenNotes": [ { "midi": 64, "dur": "2n", "vel": 100 } ],
           "answerMidi": 64,
-          "rewardChord": [ { "midi": 60 }, { "midi": 64 }, { "midi": 67 }, { "midi": 72 } ],
+          "rewardChord": [ { "midi": 60, "vel": 100 }, { "midi": 64, "vel": 100 }, { "midi": 67, "vel": 100 }, { "midi": 72, "vel": 100 } ],
           "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
         },
         "scoring": { "max": 10 },
