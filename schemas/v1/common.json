@@ -6,16 +6,16 @@
     "JsonValue": {},
     "Note": {
       "type": "object",
-      "description": "单个音符。midi 是唯一音高真相；dur 用时值记法（4n=四分音符）；vel 为 MIDI 力度 0-127（缺省 100）",
+      "description": "单个音符。midi 是唯一音高真相；dur 用时值记法（4n=四分音符，可带附点 .）；vel 为 MIDI 力度 0-127（缺省 100）",
       "properties": {
         "midi": { "type": "integer", "minimum": 0, "maximum": 127 },
-        "dur": { "type": "string", "pattern": "^[1-8]n\\.?$" },
+        "dur": { "type": "string", "pattern": "^(1|2|4|8|16|32)n\\.?$" },
         "vel": { "type": "integer", "minimum": 0, "maximum": 127 }
       },
       "required": ["midi"],
       "additionalProperties": false
     },
-    "NoteList": { "type": "array", "items": { "$ref": "#/$defs/Note" }, "minItems": 1 },
+    "NoteList": { "type": "array", "items": { "$ref": "#/$defs/Note" }, "minItems": 1, "maxItems": 64 },
     "MusicDoc": {
       "type": "object",
       "description": "谱面渲染器与发声器共享的最小音乐数据",
@@ -49,11 +49,11 @@
     },
     "Ref": {
       "type": "object",
-      "description": "弱引用：id + 版本范围（semver range），导入/导出时按闭包解析",
+      "description": "弱引用：id + 版本范围（semver range，如 ^1.0.0），导入/导出时按闭包解析",
       "properties": {
         "id": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" },
         "kind": { "enum": ["series", "topic", "level", "instrument", "assetPack"] },
-        "version": { "type": "string" }
+        "version": { "type": "string", "pattern": "^[\\^~><=*\\d.x\\s-]+$" }
       },
       "required": ["id", "kind", "version"],
       "additionalProperties": false

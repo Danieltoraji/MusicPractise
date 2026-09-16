@@ -29,7 +29,12 @@
     "ComponentInstance": {
       "type": "object",
       "properties": {
-        "id": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "maxLength": 32 },
+        "id": {
+          "allOf": [
+            { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "maxLength": 32 },
+            { "not": { "const": "level" }, "description": "\"level\" 是运行器伪组件的保留字" }
+          ]
+        },
         "type": { "type": "string", "minLength": 1 },
         "name": { "type": "string" },
         "visible": { "type": "boolean", "default": true },
