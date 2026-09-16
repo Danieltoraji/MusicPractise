@@ -49,4 +49,98 @@ describe('关卡文档 JSON Schema', () => {
     bad.content.logic.rules[0].do = [{ emit: 'no-colon' } as unknown as never]
     expect(validate!(bad)).toBe(false)
   })
+
+  it('坏规则被拒绝（单段 on 是死规则）', () => {
+    const bad = structuredClone(noteClickDoc)
+    bad.content.logic.rules[0].on = 'bare'
+    expect(validate!(bad)).toBe(false)
+  })
+
+  it('动作参数 "$100" 被拒绝（非合法引用形态）', () => {
+    const bad = structuredClone(noteClickDoc)
+    bad.content.logic.rules[0].do = [
+      { cmd: 'feedback.show', args: { text: '$100' } } as unknown as never,
+    ]
+    expect(validate!(bad)).toBe(false)
+  })
+
+  it('Note 定义：16n/32n 合法、3n 非法、vel 0..127（拒绝旧 0..1 语义）', () => {
+    // q.data 是自由 JSON 不受 schema 约束，故直接对 common.json 的 Note 定义校验
+    const noteSchema = ajv.compile({ allOf: [{ $ref: `${BASE}common.json#/$defs/Note` }] })
+    expect(noteSchema({ midi: 64, dur: '16n' })).toBe(true)
+    expect(noteSchema({ midi: 64, dur: '32n.' })).toBe(true)
+    expect(noteSchema({ midi: 64, dur: '3n' })).toBe(false)
+    expect(noteSchema({ midi: 64, vel: 100 })).toBe(true)
+    expect(noteSchema({ midi: 64, vel: 127 })).toBe(true)
+    expect(noteSchema({ midi: 64, vel: 0.8 })).toBe(false)
+    expect(noteSchema({ midi: 64, vel: 200 })).toBe(false)
+  })
+
+  it('组件 id 保留字 level 被拒绝', () => {
+    const bad = structuredClone(noteClickDoc)
+    bad.content.components[0].id = 'level'
+    expect(validate!(bad)).toBe(false)
+  })
+
+  describe('其余 kind 的正例', () => {
+    const compile = (kind: string) => ajv.getSchema(`${BASE}${kind}.json`)!
+
+    it('series', () => {
+      const doc = {
+        schemaVersion: 1,
+        kind: 'series',
+        id: 'res_01J9A0A0A0A0A0A0A0A0A0A0A3',
+        version: '1.0.0',
+        meta: { title: '乐理入门系列' },
+        refs: [{ id: 'res_01J9A0A0A0A0A0A0A0A0A0A0A4', kind: 'topic', version: '^1.0.0' }],
+        content: { topicIds: ['res_01J9A0A0A0A0A0A0A0A0A0A0A4'] },
+      }
+      expect(compile('series')(doc)).toBe(true)
+    })
+
+    it('topic', () => {
+      const doc = {
+        schemaVersion: 1,
+        kind: 'topic',
+        id: 'res_01J9A0A0A0A0A0A0A0A0A0A0A4',
+        version: '1.0.0',
+        meta: { title: '练耳' },
+        refs: [],
+        content: { levelIds: ['res_01J9A0A0A0A0A0A0A0A0A0A0A1'], brief: '' },
+      }
+      expect(compile('topic')(doc)).toBe(true)
+    })
+
+    it('instrument：fretboard 与 keyboard', () => {
+      const fretboard = {
+        schemaVersion: 1,
+        kind: 'instrument',
+        id: 'res_01J9A0A0A0A0A0A0A0A0A0A0A5',
+        version: '1.0.0',
+        meta: { title: '民谣吉他' },
+        content: {
+          type: 'fretboard',
+          tuning: [{ midi: 40 }, { midi: 45 }, { midi: 50 }, { midi: 55 }, { midi: 59 }, { midi: 64 }],
+          frets: 12,
+          noteMap: { '64': [{ string: 1, fret: 0 }] },
+          shapes: { 'C': [{ string: 2, fret: 1 }] },
+        },
+      }
+      expect(compile('instrument')(fretboard)).toBe(true)
+
+      const keyboard = {
+        schemaVersion: 1,
+        kind: 'instrument',
+        id: 'res_01J9A0A0A0A0A0A0A0A0A0A0A6',
+        version: '1.0.0',
+        meta: { title: '61键电子琴' },
+        content: {
+          type: 'keyboard',
+          keyCount: 61,
+          noteMap: { '60': [{ key: 30 }] },
+        },
+      }
+      expect(compile('instrument')(keyboard)).toBe(true)
+    })
+  })
 })

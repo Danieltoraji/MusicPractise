@@ -33,6 +33,25 @@ function boxStyle(spec: ComponentInstance): React.CSSProperties {
 const DUR_MAP: Record<string, string> = { '1n': 'w', '2n': 'h', '4n': 'q', '8n': '8', '16n': '16', '32n': '32' }
 const HIGHLIGHT_FILL: Record<string, string> = { correct: '#16a34a', wrong: '#dc2626' }
 
+/** MusicDoc → VexFlow 音符数组（纯函数，便于单测：音位/附点/升降号） */
+export function toStaveNotes(doc: MusicDoc): StaveNote[] {
+  const clef = doc.clef ?? 'treble'
+  return doc.notes.map((n) => {
+    const info = Note.get(Note.fromMidi(n.midi) ?? 'C4')
+    // 音位由 StaveNote 自身的 clef 决定（与 Stave 上画的谱号无关），必须显式传入
+    const dur = n.dur ?? '4n'
+    const dotted = dur.endsWith('.')
+    const sn = new StaveNote({
+      keys: [`${info.letter.toLowerCase()}${info.acc ?? ''}/${info.oct}`],
+      duration: DUR_MAP[dotted ? dur.slice(0, -1) : dur] ?? 'q',
+      clef,
+    })
+    if (info.acc) sn.addModifier(new Accidental(info.acc), 0)
+    if (dotted) sn.addModifier(new Dot(), 0)
+    return sn
+  })
+}
+
 export function StaffView({ spec, store, emit }: ViewProps) {
   const { music, highlights, clearToken } = useComponentState<StaffState>(store, spec.id)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -55,22 +74,7 @@ export function StaffView({ spec, store, emit }: ViewProps) {
     if (doc.timeSig) stave.addTimeSignature(`${doc.timeSig[0]}/${doc.timeSig[1]}`)
     stave.setContext(rc).draw()
 
-    const staveNotes = doc.notes.map((n) => {
-      const name = Note.fromMidi(n.midi) ?? 'C4'
-      const info = Note.get(name)
-      // 音位由 StaveNote 自身的 clef 决定（与 Stave 上画的谱号无关），必须显式传入
-      const clef = doc.clef ?? 'treble'
-      const dur = n.dur ?? '4n'
-      const dotted = dur.endsWith('.')
-      const sn = new StaveNote({
-        keys: [`${info.letter.toLowerCase()}${info.acc ?? ''}/${info.oct}`],
-        duration: DUR_MAP[dotted ? dur.slice(0, -1) : dur] ?? 'q',
-        clef,
-      })
-      if (info.acc) sn.addModifier(new Accidental(info.acc), 0)
-      if (dotted) sn.addModifier(new Dot(), 0)
-      return sn
-    })
+    const staveNotes = toStaveNotes(doc)
 
     const voice = new Voice({ numBeats: Math.max(1, staveNotes.length), beatValue: 4 }).setStrict(false)
     voice.addTickables(staveNotes)
