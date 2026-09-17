@@ -288,6 +288,7 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
             type="button"
             className={`key white ${hl ?? ''}`}
             style={{ left: `${i * whiteW}%`, width: `${whiteW}%` }}
+            data-midi={k.midi}
             title={Note.fromMidi(k.midi) ?? String(k.midi)}
             onClick={() => emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })}
           />
@@ -304,6 +305,7 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
               type="button"
               className={`key black ${hl ?? ''}`}
               style={{ left: `${whitesBefore * whiteW - blackW / 2}%`, width: `${blackW}%` }}
+              data-midi={k.midi}
               title={Note.fromMidi(k.midi) ?? String(k.midi)}
               onClick={() => emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })}
             />
