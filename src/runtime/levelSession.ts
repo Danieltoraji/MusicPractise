@@ -54,7 +54,15 @@ export class LevelSession {
       onError: (err, where) => console.error('[logic]', where, err),
     })
 
-    const problems = LogicEngine.lint(content.logic, { componentIds: content.components.map((c) => c.id) })
+    // lint 时合并各题 logicPatch.variables 声明的变量键，避免误报"未声明"
+    const patchVarKeys = new Set<string>()
+    for (const q of content.questions) {
+      for (const key of Object.keys(q.logicPatch?.variables ?? {})) patchVarKeys.add(key)
+    }
+    const problems = LogicEngine.lint(content.logic, {
+      componentIds: content.components.map((c) => c.id),
+      extraVariableKeys: patchVarKeys,
+    })
     if (problems.length > 0) console.warn('[session] 逻辑 lint:', problems)
     this.warnOrphanBindings()
   }

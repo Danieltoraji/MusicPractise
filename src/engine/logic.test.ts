@@ -100,11 +100,44 @@ describe('LogicEngine', () => {
     expect(String(errors[0])).toMatch(/预算/)
   })
 
-  it('表达式语法错误被 lint 发现', () => {
+  it('表达式语法错误被 lint 发现；set 未声明变量一并报出', () => {
     const errors = LogicEngine.lint({
       rules: [{ id: 'r', on: 'x', do: [{ set: 'a', expr: '1 +' }] }],
     })
-    expect(errors.length).toBe(1)
+    expect(errors.length).toBe(2) // 语法错误 + set 未声明变量
+    expect(errors.some((e) => e.includes('未声明变量'))).toBe(true)
+  })
+
+  it('lint 的 extraVariableKeys 豁免题目 logicPatch 声明的变量', () => {
+    const program = { rules: [{ id: 'r', on: 'x', do: [{ set: 'answered', expr: 'true' }] }] }
+    expect(LogicEngine.lint(program).length).toBe(1)
+    expect(LogicEngine.lint(program, { extraVariableKeys: ['answered'] }).length).toBe(0)
+  })
+
+  it('级联中途 reset 作废剩余旧队列（restart 边界加固）', () => {
+    let engineRef: LogicEngine | null = null
+    const { host, commands } = makeHost(null)
+    const wrappedHost: LogicHost = {
+      ...host,
+      dispatchCommand: (path) => {
+        if (path === 'level.restart') engineRef!.reset()
+      },
+    }
+    const engine = new LogicEngine(
+      {
+        variables: { touched: false },
+        rules: [
+          { id: 'r1', on: 'e1', do: [{ emit: 'e2' }, { emit: 'e3' }] },
+          { id: 'r2', on: 'e2', do: [{ cmd: 'level.restart' }] },
+          { id: 'r3', on: 'e3', do: [{ set: 'touched', expr: 'true' }] },
+        ],
+      },
+      wrappedHost,
+    )
+    engineRef = engine
+    engine.dispatch('e1')
+    expect(engine.vars.touched).toBe(false) // e3 已随 reset 作废
+    expect(commands).toHaveLength(0)
   })
 
   it('reset 恢复变量初值且保持对象身份（级联中途 restart 不丢同批写入）', () => {

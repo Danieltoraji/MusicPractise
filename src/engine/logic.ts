@@ -65,6 +65,7 @@ export class LogicEngine {
   private baseRules: Rule[]
   private byEvent: Map<string, Rule[]>
   private initialVars: Record<string, Json>
+  private generation = 0
 
   constructor(program: LogicProgram, host: LogicHost) {
     this.host = host
@@ -92,10 +93,15 @@ export class LogicEngine {
     this.byEvent = this.indexRules(rules)
   }
 
-  /** 装载期校验上下文：提供组件 id 集合时可做悬空引用检查 */
-  static lint(program: LogicProgram, ctx?: { componentIds?: Iterable<string> }): string[] {
+  /** 装载期校验上下文：提供组件 id 集合时可做悬空引用检查；extraVariableKeys 豁免各题 logicPatch 声明的变量 */
+  static lint(
+    program: LogicProgram,
+    ctx?: { componentIds?: Iterable<string>; extraVariableKeys?: Iterable<string> },
+  ): string[] {
     const errors: string[] = []
     const compIds = ctx?.componentIds ? new Set(ctx.componentIds) : null
+    const declaredVars = new Set<string>(ctx?.extraVariableKeys ?? [])
+    for (const key of Object.keys(program.variables ?? {})) declaredVars.add(key)
 
     // 1) 表达式语法（解析期错误前置）
     const checkSyntax = (src: string, where: string) => {
@@ -124,15 +130,16 @@ export class LogicEngine {
       ] as const) {
         list.forEach((a, i) => {
           const where = `规则 ${rule.id} ${phase}[${i}]`
-          if ('expr' in a) {
+          // 注意 set 动作同时含 expr 键，必须先于 'cmd' in a 判定，否则永不可达
+          if (isSetAction(a)) {
             checkSyntax(a.expr, where)
+            if (!declaredVars.has(a.set)) {
+              errors.push(`${where}: set 未声明变量 "${a.set}"（请在 variables 中声明，或由题目 logicPatch.variables 提供）`)
+            }
           } else if ('cmd' in a) {
             checkCompRef(a.cmd.split('.')[0], where)
-          } else if (isSetAction(a)) {
-            if (program.variables && !(a.set in program.variables)) {
-              errors.push(`${where}: set 未声明变量 "${a.set}"（请在 variables 中声明）`)
-            }
           }
+          // emit 动作没有待检表达式；payload 中的引用合法性属运行时
         })
       }
     }
@@ -169,6 +176,7 @@ export class LogicEngine {
   dispatch(event: string, payload: Json = {}): void {
     const b = this.host.budgets ?? {}
     const maxEvents = b.maxEvents ?? 64
+    const gen = this.generation
     const ctx: DispatchCtx = {
       scope: { event: payload, q: this.host.getQuestion(), v: this.vars },
       ctx: { getNowSeconds: this.host.getNowSeconds, stepBudget: b.exprSteps ?? 1000 },
@@ -177,6 +185,9 @@ export class LogicEngine {
       actionsRun: 0,
     }
     while (ctx.queue.length > 0) {
+      // 级联中途被 reset（如规则里 level.restart）：作废剩余旧事件，
+      // 它们不应再作用于重置后的变量与新规则索引
+      if (this.generation !== gen) return
       if (ctx.processed >= maxEvents) {
         this.fail(new Error(`事件级联超过预算（${maxEvents}）`), { event })
         return
@@ -255,9 +266,11 @@ export class LogicEngine {
   }
 
   reset(): void {
+    // 代数 +1：作废任何进行中级联的旧队列（restart 语义 = 终态）
     // 原地清空再回填，保持 vars 对象身份不变：
     // 级联中途 restart 时，同批后续 set 动作仍持有 dispatch 捕获的旧引用，
     // 若整体替换对象会造成"读旧写新"的状态错乱
+    this.generation += 1
     for (const key of Object.keys(this.vars)) delete this.vars[key]
     Object.assign(this.vars, structuredClone(this.initialVars))
   }
