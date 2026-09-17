@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { LevelDoc, Question } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { LevelSession, type SessionHost } from './levelSession'
 
-function makeDoc(overrides?: { questions?: Question[]; rules?: LevelDoc['content']['logic']['rules']; pass?: string }): LevelDoc {
+function makeDoc(overrides?: {
+  questions?: Question[]
+  rules?: LevelDoc['content']['logic']['rules']
+  pass?: string
+  variables?: Record<string, Json>
+}): LevelDoc {
   const questions: Question[] = overrides?.questions ?? [
     { id: 'q1', data: { answerMidi: 64, reward: [{ midi: 60 }] }, scoring: { max: 10 } },
     { id: 'q2', data: { answerMidi: 71 }, scoring: { max: 10 } },
@@ -21,7 +26,7 @@ function makeDoc(overrides?: { questions?: Question[]; rules?: LevelDoc['content
         { id: 'choice1', type: 'choice', bindings: { options: '$q.data.options' } },
       ],
       logic: {
-        variables: { score: 0, done: false },
+        variables: overrides?.variables ?? { score: 0, done: false },
         rules: overrides?.rules ?? [
           {
             id: 'check',
@@ -188,6 +193,60 @@ describe('LevelSession', () => {
     }
     expect(seen.size).toBe(3)
     expect(rec.finished).toHaveLength(1) // 抽完后结束
+  })
+
+  it('timer：单次 tick 派发事件；stop 取消不再触发', async () => {
+    vi.useFakeTimers()
+    try {
+      const rules: LevelDoc['content']['logic']['rules'] = [
+        { id: 'arm', on: 'level.questionLoaded', do: [{ cmd: 'timer1.start', args: { ms: 50 } }] },
+        { id: 'onTick', on: 'timer1.tick', when: ['event.count == 1'], do: [{ set: 'fired', expr: 'true' }] },
+        { id: 'stop', on: 'x.stop', do: [{ cmd: 'timer1.stop' }] },
+      ]
+      const doc = makeDoc({ rules, variables: { score: 0, done: false, fired: false } })
+      doc.content.components.push({ id: 'timer1', type: 'timer', visible: false })
+      const { host } = makeHost()
+      const session = new LevelSession(doc, host)
+      session.start()
+      expect(session.engine.vars.fired).toBe(false)
+
+      vi.advanceTimersByTime(80)
+      expect(session.engine.vars.fired).toBe(true)
+
+      // restart 会重置变量并重新 arm；随后立即 stop，tick 不应再发生
+      session.restart()
+      expect(session.engine.vars.fired).toBe(false)
+      session.dispatch('x.stop')
+      vi.advanceTimersByTime(300)
+      expect(session.engine.vars.fired).toBe(false)
+      expect(session.store.snapshot('timer1').state).toMatchObject({ running: false })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('timer：repeat 模式多次 tick，dispose 后不再触发', async () => {
+    vi.useFakeTimers()
+    try {
+      const rules: LevelDoc['content']['logic']['rules'] = [
+        { id: 'arm', on: 'level.questionLoaded', do: [{ cmd: 'timer1.start', args: { ms: 40, repeat: true } }] },
+        { id: 'onTick', on: 'timer1.tick', do: [{ set: 'ticks', expr: 'v.ticks + 1' }] },
+      ]
+      const doc = makeDoc({ rules, variables: { score: 0, done: false, ticks: 0 } })
+      doc.content.components.push({ id: 'timer1', type: 'timer', visible: false })
+      const { host } = makeHost()
+      const session = new LevelSession(doc, host)
+      session.start()
+      vi.advanceTimersByTime(150)
+      const ticks = session.engine.vars.ticks as number
+      expect(ticks).toBeGreaterThanOrEqual(2)
+
+      session.dispose()
+      vi.advanceTimersByTime(200)
+      expect(session.engine.vars.ticks).toBe(ticks) // 不再增长
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('未知组件引用被 lint 捕获（console.warn 不抛错）', () => {

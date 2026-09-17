@@ -28,7 +28,7 @@ function RunnerCore({ doc, onRetry }: { doc: LevelDoc; onRetry: () => void }) {
         onFinished: (result) => setFinished(result),
         runEffects: (effects) => {
           for (const eff of effects) {
-            if (eff.type === 'audio.play') playNotes(eff.notes, eff.tempo)
+            if (eff.type === 'audio.play') playNotes(eff.notes, eff.tempo, eff.mode)
           }
         },
         getNowSeconds: () => getCtx().currentTime,
@@ -38,6 +38,7 @@ function RunnerCore({ doc, onRetry }: { doc: LevelDoc; onRetry: () => void }) {
 
   useEffect(() => {
     session.start()
+    return () => session.dispose()
   }, [session])
 
   return (

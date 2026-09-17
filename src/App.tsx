@@ -6,11 +6,17 @@ import { TunerDemo } from './pages/TunerDemo'
 import { RhythmDemo } from './pages/RhythmDemo'
 import noteClickDoc from './sample/note-click.level.json'
 import theoryChoiceDoc from './sample/theory-choice.level.json'
+import melodyDictationDoc from './sample/melody-dictation.level.json'
+import timedReactionDoc from './sample/timed-reaction.level.json'
+import noteSpellingDoc from './sample/note-spelling.level.json'
 import type { LevelDoc } from './engine/level'
 
 const LEVELS: Record<string, LevelDoc> = {
   'note-click': noteClickDoc as unknown as LevelDoc,
   'theory-choice': theoryChoiceDoc as unknown as LevelDoc,
+  'melody-dictation': melodyDictationDoc as unknown as LevelDoc,
+  'timed-reaction': timedReactionDoc as unknown as LevelDoc,
+  'note-spelling': noteSpellingDoc as unknown as LevelDoc,
 }
 
 function useHashRoute(): string {

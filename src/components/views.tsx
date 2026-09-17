@@ -7,7 +7,7 @@ import { Accidental, Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'v
 import { Note } from 'tonal'
 import type { ComponentInstance } from '../engine/level'
 import type { Json } from '../engine/expr'
-import type { ButtonState, ChoiceState, LabelState, StaffState } from '../runtime/componentDef'
+import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, SliderState, StaffState } from '../runtime/componentDef'
 import type { ComponentStore } from '../runtime/store'
 import type { MusicDoc } from '../engine/level'
 
@@ -191,6 +191,12 @@ export function ComponentView(props: ViewProps): React.ReactNode {
       return <ButtonView {...props} />
     case 'choice':
       return <ChoiceView {...props} />
+    case 'slider':
+      return <SliderView {...props} />
+    case 'input':
+      return <InputView {...props} />
+    case 'fingering':
+      return <FingeringView {...props} />
     default:
       // 未知组件类型：降级为占位框而不是崩溃（docs §7 承诺）
       return (
@@ -199,4 +205,110 @@ export function ComponentView(props: ViewProps): React.ReactNode {
         </div>
       )
   }
+}
+
+// ---------------------------------------------------------------------------
+
+export function SliderView({ spec, store, emit }: ViewProps) {
+  const { value } = useComponentState<SliderState>(store, spec.id)
+  const p = (spec.props ?? {}) as Record<string, Json>
+  const min = typeof p.min === 'number' ? p.min : 0
+  const max = typeof p.max === 'number' ? p.max : 100
+  const step = typeof p.step === 'number' ? p.step : 1
+  const commit = (): void => {
+    emit('changed', { value })
+  }
+  return (
+    <div style={boxStyle(spec)} className="comp-slider">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => store.applyCommand(spec.id, '__set', { value: Number(e.target.value) })}
+        onPointerUp={commit}
+        onKeyUp={commit}
+      />
+      <span className="slider-value">{value}</span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+export function InputView({ spec, store, emit }: ViewProps) {
+  const { value } = useComponentState<InputState>(store, spec.id)
+  const p = (spec.props ?? {}) as Record<string, Json>
+  return (
+    <input
+      type="text"
+      style={boxStyle(spec)}
+      className="comp-input"
+      placeholder={typeof p.placeholder === 'string' ? p.placeholder : ''}
+      value={value}
+      onChange={(e) => store.applyCommand(spec.id, 'setValue', { value: e.target.value })}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') emit('submitted', { value })
+      }}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+const BLACK_PITCH_CLASSES = new Set([1, 3, 6, 8, 10])
+
+interface KeyInfo {
+  midi: number
+  isBlack: boolean
+}
+
+export function FingeringView({ spec, store, emit }: ViewProps) {
+  const { highlights, clearToken } = useComponentState<FingeringState>(store, spec.id)
+  const p = (spec.props ?? {}) as Record<string, Json>
+  const low = typeof p.lowMidi === 'number' ? p.lowMidi : 48
+  const high = typeof p.highMidi === 'number' ? p.highMidi : 72
+
+  const keys: KeyInfo[] = []
+  for (let midi = low; midi <= high; midi++) {
+    keys.push({ midi, isBlack: BLACK_PITCH_CLASSES.has(midi % 12) })
+  }
+  const whites = keys.filter((k) => !k.isBlack)
+  const whiteW = 100 / Math.max(1, whites.length)
+  const blackW = whiteW * 0.62
+
+  return (
+    <div style={boxStyle(spec)} className="comp-fingering" data-clear={clearToken}>
+      {whites.map((k, i) => {
+        const hl = highlights?.[String(k.midi)]
+        return (
+          <button
+            key={k.midi}
+            type="button"
+            className={`key white ${hl ?? ''}`}
+            style={{ left: `${i * whiteW}%`, width: `${whiteW}%` }}
+            title={Note.fromMidi(k.midi) ?? String(k.midi)}
+            onClick={() => emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })}
+          />
+        )
+      })}
+      {keys
+        .filter((k) => k.isBlack)
+        .map((k) => {
+          const whitesBefore = whites.filter((w) => w.midi < k.midi).length
+          const hl = highlights?.[String(k.midi)]
+          return (
+            <button
+              key={k.midi}
+              type="button"
+              className={`key black ${hl ?? ''}`}
+              style={{ left: `${whitesBefore * whiteW - blackW / 2}%`, width: `${blackW}%` }}
+              title={Note.fromMidi(k.midi) ?? String(k.midi)}
+              onClick={() => emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })}
+            />
+          )
+        })}
+    </div>
+  )
 }

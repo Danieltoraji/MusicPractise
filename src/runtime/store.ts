@@ -7,9 +7,13 @@ import type { Json } from '../engine/expr'
 import {
   BUTTON_DEF,
   CHOICE_DEF,
+  FINGERING_DEF,
+  INPUT_DEF,
   LABEL_DEF,
+  SLIDER_DEF,
   SOUND_DEF,
   STAFF_DEF,
+  TIMER_DEF,
   type ComponentDef,
   type Effect,
 } from './componentDef'
@@ -20,6 +24,10 @@ const DEFS: Record<string, ComponentDef<never>> = {
   choice: CHOICE_DEF as ComponentDef<never>,
   staff: STAFF_DEF as ComponentDef<never>,
   sound: SOUND_DEF as ComponentDef<never>,
+  timer: TIMER_DEF as ComponentDef<never>,
+  slider: SLIDER_DEF as ComponentDef<never>,
+  input: INPUT_DEF as ComponentDef<never>,
+  fingering: FINGERING_DEF as ComponentDef<never>,
 }
 
 /** 未知组件类型的占位 def：状态/命令全部 no-op，视图层渲染"组件缺失"占位框 */

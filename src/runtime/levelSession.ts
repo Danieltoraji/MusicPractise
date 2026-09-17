@@ -28,6 +28,7 @@ export class LevelSession {
   private finishedFlag = false
   private question: Question | null = null
   private emitFns = new Map<string, (event: string, payload?: Json) => void>()
+  private timers = new Map<string, ReturnType<typeof setTimeout>>()
 
   constructor(doc: LevelDoc, host: SessionHost) {
     this.doc = doc
@@ -89,10 +90,16 @@ export class LevelSession {
   }
 
   restart(): void {
+    this.stopAllTimers()
     this.engine.reset()
     this.store.resetAll()
     this.finishedFlag = false
     this.start()
+  }
+
+  /** 卸载时清理（LevelRunner 的 effect cleanup 调用） */
+  dispose(): void {
+    this.stopAllTimers()
   }
 
   private loadQuestion(p: number): void {
@@ -142,10 +149,49 @@ export class LevelSession {
     }
     try {
       const effects = this.store.applyCommand(cid, cmd, args as Record<string, Json>)
-      this.host.runEffects(effects)
+      this.runEffects(cid, effects)
     } catch (err) {
       console.error(`[session] 命令执行失败 ${path}:`, err)
     }
+  }
+
+  /** timer 效果由会话内部执行（tick 回流为组件事件），其余交给宿主 */
+  private runEffects(cid: string, effects: Effect[]): void {
+    for (const eff of effects) {
+      if (eff.type === 'timer.start') this.startTimer(cid, eff.ms, eff.repeat)
+      else if (eff.type === 'timer.stop') this.stopTimer(cid)
+      else this.host.runEffects([eff])
+    }
+  }
+
+  private startTimer(cid: string, ms: number, repeat: boolean): void {
+    this.stopTimer(cid)
+    let count = 0
+    const fire = (): void => {
+      count += 1
+      try {
+        this.store.applyCommand(cid, '__tick', { count })
+      } catch (err) {
+        console.error(`[session] 计时器状态更新失败 ${cid}:`, err)
+      }
+      this.dispatch(`${cid}.tick`, { count })
+    }
+    // 单次与重复分别用 timeout/interval；句柄统一用 clearTimeout 清理
+    const handle = repeat ? setInterval(fire, ms) : setTimeout(fire, ms)
+    this.timers.set(cid, handle)
+  }
+
+  private stopTimer(cid: string): void {
+    const handle = this.timers.get(cid)
+    if (handle !== undefined) {
+      clearTimeout(handle)
+      this.timers.delete(cid)
+    }
+  }
+
+  private stopAllTimers(): void {
+    for (const handle of this.timers.values()) clearTimeout(handle)
+    this.timers.clear()
   }
 
   private finish(): void {

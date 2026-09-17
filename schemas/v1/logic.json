@@ -5,7 +5,7 @@
   "$defs": {
     "Expr": {
       "type": "string",
-      "description": "安全表达式：算术/比较/逻辑/三元/成员访问(.)/白名单函数。作用域根：event、q、v。无赋值、无循环。运行时另有步数预算（默认 1000 节点）",
+      "description": "安全表达式：算术/比较/逻辑/三元/成员访问(.)/数组字面量[]/下标访问[i]/白名单函数。作用域根：event、q、v。无赋值、无循环。运行时另有步数预算（默认 1000 节点）",
       "minLength": 1
     },
     "ResolvedValue": {
@@ -79,8 +79,13 @@
   "properties": {
     "variables": {
       "type": "object",
-      "description": "关卡级变量与初始值（初始值必须是标量字面量）",
-      "additionalProperties": { "type": ["number", "string", "boolean", "null"] }
+      "description": "关卡级变量与初始值（标量或标量数组，数组可作序列累加器；表达式 append/join 等配合使用）",
+      "additionalProperties": {
+        "anyOf": [
+          { "type": ["number", "string", "boolean", "null"] },
+          { "type": "array", "items": { "type": ["number", "string", "boolean", "null"] }, "maxItems": 128 }
+        ]
+      }
     },
     "rules": { "type": "array", "items": { "$ref": "#/$defs/Rule" }, "maxItems": 128 }
   },

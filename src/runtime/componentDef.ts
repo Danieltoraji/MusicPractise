@@ -6,7 +6,11 @@
 import type { ComponentInstance, Note } from '../engine/level'
 import type { Json } from '../engine/expr'
 
-export type Effect = { type: 'audio.play'; notes: Note[]; tempo?: number } | { type: 'none' }
+export type Effect =
+  | { type: 'audio.play'; notes: Note[]; tempo?: number; mode?: 'chord' | 'seq' }
+  | { type: 'timer.start'; ms: number; repeat: boolean }
+  | { type: 'timer.stop' }
+  | { type: 'none' }
 
 export interface ContractDoc {
   type: string
@@ -20,6 +24,8 @@ export interface ContractDoc {
   bindings?: Record<string, string>
   /** 可读状态（编辑器展示用；表达式 v1 经事件即可覆盖） */
   state?: Record<string, string>
+  /** props 说明（自由文本；propsSchema 正式化在编辑器阶段） */
+  propsDoc?: string
 }
 
 export interface ComponentDef<S = unknown> {
@@ -50,6 +56,21 @@ export interface StaffState {
 }
 export interface SoundState {
   lastPlay: Json | null
+}
+export interface TimerState {
+  running: boolean
+  count: number
+  ms: number
+}
+export interface SliderState {
+  value: number
+}
+export interface InputState {
+  value: string
+}
+export interface FingeringState {
+  highlights: Record<string, string>
+  clearToken: number
 }
 
 const str = (v: Json | undefined, dflt: string): string => (typeof v === 'string' ? v : dflt)
@@ -157,7 +178,7 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
     displayName: '发声器',
     category: 'music',
     events: {},
-    commands: { play: '{ notes: Note[], tempo?: number }', stop: '无参数' },
+    commands: { play: '{ notes: Note[], tempo?: number, mode?: "chord"|"seq" }', stop: '无参数' },
     state: { lastPlay: 'Json' },
   },
   initialState: () => ({ lastPlay: null }),
@@ -166,11 +187,103 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
     if (cmd === 'play') {
       const notes = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
       const tempo = typeof args.tempo === 'number' ? args.tempo : undefined
+      const mode = args.mode === 'seq' ? 'seq' : 'chord'
       return {
         state: { lastPlay: args.notes ?? null },
-        effects: [{ type: 'audio.play', notes, tempo }],
+        effects: [{ type: 'audio.play', notes, tempo, mode }],
       }
     }
+    return { state: s }
+  },
+}
+
+export const TIMER_DEF: ComponentDef<TimerState> = {
+  contract: {
+    type: 'timer',
+    displayName: '计时器',
+    category: 'hidden',
+    events: { tick: '{ count: number }' },
+    // __tick 为运行器内部命令（约定：双下划线前缀 = 内部，不承诺给 UGC）
+    commands: { start: '{ ms: number, repeat?: boolean }', stop: '无参数' },
+    state: { running: 'boolean', count: 'number', ms: 'number' },
+  },
+  initialState: () => ({ running: false, count: 0, ms: 0 }),
+  applyBinding: (s) => s,
+  applyCommand: (s, cmd, args) => {
+    if (cmd === 'start') {
+      const ms = typeof args.ms === 'number' ? Math.max(1, args.ms) : 1000
+      const repeat = args.repeat === true
+      return { state: { ...s, running: true, count: 0, ms }, effects: [{ type: 'timer.start', ms, repeat }] }
+    }
+    if (cmd === 'stop') return { state: { ...s, running: false }, effects: [{ type: 'timer.stop' }] }
+    if (cmd === '__tick') return { state: { ...s, count: typeof args.count === 'number' ? args.count : s.count + 1 } }
+    return { state: s }
+  },
+}
+
+export const SLIDER_DEF: ComponentDef<SliderState> = {
+  contract: {
+    type: 'slider',
+    displayName: '滑块',
+    category: 'ui',
+    events: { changed: '{ value: number }' },
+    commands: { setValue: '{ value: number }' },
+    state: { value: 'number' },
+  },
+  initialState: (spec) => {
+    const p = (spec.props ?? {}) as Record<string, Json>
+    const min = typeof p.min === 'number' ? p.min : 0
+    const max = typeof p.max === 'number' ? p.max : 100
+    const initial = typeof p.initial === 'number' ? p.initial : min
+    return { value: Math.min(max, Math.max(min, initial)) }
+  },
+  applyBinding: (s) => s,
+  applyCommand: (s, cmd, args) => {
+    if (cmd === 'setValue' || cmd === '__set') {
+      if (typeof args.value !== 'number') return { state: s }
+      return { state: { ...s, value: args.value } }
+    }
+    return { state: s }
+  },
+}
+
+export const INPUT_DEF: ComponentDef<InputState> = {
+  contract: {
+    type: 'input',
+    displayName: '输入框',
+    category: 'ui',
+    events: { submitted: '{ value: string }' },
+    commands: { setValue: '{ value: string }', clear: '无参数' },
+    state: { value: 'string' },
+  },
+  initialState: () => ({ value: '' }),
+  applyBinding: (s) => s,
+  applyCommand: (s, cmd, args) => {
+    if (cmd === 'setValue') return { state: { ...s, value: str(args.value, s.value) } }
+    if (cmd === 'clear') return { state: { ...s, value: '' } }
+    return { state: s }
+  },
+}
+
+export const FINGERING_DEF: ComponentDef<FingeringState> = {
+  contract: {
+    type: 'fingering',
+    displayName: '指法/键盘',
+    category: 'music',
+    events: { keyClicked: '{ midi: number, name: string }' },
+    commands: { highlight: '{ target: number(midi), style: "correct"|"wrong" }', clear: '无参数' },
+    propsDoc: 'props: { lowMidi: number, highMidi: number }（键盘音域，缺省 48..72）',
+    state: { highlights: 'Record<midi, "correct"|"wrong">' },
+  },
+  initialState: () => ({ highlights: {}, clearToken: 0 }),
+  applyBinding: (s) => s,
+  applyCommand: (s, cmd, args) => {
+    if (cmd === 'highlight') {
+      if (typeof args.target !== 'number') return { state: s }
+      const style = args.style === 'wrong' ? 'wrong' : 'correct'
+      return { state: { ...s, highlights: { ...s.highlights, [String(args.target)]: style } } }
+    }
+    if (cmd === 'clear') return { state: { ...s, highlights: {}, clearToken: s.clearToken + 1 } }
     return { state: s }
   },
 }

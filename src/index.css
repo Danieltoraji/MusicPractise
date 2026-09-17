@@ -462,6 +462,79 @@ button.link {
   color: var(--accent);
   box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.12);
 }
+/* ---------- 滑块 / 输入框 / 键盘 ---------- */
+
+.comp-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+}
+.comp-slider input[type='range'] {
+  flex: 1;
+}
+.slider-value {
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 40px;
+  text-align: right;
+}
+.comp-input {
+  width: 100%;
+  height: 100%;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 0 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: inherit;
+}
+.comp-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.comp-fingering {
+  position: relative;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: #f2f3f8;
+  overflow: hidden;
+}
+.comp-fingering .key {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  padding: 0;
+}
+.comp-fingering .key.white {
+  background: #ffffff;
+}
+.comp-fingering .key.white:hover {
+  background: #eef2ff;
+}
+.comp-fingering .key.black {
+  height: 62%;
+  background: #2a2f3a;
+  border-color: #14181f;
+  z-index: 2;
+  border-radius: 0 0 4px 4px;
+}
+.comp-fingering .key.black:hover {
+  background: #3d4453;
+}
+.comp-fingering .key.correct {
+  background: var(--ok) !important;
+}
+.comp-fingering .key.wrong {
+  background: var(--bad) !important;
+}
+
 .rhythm-result {
   background: var(--panel);
   border: 1px solid var(--line);

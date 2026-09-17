@@ -7,6 +7,9 @@ import { describe, expect, it } from 'vitest'
 import Ajv2020 from 'ajv/dist/2020'
 import noteClickDoc from './sample/note-click.level.json'
 import theoryChoiceDoc from './sample/theory-choice.level.json'
+import melodyDictationDoc from './sample/melody-dictation.level.json'
+import timedReactionDoc from './sample/timed-reaction.level.json'
+import noteSpellingDoc from './sample/note-spelling.level.json'
 
 const SCHEMA_FILES = ['common.json', 'logic.json', 'level.json', 'series.json', 'topic.json', 'instrument.json']
 const BASE = 'https://music-practise.local/schemas/v1/'
@@ -35,6 +38,16 @@ describe('关卡文档 JSON Schema', () => {
 
   it('示例关卡 theory-choice 通过校验', () => {
     const ok = validate!(theoryChoiceDoc)
+    expect(validate!.errors ?? []).toEqual([])
+    expect(ok).toBe(true)
+  })
+
+  it.each([
+    ['melody-dictation', melodyDictationDoc],
+    ['timed-reaction', timedReactionDoc],
+    ['note-spelling', noteSpellingDoc],
+  ])('示例关卡 %s 通过校验（含数组变量初值）', (_name, doc) => {
+    const ok = validate!(doc)
     expect(validate!.errors ?? []).toEqual([])
     expect(ok).toBe(true)
   })

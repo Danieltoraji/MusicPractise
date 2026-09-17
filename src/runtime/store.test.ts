@@ -30,11 +30,26 @@ describe('ComponentStore', () => {
     expect(listener).toHaveBeenCalled()
   })
 
-  it('sound.play 产出 audio.play 效果（含 tempo）', () => {
+  it('sound.play 产出 audio.play 效果（含 tempo 与 mode）', () => {
     const store = new ComponentStore()
     store.init([spec('s1', 'sound')])
     const effects = store.applyCommand('s1', 'play', { notes: [{ midi: 60 }], tempo: 120 })
-    expect(effects).toEqual([{ type: 'audio.play', notes: [{ midi: 60 }], tempo: 120 }])
+    expect(effects).toEqual([{ type: 'audio.play', notes: [{ midi: 60 }], tempo: 120, mode: 'chord' }])
+    const seq = store.applyCommand('s1', 'play', { notes: [{ midi: 60 }], mode: 'seq' })
+    expect(seq).toEqual([{ type: 'audio.play', notes: [{ midi: 60 }], mode: 'seq' }])
+  })
+
+  it('timer：start 产出效果、__tick 更新计数、stop 停止', () => {
+    const store = new ComponentStore()
+    store.init([spec('t1', 'timer')])
+    const effects = store.applyCommand('t1', 'start', { ms: 500, repeat: true })
+    expect(effects).toEqual([{ type: 'timer.start', ms: 500, repeat: true }])
+    expect(store.snapshot('t1').state).toMatchObject({ running: true, count: 0 })
+    store.applyCommand('t1', '__tick', { count: 1 })
+    expect(store.snapshot('t1').state).toMatchObject({ count: 1 })
+    const stop = store.applyCommand('t1', 'stop', {})
+    expect(stop).toEqual([{ type: 'timer.stop' }])
+    expect(store.snapshot('t1').state).toMatchObject({ running: false })
   })
 
   it('applyBinding 走组件定义（choice.options）', () => {

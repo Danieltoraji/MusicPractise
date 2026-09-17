@@ -49,24 +49,31 @@ export function durToSeconds(dur: string, tempo = 90): number {
   return (quarters * 60) / tempo * (dotted ? 1.5 : 1)
 }
 
-/** 播放一组音符（chord 模式带 25ms 微琶音）。velocity 为 MIDI 尺度 1-127（smplr 语义）。 */
-export function playNotes(notes: Note[], tempo = 90): void {
+/**
+ * 播放一组音符。
+ * - chord（缺省）：25ms 微琶音，适合和弦
+ * - seq：按每个音的 dur 在 tempo 网格上逐音排程（旋律播放，听写类关卡用）
+ * velocity 为 MIDI 尺度 1-127（smplr 语义）。
+ */
+export function playNotes(notes: Note[], tempo = 90, mode: 'chord' | 'seq' = 'chord'): void {
   if (!Array.isArray(notes) || notes.length === 0) return
   getCtx()
   ensurePiano()
     .then((p) => {
       const t0 = getCtx().currentTime + 0.06
+      let t = t0
       notes.forEach((n, i) => {
         if (typeof n?.midi !== 'number') return
         // smplr 的 velocity 是 0-127 MIDI 尺度；0 会被速度分层拒绝导致静音，钳到 1
         const vel = typeof n.vel === 'number' ? Math.min(127, Math.max(1, Math.round(n.vel))) : 100
-        const dur = Math.min(durToSeconds(n.dur ?? '4n', tempo) + 0.5, 3.5)
-        p.start({
-          note: n.midi,
-          velocity: vel,
-          time: t0 + i * 0.025,
-          duration: dur,
-        })
+        if (mode === 'seq') {
+          const dur = durToSeconds(n.dur ?? '4n', tempo)
+          p.start({ note: n.midi, velocity: vel, time: t, duration: Math.min(dur + 0.4, 3.5) })
+          t += dur
+        } else {
+          const dur = Math.min(durToSeconds(n.dur ?? '4n', tempo) + 0.5, 3.5)
+          p.start({ note: n.midi, velocity: vel, time: t0 + i * 0.025, duration: dur })
+        }
       })
     })
     .catch((err) => console.error('[audio] 钢琴音色加载失败', err))
