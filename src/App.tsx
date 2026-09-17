@@ -4,6 +4,7 @@ import { HomePage } from './pages/HomePage'
 import { LevelPage } from './pages/LevelPage'
 import { LibraryPage } from './pages/LibraryPage'
 import { SeriesPage } from './pages/SeriesPage'
+import { EditorPage } from './editor/EditorPage'
 import { TunerDemo } from './pages/TunerDemo'
 import { RhythmDemo } from './pages/RhythmDemo'
 import { ensureSeeded } from './library/db'
@@ -61,6 +62,8 @@ export default function App() {
     page = <LevelPage id={hash.slice('#/level/'.length)} />
   } else if (hash.startsWith('#/series/')) {
     page = <SeriesPage id={hash.slice('#/series/'.length)} />
+  } else if (hash.startsWith('#/edit/')) {
+    page = <EditorPage id={hash.slice('#/edit/'.length)} />
   } else if (hash === '#/library') {
     page = <LibraryPage />
   } else if (hash === '#/tuner') {

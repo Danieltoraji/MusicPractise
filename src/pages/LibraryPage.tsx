@@ -1,8 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useRef, useState } from 'react'
 import type { LibraryRecord, ResourceKind } from '../library/db'
-import { db, deleteResource } from '../library/db'
+import { db, deleteResource, putResource } from '../library/db'
 import { downloadBlob, exportResource, importFromFiles, type ImportReport } from '../library/io'
+import { copyForEditing, blankLevelDoc } from '../editor/docState'
+import type { LevelDoc } from '../engine/level'
 
 const KIND_LABEL: Record<ResourceKind, string> = { series: '📚 系列', topic: '📂 专题', level: '🎯 关卡', instrument: '🎹 乐器' }
 
@@ -50,6 +52,30 @@ export function LibraryPage() {
     }
   }
 
+  /** 编辑副本：复制库内关卡为新文档并进入编辑器 */
+  async function handleEditCopy(rec: LibraryRecord): Promise<void> {
+    setError('')
+    try {
+      const copy = copyForEditing(rec.doc as unknown as LevelDoc)
+      await putResource(copy as never)
+      window.location.hash = `#/edit/${copy.id}`
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  /** 新建空白关卡并进入编辑器 */
+  async function handleNew(): Promise<void> {
+    setError('')
+    const doc = blankLevelDoc()
+    try {
+      await putResource(doc as never)
+      window.location.hash = `#/edit/${doc.id}`
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   return (
     <div className="page">
       <h1>资源库</h1>
@@ -59,6 +85,9 @@ export function LibraryPage() {
       </p>
 
       <div className="library-actions">
+        <button type="button" className="primary" onClick={() => void handleNew()}>
+          ✏ 新建关卡
+        </button>
         <button type="button" className="primary" disabled={importing} onClick={() => fileInput.current?.click()}>
           {importing ? '导入中…' : '⬆ 导入（.json / .zip）'}
         </button>
@@ -123,7 +152,16 @@ export function LibraryPage() {
                 <td>{rec.builtIn ? '内置' : '导入'}</td>
                 <td className="row-actions">
                   {rec.kind === 'level' && (
-                    <a href={`#/level/${rec.id}`}>试玩</a>
+                    <>
+                      <a href={`#/level/${rec.id}`}>试玩</a>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => void handleEditCopy(rec)}
+                      >
+                        编辑副本
+                      </button>
+                    </>
                   )}
                   <button type="button" className="link" onClick={() => void handleExport(rec)}>
                     导出
