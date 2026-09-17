@@ -14,6 +14,14 @@ export function LevelPage({ id }: { id: string }) {
     'loading',
   )
 
+  // hooks 必须在任何条件返回之前：结算回调按 id 稳定（避免 session 重建）
+  const handleFinished = useCallback(
+    (result: { score: unknown; passed: boolean }) => {
+      void saveProgress(id, { score: Number(result.score) || 0, passed: result.passed })
+    },
+    [id],
+  )
+
   if (record === 'loading') return <p className="muted page">从资源库加载…</p>
   if (record === null) {
     return (
@@ -50,14 +58,6 @@ export function LevelPage({ id }: { id: string }) {
     )
   }
   const doc = load.doc as unknown as LevelDoc
-
-  // 结算时存进度（回调按 id 稳定，避免 session 重建）
-  const handleFinished = useCallback(
-    (result: { score: unknown; passed: boolean }) => {
-      void saveProgress(id, { score: Number(result.score) || 0, passed: result.passed })
-    },
-    [id],
-  )
 
   return (
     <div className="page">
