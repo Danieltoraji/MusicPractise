@@ -1,33 +1,35 @@
 /**
  * Schema 一致性测试：示例关卡文档必须通过 JSON Schema 校验。
- * 导入管线与编辑器将共用这套 schema（Ajv）。
+ * 导入管线与编辑器将共用这套 schema（Ajv）—— Ajv 实例来自 src/library/validate.ts 共享模块。
  */
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import Ajv2020 from 'ajv/dist/2020'
+import { buildAjv, SCHEMA_BASE } from './library/validate'
 import noteClickDoc from './sample/note-click.level.json'
 import theoryChoiceDoc from './sample/theory-choice.level.json'
 import melodyDictationDoc from './sample/melody-dictation.level.json'
 import timedReactionDoc from './sample/timed-reaction.level.json'
 import noteSpellingDoc from './sample/note-spelling.level.json'
+import starterSeries from './sample/starter.series.json'
+import starterTopic1 from './sample/starter-topic1.topic.json'
+import starterTopic2 from './sample/starter-topic2.topic.json'
 
-const SCHEMA_FILES = ['common.json', 'logic.json', 'level.json', 'series.json', 'topic.json', 'instrument.json']
-const BASE = 'https://music-practise.local/schemas/v1/'
+const BASE = SCHEMA_BASE
 
-function buildAjv(): Ajv2020 {
-  const ajv = new Ajv2020({ strict: false, allErrors: true })
-  for (const file of SCHEMA_FILES) {
-    const raw = readFileSync(new URL(`../schemas/v1/${file}`, import.meta.url), 'utf8')
-    ajv.addSchema(JSON.parse(raw))
-  }
-  return ajv
-}
+const ajv = buildAjv()
 
 describe('关卡文档 JSON Schema', () => {
-  const ajv = buildAjv()
   const validate = ajv.getSchema(`${BASE}level.json`)
   it('schema 已注册且可编译', () => {
     expect(validate).toBeDefined()
+  })
+
+  it('示例系列与专题通过校验', () => {
+    for (const doc of [starterSeries, starterTopic1, starterTopic2]) {
+      const kind = (doc as { kind: string }).kind
+      const v = ajv.getSchema(`${BASE}${kind}.json`)!
+      expect(v(doc)).toBe(true)
+      expect(v.errors ?? []).toEqual([])
+    }
   })
 
   it('示例关卡 note-click 通过校验', () => {

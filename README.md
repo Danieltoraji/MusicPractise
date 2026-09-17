@@ -9,11 +9,12 @@ ECA 规则引擎（"简易代码"）描述；节点图编辑器是后续阶段�
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # Vitest：引擎单测 + JSON Schema 校验
+npm test         # Vitest：引擎单测 + JSON Schema 校验 + 资源库/导入导出
 npm run build    # tsc strict + Vite 生产构建
 ```
 
-- `#/` 首页 · `#/level/note-click` 听音点击关卡 · `#/level/theory-choice` 和弦听辨选择题
+- `#/` 首页（关卡库） · `#/library` 资源库（导入/导出/删除/试玩） · `#/level/:id` 运行关卡
+- 内置五关 + 入门系列（1 系列 2 专题）首次启动自动入库；支持导入 `.json` 关卡与 `.zip` 系列包、导出自包含 zip
 - `#/tuner` 校音器（麦克风→音分） · `#/rhythm` 节奏判定
 
 ## 文档

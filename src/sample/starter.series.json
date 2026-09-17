@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "kind": "series",
+  "id": "res_01J9B000000000000000000000",
+  "version": "1.0.0",
+  "meta": {
+    "title": "入门系列",
+    "description": "POC 内置的完整练习路径：从听单音到旋律听写",
+    "author": {
+      "name": "POC 内置示例"
+    },
+    "tags": [
+      "系列",
+      "入门"
+    ],
+    "locale": "zh-CN",
+    "license": "CC0-1.0",
+    "difficulty": 1
+  },
+  "refs": [
+    {
+      "id": "res_01J9B100000000000000000000",
+      "kind": "topic",
+      "version": "^1.0.0"
+    },
+    {
+      "id": "res_01J9B200000000000000000000",
+      "kind": "topic",
+      "version": "^1.0.0"
+    }
+  ],
+  "content": {
+    "topicIds": [
+      "res_01J9B100000000000000000000",
+      "res_01J9B200000000000000000000"
+    ]
+  }
+}

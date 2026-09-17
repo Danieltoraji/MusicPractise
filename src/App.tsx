@@ -1,23 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { unlockAudio } from './runtime/audio'
 import { HomePage } from './pages/HomePage'
 import { LevelPage } from './pages/LevelPage'
+import { LibraryPage } from './pages/LibraryPage'
 import { TunerDemo } from './pages/TunerDemo'
 import { RhythmDemo } from './pages/RhythmDemo'
-import noteClickDoc from './sample/note-click.level.json'
-import theoryChoiceDoc from './sample/theory-choice.level.json'
-import melodyDictationDoc from './sample/melody-dictation.level.json'
-import timedReactionDoc from './sample/timed-reaction.level.json'
-import noteSpellingDoc from './sample/note-spelling.level.json'
-import type { LevelDoc } from './engine/level'
-
-const LEVELS: Record<string, LevelDoc> = {
-  'note-click': noteClickDoc as unknown as LevelDoc,
-  'theory-choice': theoryChoiceDoc as unknown as LevelDoc,
-  'melody-dictation': melodyDictationDoc as unknown as LevelDoc,
-  'timed-reaction': timedReactionDoc as unknown as LevelDoc,
-  'note-spelling': noteSpellingDoc as unknown as LevelDoc,
-}
+import { ensureSeeded, db } from './library/db'
 
 function useHashRoute(): string {
   const [hash, setHash] = useState(() => window.location.hash)
@@ -31,6 +20,16 @@ function useHashRoute(): string {
 
 export default function App() {
   const hash = useHashRoute()
+  const [seeded, setSeeded] = useState(false)
+  const [seedError, setSeedError] = useState('')
+
+  // 首次启动把内置示例关卡入库；此后一切内容只从库读取
+  useEffect(() => {
+    ensureSeeded().then(
+      () => setSeeded(true),
+      (err) => setSeedError(String(err instanceof Error ? err.message : err)),
+    )
+  }, [])
 
   // 浏览器自动播放策略：首次手势解锁 AudioContext
   useEffect(() => {
@@ -43,17 +42,25 @@ export default function App() {
     }
   }, [])
 
+  const levels = useLiveQuery(
+    () => db.resources.where('kind').equals('level').toArray(),
+    [],
+    undefined,
+  )
+
   let page: React.ReactNode
-  if (hash.startsWith('#/level/')) {
-    const id = hash.slice('#/level/'.length)
-    const doc = LEVELS[id]
-    page = doc ? <LevelPage doc={doc} /> : <p className="muted">关卡不存在</p>
+  if (!seeded) {
+    page = seedError ? <p className="tone-error">资源库初始化失败：{seedError}</p> : <p className="muted">资源库初始化中…</p>
+  } else if (hash.startsWith('#/level/')) {
+    page = <LevelPage id={hash.slice('#/level/'.length)} />
+  } else if (hash === '#/library') {
+    page = <LibraryPage />
   } else if (hash === '#/tuner') {
     page = <TunerDemo />
   } else if (hash === '#/rhythm') {
     page = <RhythmDemo />
   } else {
-    page = <HomePage levels={LEVELS} />
+    page = <HomePage levels={levels ?? []} loading={levels === undefined} />
   }
 
   return (
@@ -65,6 +72,9 @@ export default function App() {
         <nav>
           <a href="#/" className={hash === '' || hash === '#/' || hash === '#' ? 'active' : ''}>
             首页
+          </a>
+          <a href="#/library" className={hash === '#/library' ? 'active' : ''}>
+            资源库
           </a>
           <a href="#/tuner" className={hash === '#/tuner' ? 'active' : ''}>
             校音器

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "kind": "topic",
+  "id": "res_01J9B100000000000000000000",
+  "version": "1.0.0",
+  "meta": {
+    "title": "听音基础",
+    "description": "从单音到和弦的听辨入门",
+    "author": {
+      "name": "POC 内置示例"
+    },
+    "tags": [
+      "入门"
+    ],
+    "locale": "zh-CN",
+    "license": "CC0-1.0",
+    "difficulty": 1
+  },
+  "refs": [
+    {
+      "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A1",
+      "kind": "level",
+      "version": "^1.0.0"
+    },
+    {
+      "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A2",
+      "kind": "level",
+      "version": "^1.0.0"
+    }
+  ],
+  "content": {
+    "levelIds": [
+      "res_01J9A0A0A0A0A0A0A0A0A0A0A1",
+      "res_01J9A0A0A0A0A0A0A0A0A0A0A2"
+    ],
+    "brief": "先学会听单个音与和弦性质"
+  }
+}

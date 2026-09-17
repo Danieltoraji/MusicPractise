@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "kind": "topic",
+  "id": "res_01J9B200000000000000000000",
+  "version": "1.0.0",
+  "meta": {
+    "title": "进阶训练",
+    "description": "旋律、节奏与理论拼写",
+    "author": {
+      "name": "POC 内置示例"
+    },
+    "tags": [
+      "进阶"
+    ],
+    "locale": "zh-CN",
+    "license": "CC0-1.0",
+    "difficulty": 3
+  },
+  "refs": [
+    {
+      "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A3",
+      "kind": "level",
+      "version": "^1.0.0"
+    },
+    {
+      "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A4",
+      "kind": "level",
+      "version": "^1.0.0"
+    },
+    {
+      "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A5",
+      "kind": "level",
+      "version": "^1.0.0"
+    }
+  ],
+  "content": {
+    "levelIds": [
+      "res_01J9A0A0A0A0A0A0A0A0A0A0A3",
+      "res_01J9A0A0A0A0A0A0A0A0A0A0A4",
+      "res_01J9A0A0A0A0A0A0A0A0A0A0A5"
+    ],
+    "brief": "综合运用耳朵与理论"
+  }
+}

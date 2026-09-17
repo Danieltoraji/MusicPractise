@@ -402,6 +402,82 @@ button.link {
   font-weight: 700;
 }
 
+/* ---------- 资源库 ---------- */
+
+.library-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 14px 0 18px;
+}
+.button-like {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 18px;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--panel);
+  font-size: 15px;
+}
+.library-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.library-table th,
+.library-table td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.library-table th {
+  color: var(--muted);
+  font-weight: 600;
+  background: #fafbfe;
+}
+.library-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.id-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.row-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.row-actions .link.danger {
+  color: var(--bad);
+}
+.import-report {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.import-report ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.boundary-error {
+  background: var(--panel);
+  border: 1.5px solid var(--bad);
+  border-radius: 14px;
+  padding: 28px;
+  text-align: center;
+}
+.boundary-error h2 {
+  color: var(--bad);
+}
+
 /* ---------- 节奏 ---------- */
 
 .rhythm-controls {
