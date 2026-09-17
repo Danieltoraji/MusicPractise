@@ -42,7 +42,7 @@ interface Tok {
 
 const OPS3: string[] = []
 const OPS2 = ['==', '!=', '<=', '>=', '&&', '||']
-const OPS1 = ['+', '-', '*', '/', '%', '<', '>', '!', '?', ':', '(', ')', ',', '.']
+const OPS1 = ['+', '-', '*', '/', '%', '<', '>', '!', '?', ':', '(', ')', ',', '.', '[', ']']
 
 function tokenize(src: string): Tok[] {
   const toks: Tok[] = []
@@ -118,6 +118,8 @@ function tokenize(src: string): Tok[] {
 export type Ast =
   | { k: 'lit'; v: Json }
   | { k: 'path'; parts: string[] }
+  | { k: 'array'; items: Ast[] }
+  | { k: 'index'; obj: Ast; idx: Ast }
   | { k: 'call'; name: string; args: Ast[] }
   | { k: 'un'; op: '!' | '-'; a: Ast }
   | { k: 'bin'; op: string; a: Ast; b: Ast }
@@ -230,17 +232,28 @@ class Parser {
     if (!t) throw new ExprError('表达式意外结束')
     if (t.t === 'num') {
       this.pos++
-      return { k: 'lit', v: t.v as number }
+      return this.postfix({ k: 'lit', v: t.v as number })
     }
     if (t.t === 'str') {
       this.pos++
-      return { k: 'lit', v: t.v as string }
+      return this.postfix({ k: 'lit', v: t.v as string })
     }
     if (t.t === 'op' && t.v === '(') {
       this.pos++
       const inner = this.ternary()
       this.expectOp(')')
-      return inner
+      return this.postfix(inner)
+    }
+    if (t.t === 'op' && t.v === '[') {
+      this.pos++
+      const items: Ast[] = []
+      if (!this.eatOp(']')) {
+        do {
+          items.push(this.ternary())
+        } while (this.eatOp(','))
+        this.expectOp(']')
+      }
+      return this.postfix({ k: 'array', items })
     }
     if (t.t === 'ident') {
       this.pos++
@@ -253,7 +266,7 @@ class Parser {
           } while (this.eatOp(','))
           this.expectOp(')')
         }
-        return { k: 'call', name, args }
+        return this.postfix({ k: 'call', name, args })
       }
       const parts = [name]
       while (this.eatOp('.')) {
@@ -262,12 +275,23 @@ class Parser {
         this.pos++
         parts.push(String(id.v))
       }
-      if (name === 'true') return { k: 'lit', v: true }
-      if (name === 'false') return { k: 'lit', v: false }
-      if (name === 'null') return { k: 'lit', v: null }
-      return { k: 'path', parts }
+      if (name === 'true') return this.postfix({ k: 'lit', v: true })
+      if (name === 'false') return this.postfix({ k: 'lit', v: false })
+      if (name === 'null') return this.postfix({ k: 'lit', v: null })
+      return this.postfix({ k: 'path', parts })
     }
     throw new ExprError(`意外的符号: ${String(t.v)}`)
+  }
+
+  /** 后缀下标访问：a[i]、q.data.seq[0]、(a concat b)[1] */
+  private postfix(base: Ast): Ast {
+    let node = base
+    while (this.eatOp('[')) {
+      const idx = this.ternary()
+      this.expectOp(']')
+      node = { k: 'index', obj: node, idx }
+    }
+    return node
   }
 }
 
@@ -353,6 +377,68 @@ const FUNCS: Record<string, FuncDef> = {
       return Math.round(1200 * Math.log2(freq / target))
     },
   },
+  upper: {
+    minArgs: 1,
+    maxArgs: 1,
+    fn: ([a]) => {
+      if (typeof a !== 'string') throw new ExprError('upper 需要字符串')
+      return a.toUpperCase()
+    },
+  },
+  lower: {
+    minArgs: 1,
+    maxArgs: 1,
+    fn: ([a]) => {
+      if (typeof a !== 'string') throw new ExprError('lower 需要字符串')
+      return a.toLowerCase()
+    },
+  },
+  append: {
+    minArgs: 2,
+    maxArgs: 2,
+    fn: ([arr, x]) => {
+      if (!Array.isArray(arr)) throw new ExprError('append 第一个参数需要数组')
+      return [...arr, x]
+    },
+  },
+  concat: {
+    minArgs: 2,
+    maxArgs: 2,
+    fn: ([a, b]) => {
+      if (Array.isArray(a) && Array.isArray(b)) return [...a, ...b]
+      if (typeof a === 'string' && typeof b === 'string') return a + b
+      throw new ExprError('concat 两个参数需要同为数组或同为字符串')
+    },
+  },
+  contains: {
+    minArgs: 2,
+    maxArgs: 2,
+    fn: ([hay, x]) => {
+      if (Array.isArray(hay)) return hay.some((item) => item === x)
+      if (typeof hay === 'string' && typeof x === 'string') return hay.includes(x)
+      throw new ExprError('contains 需要数组或字符串作为第一个参数')
+    },
+  },
+  join: {
+    minArgs: 1,
+    maxArgs: 2,
+    fn: ([arr, sep]) => {
+      if (!Array.isArray(arr)) throw new ExprError('join 需要数组')
+      const s = sep === undefined ? '' : String(sep)
+      return arr.map((item) => String(item)).join(s)
+    },
+  },
+  slice: {
+    minArgs: 2,
+    maxArgs: 3,
+    fn: ([x, start, end]) => {
+      const s = Math.trunc(num(start, 'slice'))
+      const e = end === undefined ? undefined : Math.trunc(num(end, 'slice'))
+      if (Array.isArray(x)) return x.slice(s, e)
+      if (typeof x === 'string') return x.slice(s, e)
+      throw new ExprError('slice 需要数组或字符串')
+    },
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +466,17 @@ class Evaluator {
     switch (node.k) {
       case 'lit':
         return node.v
+      case 'array':
+        return node.items.map((item) => this.evalAst(item))
+      case 'index': {
+        const obj = this.evalAst(node.obj)
+        const rawIdx = this.evalAst(node.idx)
+        if (typeof rawIdx !== 'number') throw new ExprError('下标必须是数字')
+        const idx = Math.trunc(rawIdx)
+        if (Array.isArray(obj)) return idx >= 0 && idx < obj.length ? obj[idx] : null
+        if (typeof obj === 'string') return idx >= 0 && idx < obj.length ? obj[idx] : null
+        throw new ExprError('只能对数组或字符串取下标')
+      }
       case 'path': {
         const root = node.parts[0]
         let cur: Json

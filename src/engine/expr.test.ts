@@ -67,8 +67,38 @@ describe('表达式求值', () => {
     expect(evalExpr('cents(440, 69)', base)).toBe(0)
     expect(evalExpr('cents(466.16, 69)', base)).toBe(100)
     expect(() => evalExpr('cents(0, 69)', base)).toThrow(/正数/)
+    expect(evalExpr('upper("ceg")', base)).toBe('CEG')
+    expect(evalExpr('lower("CEG")', base)).toBe('ceg')
     const ri = evalExpr('randomInt(2, 2)', base)
     expect(ri).toBe(2)
+  })
+
+  it('数组字面量与下标访问', () => {
+    expect(evalExpr('[1, 2, 3]', base)).toEqual([1, 2, 3])
+    expect(evalExpr('[]', base)).toEqual([])
+    expect(evalExpr('[10, 20, 30][1]', base)).toBe(20)
+    const scope = { event: {}, q: { data: { seq: [60, 64] } }, v: {} }
+    expect(evalExpr('q.data.seq[0]', scope)).toBe(60)
+    expect(evalExpr('q.data.seq[5]', scope)).toBe(null)
+    expect(evalExpr('q.data.seq[0 - 1]', scope)).toBe(null)
+    expect(evalExpr('"abc"[1]', base)).toBe('b')
+    expect(() => evalExpr('5[0]', base)).toThrow(ExprError)
+    expect(() => evalExpr('q.data.seq["a"]', scope)).toThrow(ExprError)
+  })
+
+  it('序列函数 append/concat/contains/join/slice', () => {
+    expect(evalExpr('append([], 7)', base)).toEqual([7])
+    expect(evalExpr('append([1], 2)', base)).toEqual([1, 2])
+    expect(evalExpr('concat([1], [2, 3])', base)).toEqual([1, 2, 3])
+    expect(evalExpr('concat("a", "b")', base)).toBe('ab')
+    expect(() => evalExpr('concat([1], "a")', base)).toThrow(ExprError)
+    expect(evalExpr('contains([1, 2], 2)', base)).toBe(true)
+    expect(evalExpr('contains([1, 2], 3)', base)).toBe(false)
+    expect(evalExpr('contains("hello", "ell")', base)).toBe(true)
+    expect(evalExpr('join([60, 64, 67], ",")', base)).toBe('60,64,67')
+    expect(evalExpr('join([1, 2])', base)).toBe('12')
+    expect(evalExpr('slice([1, 2, 3, 4], 1, 3)', base)).toEqual([2, 3])
+    expect(evalExpr('slice("hello", 1)', base)).toBe('ello')
   })
 
   it('安全边界：拒绝作用域外标识符', () => {
