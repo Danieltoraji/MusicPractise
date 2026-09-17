@@ -31,15 +31,33 @@ export function packBundle(docs: Record<string, unknown>[]): Uint8Array {
   return zipSync(files)
 }
 
-export function unpackBundle(bytes: Uint8Array): { file: string; doc: unknown }[] {
-  const unzipped = unzipSync(bytes)
-  const out: { file: string; doc: unknown }[] = []
+/** 单条目解压上限（50MB）与整包上限（100MB），防 zip 炸弹撑爆标签页 */
+const MAX_ENTRY_BYTES = 50_000_000
+const MAX_TOTAL_BYTES = 100_000_000
+
+export function unpackBundle(bytes: Uint8Array): { entries: { file: string; doc: unknown }[]; parseErrors: string[] } {
+  let total = 0
+  const unzipped = unzipSync(bytes, {
+    filter: (f) => {
+      if (f.originalSize > MAX_ENTRY_BYTES) return false
+      total += f.originalSize
+      return total <= MAX_TOTAL_BYTES
+    },
+  })
+  const entries: { file: string; doc: unknown }[] = []
+  const parseErrors: string[] = []
   for (const [path, data] of Object.entries(unzipped)) {
     if (path === 'manifest.json' || !path.startsWith('resources/') || !path.endsWith('.json')) continue
-    out.push({ file: path, doc: JSON.parse(strFromU8(data)) })
+    try {
+      entries.push({ file: path, doc: JSON.parse(strFromU8(data)) })
+    } catch (err) {
+      parseErrors.push(`${path}: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
-  if (out.length === 0) throw new Error('zip 中没有 resources/*.json 文档')
-  return out
+  if (entries.length === 0) {
+    throw new Error(parseErrors.length > 0 ? `zip 中没有可解析的文档：${parseErrors.join('；')}` : 'zip 中没有 resources/*.json 文档')
+  }
+  return { entries, parseErrors }
 }
 
 // ---------------------------------------------------------------------------
@@ -61,8 +79,11 @@ export interface ImportReport {
   aborted: boolean
 }
 
-export async function importDocuments(entries: ImportEntry[]): Promise<ImportReport> {
-  const report: ImportReport = { added: [], updated: [], skipped: [], rejected: [], missing: [], aborted: false }
+export async function importDocuments(
+  entries: ImportEntry[],
+  preRejected: { file: string; reasons: string[] }[] = [],
+): Promise<ImportReport> {
+  const report: ImportReport = { added: [], updated: [], skipped: [], rejected: [...preRejected], missing: [], aborted: false }
 
   // 1) 信封校验 + 包内去重
   const lites: ResourceLite[] = []
@@ -107,7 +128,8 @@ export async function importDocuments(entries: ImportEntry[]): Promise<ImportRep
   }
 
   // 3) 冲突策略（单态）：新增 / 跳过（同 id 同 version）/ 覆盖更新（同 id 异 version）
-  const addedDocs: Record<string, unknown>[] = []
+  //    写入包在事务里：任何一条失败整体回滚，不半提交
+  const toWrite: Record<string, unknown>[] = []
   for (const lite of lites) {
     const existing = libraryRecords.find((r) => r.id === lite.id)
     const version = String(lite.doc.version)
@@ -115,26 +137,40 @@ export async function importDocuments(entries: ImportEntry[]): Promise<ImportRep
       report.skipped.push(lite.id)
       continue
     }
-    await putResource(lite.doc as never)
     if (existing) report.updated.push(lite.id)
     else report.added.push(lite.id)
-    addedDocs.push(lite.doc)
+    toWrite.push(lite.doc)
   }
-  void addedDocs
+  if (toWrite.length > 0) {
+    await db.transaction('rw', db.resources, async () => {
+      for (const doc of toWrite) await putResource(doc as never)
+    })
+  }
   return report
 }
 
 /** 从文件字节导入（.json 单文档或 .zip 包），聚合为一次导入报告 */
 export async function importFromFiles(files: { name: string; bytes: Uint8Array }[]): Promise<ImportReport> {
   const entries: ImportEntry[] = []
+  const preRejected: { file: string; reasons: string[] }[] = []
   for (const f of files) {
     if (f.name.toLowerCase().endsWith('.zip')) {
-      for (const e of unpackBundle(f.bytes)) entries.push({ file: `${f.name}/${e.file}`, raw: e.doc })
+      try {
+        const { entries: unpacked, parseErrors } = unpackBundle(f.bytes)
+        entries.push(...unpacked.map((e) => ({ file: `${f.name}/${e.file}`, raw: e.doc })))
+        for (const msg of parseErrors) preRejected.push({ file: f.name, reasons: [msg] })
+      } catch (err) {
+        preRejected.push({ file: f.name, reasons: [err instanceof Error ? err.message : String(err)] })
+      }
     } else {
-      entries.push({ file: f.name, raw: JSON.parse(strFromU8(f.bytes)) })
+      try {
+        entries.push({ file: f.name, raw: JSON.parse(strFromU8(f.bytes)) })
+      } catch (err) {
+        preRejected.push({ file: f.name, reasons: [`不是合法 JSON: ${err instanceof Error ? err.message : String(err)}`] })
+      }
     }
   }
-  return importDocuments(entries)
+  return importDocuments(entries, preRejected)
 }
 
 // ---------------------------------------------------------------------------

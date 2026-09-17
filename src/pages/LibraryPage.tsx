@@ -10,12 +10,14 @@ export function LibraryPage() {
   const resources = useLiveQuery(() => db.resources.orderBy('importedAt').toArray(), [], undefined)
   const [report, setReport] = useState<ImportReport | null>(null)
   const [error, setError] = useState('')
+  const [importing, setImporting] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   async function handleImport(files: FileList | null): Promise<void> {
     if (!files || files.length === 0) return
     setError('')
     setReport(null)
+    setImporting(true)
     try {
       const entries = await Promise.all(
         [...files].map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })),
@@ -23,8 +25,10 @@ export function LibraryPage() {
       setReport(await importFromFiles(entries))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setImporting(false)
+      if (fileInput.current) fileInput.current.value = ''
     }
-    if (fileInput.current) fileInput.current.value = ''
   }
 
   async function handleExport(rec: LibraryRecord): Promise<void> {
@@ -55,8 +59,8 @@ export function LibraryPage() {
       </p>
 
       <div className="library-actions">
-        <button type="button" className="primary" onClick={() => fileInput.current?.click()}>
-          ⬆ 导入（.json / .zip）
+        <button type="button" className="primary" disabled={importing} onClick={() => fileInput.current?.click()}>
+          {importing ? '导入中…' : '⬆ 导入（.json / .zip）'}
         </button>
         <input
           ref={fileInput}

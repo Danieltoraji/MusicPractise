@@ -1,5 +1,6 @@
 import type { LibraryRecord } from '../library/db'
 import type { LevelDoc } from '../engine/level'
+import { ErrorBoundary } from '../library/ErrorBoundary'
 
 export function HomePage({ levels, loading }: { levels: LibraryRecord[]; loading: boolean }) {
   return (
@@ -23,32 +24,34 @@ export function HomePage({ levels, loading }: { levels: LibraryRecord[]; loading
           资源库是空的。到<a href="#/library">资源库</a>导入关卡，或刷新页面载入内置示例。
         </p>
       ) : (
-        <div className="cards">
-          {levels.map((rec) => {
-            const doc = rec.doc as unknown as LevelDoc
-            const diff = Math.min(5, Math.max(1, Number(doc.meta.difficulty) || 1))
-            return (
-              <a key={rec.id} className="card" href={`#/level/${rec.id}`}>
-                <div className="card-kind">
-                  关卡 · {'★'.repeat(diff)} {rec.builtIn ? '' : '· 导入'}
-                </div>
-                <h3>{String(doc.meta.title)}</h3>
-                <p>{String(doc.meta.description ?? '')}</p>
-                <div className="tags">
-                  {(Array.isArray(doc.meta.tags) ? (doc.meta.tags as string[]) : []).map((t) => (
-                    <span key={t} className="tag">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-                <div className="card-meta">
-                  {doc.content.components.length} 个组件 · {doc.content.logic.rules.length} 条规则 ·{' '}
-                  {doc.content.questions.length} 道题
-                </div>
-              </a>
-            )
-          })}
-        </div>
+        <ErrorBoundary>
+          <div className="cards">
+            {levels.map((rec) => {
+              const doc = rec.doc as unknown as LevelDoc
+              const diff = Math.min(5, Math.max(1, Number(doc.meta.difficulty) || 1))
+              return (
+                <a key={rec.id} className="card" href={`#/level/${rec.id}`}>
+                  <div className="card-kind">
+                    关卡 · {'★'.repeat(diff)} {rec.builtIn ? '' : '· 导入'}
+                  </div>
+                  <h3>{String(doc.meta.title)}</h3>
+                  <p>{String(doc.meta.description ?? '')}</p>
+                  <div className="tags">
+                    {(Array.isArray(doc.meta.tags) ? (doc.meta.tags as string[]) : []).map((t) => (
+                      <span key={t} className="tag">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="card-meta">
+                    {doc.content.components.length} 个组件 · {doc.content.logic.rules.length} 条规则 ·{' '}
+                    {doc.content.questions.length} 道题
+                  </div>
+                </a>
+              )
+            })}
+          </div>
+        </ErrorBoundary>
       )}
 
       <h2>风险验证 Demo</h2>

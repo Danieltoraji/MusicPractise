@@ -22,14 +22,16 @@ export default function App() {
   const hash = useHashRoute()
   const [seeded, setSeeded] = useState(false)
   const [seedError, setSeedError] = useState('')
+  const [seedAttempt, setSeedAttempt] = useState(0)
 
   // 首次启动把内置示例关卡入库；此后一切内容只从库读取
   useEffect(() => {
+    setSeedError('')
     ensureSeeded().then(
       () => setSeeded(true),
       (err) => setSeedError(String(err instanceof Error ? err.message : err)),
     )
-  }, [])
+  }, [seedAttempt])
 
   // 浏览器自动播放策略：首次手势解锁 AudioContext
   useEffect(() => {
@@ -50,7 +52,17 @@ export default function App() {
 
   let page: React.ReactNode
   if (!seeded) {
-    page = seedError ? <p className="tone-error">资源库初始化失败：{seedError}</p> : <p className="muted">资源库初始化中…</p>
+    page = seedError ? (
+      <div className="page boundary-error">
+        <h2>资源库初始化失败</h2>
+        <p className="muted">{seedError}</p>
+        <button type="button" onClick={() => setSeedAttempt((n) => n + 1)}>
+          重试
+        </button>
+      </div>
+    ) : (
+      <p className="muted">资源库初始化中…</p>
+    )
   } else if (hash.startsWith('#/level/')) {
     page = <LevelPage id={hash.slice('#/level/'.length)} />
   } else if (hash === '#/library') {

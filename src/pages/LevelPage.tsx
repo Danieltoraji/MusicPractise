@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../library/db'
 import type { LevelDoc } from '../engine/level'
 import { ErrorBoundary } from '../library/ErrorBoundary'
+import { loadLevelDoc } from '../library/validate'
 import { LevelRunner } from '../runtime/LevelRunner'
 
 export function LevelPage({ id }: { id: string }) {
@@ -23,13 +24,46 @@ export function LevelPage({ id }: { id: string }) {
     )
   }
 
-  const doc = record.doc as unknown as LevelDoc
+  // 装载管线：信封 schema → schemaVersion → 逻辑 lint（警告不阻断）
+  const load = loadLevelDoc(record.doc)
+  if (!load.ok) {
+    return (
+      <div className="page">
+        <div className="breadcrumb">
+          <a href="#/">← 返回首页</a>
+        </div>
+        <div className="boundary-error">
+          <h2>该文档未通过装载校验</h2>
+          <ul className="tone-error">
+            {load.errors.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+          <details className="json-view">
+            <summary>查看原始 JSON</summary>
+            <pre>{JSON.stringify(record.doc, null, 2)}</pre>
+          </details>
+        </div>
+      </div>
+    )
+  }
+  const doc = load.doc as unknown as LevelDoc
 
   return (
     <div className="page">
       <div className="breadcrumb">
         <a href="#/">← 返回首页</a>
       </div>
+      {load.lintWarnings.length > 0 && (
+        <details className="json-view">
+          <summary className="tone-error">⚠ 逻辑 lint 告警（{load.lintWarnings.length}）</summary>
+          <ul className="muted">
+            {load.lintWarnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       <ErrorBoundary>
         <LevelRunner doc={doc} />
       </ErrorBoundary>

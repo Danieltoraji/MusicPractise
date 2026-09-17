@@ -8,6 +8,7 @@ import starterTopic1 from '../sample/starter-topic1.topic.json'
 import starterTopic2 from '../sample/starter-topic2.topic.json'
 import { db, ensureSeeded } from './db'
 import { exportResource, importDocuments, importFromFiles, packBundle, unpackBundle } from './io'
+import { strToU8, unzipSync, zipSync } from 'fflate'
 
 beforeEach(async () => {
   await db.resources.clear()
@@ -18,19 +19,25 @@ describe('打包 / 解包', () => {
   it('packBundle → unpackBundle 往返无损', () => {
     const docs = [noteClickDoc, starterSeries] as unknown as Record<string, unknown>[]
     const bytes = packBundle(docs)
-    const entries = unpackBundle(bytes)
+    const { entries, parseErrors } = unpackBundle(bytes)
+    expect(parseErrors).toEqual([])
     expect(entries).toHaveLength(2)
     const restored = entries.map((e) => e.doc)
     expect(restored).toContainEqual(noteClickDoc)
     expect(restored).toContainEqual(starterSeries)
   })
 
-  it('非资源 zip 抛错', () => {
+  it('空包与非 JSON 条目', () => {
+    expect(() => unpackBundle(packBundle([]))).toThrow(/没有 resources/)
+    // 一个合法条目 + 一个坏条目：好的照常解析，坏的进 parseErrors
     const bytes = packBundle([noteClickDoc as unknown as Record<string, unknown>])
-    // 去掉 resources/ 目录结构：直接构造一个空 zip 内容不可行，这里用 manifest-only 场景
-    const empty = packBundle([])
-    expect(() => unpackBundle(empty)).toThrow(/没有 resources/)
-    void bytes
+    const unzipped = unzipSync(bytes)
+    unzipped['resources/broken.json'] = strToU8('{ not json')
+    const rebuilt = zipSync(unzipped)
+    const { entries, parseErrors } = unpackBundle(rebuilt)
+    expect(entries).toHaveLength(1)
+    expect(parseErrors).toHaveLength(1)
+    expect(parseErrors[0]).toContain('broken.json')
   })
 })
 
@@ -126,7 +133,7 @@ describe('importFromFiles / exportResource', () => {
 
     const seriesExport = await exportResource(starterSeries.id)
     expect(seriesExport.filename).toMatch(/\.zip$/)
-    const entries = unpackBundle(seriesExport.bytes)
+    const { entries } = unpackBundle(seriesExport.bytes)
     const docs = entries.map((e) => e.doc)
     // 自包含：1 系列 + 2 专题 + 5 关卡
     expect(docs).toHaveLength(8)
