@@ -183,7 +183,7 @@
             {
               "cmd": "scoreLabel.show",
               "args": {
-                "text": ":'得分: ' + v.score",
+                "text": "$expr:'得分: ' + v.score",
                 "tone": "success"
               }
             },
@@ -212,7 +212,7 @@
             {
               "cmd": "feedback.show",
               "args": {
-                "text": ":'提示：' + q.data.hint",
+                "text": "$expr:'提示：' + q.data.hint",
                 "tone": "error"
               }
             }
