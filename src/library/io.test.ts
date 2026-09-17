@@ -42,16 +42,13 @@ describe('打包 / 解包', () => {
 })
 
 describe('importDocuments', () => {
-  it('新增导入：系列+专题（关卡已在本机库，闭包完整）', async () => {
-    const report = await importDocuments([
-      { file: 'series.json', raw: starterSeries },
-      { file: 't1.json', raw: starterTopic1 },
-      { file: 't2.json', raw: starterTopic2 },
-    ])
+  it('新增导入：新 id 的系列副本（引用的专题已在库，闭包完整）', async () => {
+    const copy = { ...starterSeries, id: 'res_01J9C1C1C1C1C1C1C1C1C1C1C1' }
+    const report = await importDocuments([{ file: 'series-copy.json', raw: copy }])
     expect(report.aborted).toBe(false)
-    expect(report.added).toHaveLength(3)
+    expect(report.added).toEqual([copy.id])
     expect(report.rejected).toHaveLength(0)
-    expect((await db.resources.count())).toBe(8) // 5 内置 + 3 新增
+    expect((await db.resources.count())).toBe(9) // 8 内置 + 1 新增
   })
 
   it('重复导入：同 id 同 version 跳过', async () => {
@@ -104,17 +101,20 @@ describe('importDocuments', () => {
     ])
     expect(report.rejected).toHaveLength(1)
     expect(report.rejected[0].file).toBe('bad.json')
-    expect(report.added).toEqual([starterTopic1.id])
+    // topic1 已随 seed 入库且版本相同 → 跳过
+    expect(report.skipped).toEqual([starterTopic1.id])
   })
 })
 
 describe('importFromFiles / exportResource', () => {
-  it('json 文件导入（topic 闭包完整：引用的关卡已 seed）', async () => {
+  it('json 文件导入（topic 已随 seed 入库 → 跳过）', async () => {
     await db.resources.clear()
     await ensureSeeded()
     const bytes = new TextEncoder().encode(JSON.stringify({ ...starterTopic1 }))
     const report = await importFromFiles([{ name: 'topic.json', bytes }])
-    expect(report.added).toEqual([starterTopic1.id])
+    expect(report.aborted).toBe(false)
+    expect(report.skipped).toEqual([starterTopic1.id])
+    expect(report.added).toHaveLength(0)
   })
 
   it('关卡导出为 JSON；系列导出为自包含 zip 并可回灌', async () => {
@@ -144,7 +144,9 @@ describe('importFromFiles / exportResource', () => {
     await ensureSeeded()
     const report = await importFromFiles([{ name: 'starter.zip', bytes: seriesExport.bytes }])
     expect(report.aborted).toBe(false)
-    expect(report.added).toHaveLength(3) // series + 2 topics（关卡 seed 已在）
+    // 系列+专题已随 seed 入库且版本相同 → 跳过；关卡 seed 已在
+    expect(report.added).toHaveLength(0)
+    expect(report.skipped).toHaveLength(8) // 8 份文档全部命中 seed（关卡+系列+专题）
   })
 
   it('缺件库中导出系列被拒绝', async () => {

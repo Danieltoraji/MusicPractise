@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
 import { unlockAudio } from './runtime/audio'
 import { HomePage } from './pages/HomePage'
 import { LevelPage } from './pages/LevelPage'
 import { LibraryPage } from './pages/LibraryPage'
+import { SeriesPage } from './pages/SeriesPage'
 import { TunerDemo } from './pages/TunerDemo'
 import { RhythmDemo } from './pages/RhythmDemo'
-import { ensureSeeded, db } from './library/db'
+import { ensureSeeded } from './library/db'
 
 function useHashRoute(): string {
   const [hash, setHash] = useState(() => window.location.hash)
@@ -44,12 +44,6 @@ export default function App() {
     }
   }, [])
 
-  const levels = useLiveQuery(
-    () => db.resources.where('kind').equals('level').toArray(),
-    [],
-    undefined,
-  )
-
   let page: React.ReactNode
   if (!seeded) {
     page = seedError ? (
@@ -65,6 +59,8 @@ export default function App() {
     )
   } else if (hash.startsWith('#/level/')) {
     page = <LevelPage id={hash.slice('#/level/'.length)} />
+  } else if (hash.startsWith('#/series/')) {
+    page = <SeriesPage id={hash.slice('#/series/'.length)} />
   } else if (hash === '#/library') {
     page = <LibraryPage />
   } else if (hash === '#/tuner') {
@@ -72,7 +68,7 @@ export default function App() {
   } else if (hash === '#/rhythm') {
     page = <RhythmDemo />
   } else {
-    page = <HomePage levels={levels ?? []} loading={levels === undefined} />
+    page = <HomePage />
   }
 
   return (

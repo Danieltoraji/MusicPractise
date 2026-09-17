@@ -8,12 +8,34 @@ import { LevelSession } from './levelSession'
 import { getCtx, playNotes } from './audio'
 import { ComponentView } from '../components/views'
 
-export function LevelRunner({ doc }: { doc: LevelDoc }) {
+export function LevelRunner({
+  doc,
+  onFinished,
+}: {
+  doc: LevelDoc
+  /** 结算回调（每关完成时一次）：供宿主存进度等 */
+  onFinished?: (result: { score: Json; passed: boolean }) => void
+}) {
   const [runKey, setRunKey] = useState(0)
-  return <RunnerCore key={runKey} doc={doc} onRetry={() => setRunKey((k) => k + 1)} />
+  return (
+    <RunnerCore
+      key={runKey}
+      doc={doc}
+      onRetry={() => setRunKey((k) => k + 1)}
+      onFinished={onFinished}
+    />
+  )
 }
 
-function RunnerCore({ doc, onRetry }: { doc: LevelDoc; onRetry: () => void }) {
+function RunnerCore({
+  doc,
+  onRetry,
+  onFinished,
+}: {
+  doc: LevelDoc
+  onRetry: () => void
+  onFinished?: (result: { score: Json; passed: boolean }) => void
+}) {
   const [progress, setProgress] = useState({ index: 0, total: doc.content.questions.length })
   const [finished, setFinished] = useState<{ score: Json; passed: boolean } | null>(null)
   const [question, setQuestion] = useState<Question | null>(null)
@@ -25,7 +47,10 @@ function RunnerCore({ doc, onRetry }: { doc: LevelDoc; onRetry: () => void }) {
           setProgress({ index, total })
           setQuestion(q)
         },
-        onFinished: (result) => setFinished(result),
+        onFinished: (result) => {
+          setFinished(result)
+          onFinished?.(result)
+        },
         runEffects: (effects) => {
           for (const eff of effects) {
             if (eff.type === 'audio.play') playNotes(eff.notes, eff.tempo, eff.mode)
@@ -33,7 +58,7 @@ function RunnerCore({ doc, onRetry }: { doc: LevelDoc; onRetry: () => void }) {
         },
         getNowSeconds: () => getCtx().currentTime,
       }),
-    [doc],
+    [doc, onFinished],
   )
 
   useEffect(() => {

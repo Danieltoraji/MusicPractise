@@ -3,12 +3,14 @@
  * 内置示例关卡首次启动时 seed（builtIn 标记，UI 禁删），此后应用只从库读内容。
  */
 import Dexie, { type EntityTable } from 'dexie'
-import type { LevelDoc } from '../engine/level'
 import noteClickDoc from '../sample/note-click.level.json'
 import theoryChoiceDoc from '../sample/theory-choice.level.json'
 import melodyDictationDoc from '../sample/melody-dictation.level.json'
 import timedReactionDoc from '../sample/timed-reaction.level.json'
 import noteSpellingDoc from '../sample/note-spelling.level.json'
+import starterSeries from '../sample/starter.series.json'
+import starterTopic1 from '../sample/starter-topic1.topic.json'
+import starterTopic2 from '../sample/starter-topic2.topic.json'
 
 export type ResourceKind = 'series' | 'topic' | 'level' | 'instrument'
 
@@ -23,12 +25,26 @@ export interface LibraryRecord {
   builtIn: 0 | 1
 }
 
+/** 练习进度存档：运行时数据（非内容文档），每关一条 */
+export interface ProgressRecord {
+  levelId: string
+  bestScore: number
+  passed: 0 | 1
+  attempts: number
+  updatedAt: number
+}
+
 export const db = new Dexie('music-practise-library') as Dexie & {
   resources: EntityTable<LibraryRecord, 'id'>
+  progress: EntityTable<ProgressRecord, 'levelId'>
 }
 
 db.version(1).stores({
   resources: 'id, kind, version, importedAt, builtIn',
+})
+db.version(2).stores({
+  resources: 'id, kind, version, importedAt, builtIn',
+  progress: 'levelId',
 })
 
 const LEVEL_DOCS = [
@@ -37,7 +53,13 @@ const LEVEL_DOCS = [
   melodyDictationDoc,
   timedReactionDoc,
   noteSpellingDoc,
-] as unknown as LevelDoc[]
+] as unknown as Parameters<typeof toRecord>[0][]
+
+const STARTER_DOCS = [
+  starterSeries,
+  starterTopic1,
+  starterTopic2,
+] as unknown as Parameters<typeof toRecord>[0][]
 
 function toRecord(doc: {
   id: string
@@ -56,11 +78,13 @@ function toRecord(doc: {
   }
 }
 
-/** 首次启动（库为空）时把内置示例关卡入库；bulkPut 幂等，可安全重复调用 */
+/**
+ * 内置示例入库（5 关卡 + 入门系列 1 系列 2 专题）。
+ * 无条件 bulkPut（幂等且让内置内容跟随应用版本更新）——导入的同 id 文档
+ * 若版本相同会被刷新，异版本由导入时的冲突策略决定，二者互不干扰。
+ */
 export async function ensureSeeded(): Promise<void> {
-  const count = await db.resources.count()
-  if (count > 0) return
-  const records = LEVEL_DOCS.map((doc) => toRecord(doc as unknown as Parameters<typeof toRecord>[0], true))
+  const records = [...LEVEL_DOCS, ...STARTER_DOCS].map((doc) => toRecord(doc, true))
   await db.resources.bulkPut(records)
 }
 
@@ -86,4 +110,34 @@ export async function deleteResource(id: string): Promise<void> {
   if (!record) return
   if (record.builtIn) throw new Error('内置示例不可删除')
   await db.resources.delete(id)
+}
+
+// ---------------------------------------------------------------------------
+// 练习进度存档
+// ---------------------------------------------------------------------------
+
+export async function saveProgress(
+  levelId: string,
+  result: { score: number; passed: boolean },
+): Promise<ProgressRecord> {
+  return db.transaction('rw', db.progress, async () => {
+    const prev = await db.progress.get(levelId)
+    const next: ProgressRecord = {
+      levelId,
+      bestScore: Math.max(prev?.bestScore ?? 0, result.score),
+      passed: (prev?.passed === 1 || result.passed) ? 1 : 0,
+      attempts: (prev?.attempts ?? 0) + 1,
+      updatedAt: Date.now(),
+    }
+    await db.progress.put(next)
+    return next
+  })
+}
+
+export async function getProgress(levelId: string): Promise<ProgressRecord | undefined> {
+  return db.progress.get(levelId)
+}
+
+export async function listProgress(): Promise<ProgressRecord[]> {
+  return db.progress.toArray()
 }

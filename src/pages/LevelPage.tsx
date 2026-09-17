@@ -1,9 +1,11 @@
+import { useCallback } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../library/db'
+import { db, saveProgress } from '../library/db'
 import type { LevelDoc } from '../engine/level'
 import { ErrorBoundary } from '../library/ErrorBoundary'
 import { loadLevelDoc } from '../library/validate'
 import { LevelRunner } from '../runtime/LevelRunner'
+
 
 export function LevelPage({ id }: { id: string }) {
   const record = useLiveQuery(
@@ -49,6 +51,14 @@ export function LevelPage({ id }: { id: string }) {
   }
   const doc = load.doc as unknown as LevelDoc
 
+  // 结算时存进度（回调按 id 稳定，避免 session 重建）
+  const handleFinished = useCallback(
+    (result: { score: unknown; passed: boolean }) => {
+      void saveProgress(id, { score: Number(result.score) || 0, passed: result.passed })
+    },
+    [id],
+  )
+
   return (
     <div className="page">
       <div className="breadcrumb">
@@ -65,7 +75,7 @@ export function LevelPage({ id }: { id: string }) {
         </details>
       )}
       <ErrorBoundary>
-        <LevelRunner doc={doc} />
+        <LevelRunner doc={doc} onFinished={handleFinished} />
       </ErrorBoundary>
       <details className="json-view">
         <summary>查看本关卡的 JSON 定义（内容即关卡）</summary>

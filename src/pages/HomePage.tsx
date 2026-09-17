@@ -1,58 +1,88 @@
-import type { LibraryRecord } from '../library/db'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db, type LibraryRecord, type ProgressRecord } from '../library/db'
+import { partitionLevels } from '../library/browse'
 import type { LevelDoc } from '../engine/level'
 import { ErrorBoundary } from '../library/ErrorBoundary'
 
-export function HomePage({ levels, loading }: { levels: LibraryRecord[]; loading: boolean }) {
+function diffStars(doc: LevelDoc): string {
+  const diff = Math.min(5, Math.max(1, Number(doc.meta.difficulty) || 1))
+  return '★'.repeat(diff)
+}
+
+function ProgressBadge({ levelId, progress }: { levelId: string; progress: ProgressRecord[] }) {
+  const p = progress.find((x) => x.levelId === levelId)
+  if (!p) return null
+  return p.passed === 1 ? (
+    <span className="badge pass">✅ 通过</span>
+  ) : (
+    <span className="badge">最佳 {p.bestScore}</span>
+  )
+}
+
+export function HomePage() {
+  const series = useLiveQuery(() => db.resources.where('kind').equals('series').toArray(), [], [] as LibraryRecord[])
+  const topics = useLiveQuery(() => db.resources.where('kind').equals('topic').toArray(), [], [] as LibraryRecord[])
+  const levels = useLiveQuery(() => db.resources.where('kind').equals('level').toArray(), [], [] as LibraryRecord[])
+  const progress = useLiveQuery(() => db.progress.toArray(), [], [] as ProgressRecord[])
+
+  const { independent } = partitionLevels(levels, topics)
+
   return (
     <div className="page">
       <section className="hero">
         <h1>音乐练习 · UGC 平台原型</h1>
         <p>
-          关卡 = 组件 + 逻辑规则 + 题目数据，全部由 JSON 定义。下面的关卡没有一行硬编码 UI 逻辑——
-          判定、计分、反馈都写在关卡文档的 <code>logic.rules</code> 里（事件→条件→动作）。
-          内容存放在浏览器本地资源库，可在
-          <a href="#/library"> 资源库 </a>
-          中导入导出。
+          关卡 = 组件 + 逻辑规则 + 题目数据，全部由 JSON 定义。判定、计分、反馈都写在关卡文档的{' '}
+          <code>logic.rules</code> 里（事件→条件→动作）。内容存放在浏览器本地资源库，可在
+          <a href="#/library"> 资源库 </a>中导入导出。
         </p>
       </section>
 
-      <h2>关卡库</h2>
-      {loading ? (
-        <p className="muted">加载中…</p>
-      ) : levels.length === 0 ? (
-        <p className="muted">
-          资源库是空的。到<a href="#/library">资源库</a>导入关卡，或刷新页面载入内置示例。
-        </p>
+      <h2>系列</h2>
+      {series.length === 0 ? (
+        <p className="muted">还没有系列。可在<a href="#/library">资源库</a>导入系列包（zip）。</p>
       ) : (
-        <ErrorBoundary>
+        <div className="cards">
+          {series.map((rec) => {
+            const doc = rec.doc as { meta?: { title?: unknown; description?: unknown } }
+            const topicCount = ((doc as { content?: { topicIds?: unknown[] } }).content?.topicIds ?? []).length
+            return (
+              <a key={rec.id} className="card" href={`#/series/${rec.id}`}>
+                <div className="card-kind">📚 系列 · {topicCount} 个专题</div>
+                <h3>{String(doc.meta?.title ?? rec.title)}</h3>
+                <p>{String(doc.meta?.description ?? '')}</p>
+              </a>
+            )
+          })}
+        </div>
+      )}
+
+      <h2>独立关卡</h2>
+      <ErrorBoundary>
+        {independent.length === 0 ? (
+          <p className="muted">没有独立关卡——所有关卡都已归入系列。</p>
+        ) : (
           <div className="cards">
-            {levels.map((rec) => {
+            {independent.map((rec) => {
               const doc = rec.doc as unknown as LevelDoc
-              const diff = Math.min(5, Math.max(1, Number(doc.meta.difficulty) || 1))
               return (
                 <a key={rec.id} className="card" href={`#/level/${rec.id}`}>
                   <div className="card-kind">
-                    关卡 · {'★'.repeat(diff)} {rec.builtIn ? '' : '· 导入'}
+                    关卡 · {diffStars(doc)} {rec.builtIn ? '' : '· 导入'}
                   </div>
-                  <h3>{String(doc.meta.title)}</h3>
+                  <h3>
+                    {String(doc.meta.title)} <ProgressBadge levelId={rec.id} progress={progress} />
+                  </h3>
                   <p>{String(doc.meta.description ?? '')}</p>
-                  <div className="tags">
-                    {(Array.isArray(doc.meta.tags) ? (doc.meta.tags as string[]) : []).map((t) => (
-                      <span key={t} className="tag">
-                        {t}
-                      </span>
-                    ))}
-                  </div>
                   <div className="card-meta">
-                    {doc.content.components.length} 个组件 · {doc.content.logic.rules.length} 条规则 ·{' '}
-                    {doc.content.questions.length} 道题
+                    {doc.content.components.length} 个组件 · {doc.content.questions.length} 道题
                   </div>
                 </a>
               )
             })}
           </div>
-        </ErrorBoundary>
-      )}
+        )}
+      </ErrorBoundary>
 
       <h2>风险验证 Demo</h2>
       <div className="cards">
