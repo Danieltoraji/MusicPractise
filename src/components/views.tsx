@@ -90,7 +90,10 @@ export function StaffView({ spec, store, emit }: ViewProps) {
       svgEl.setAttribute('data-midi', String(midi))
       if (!clickable) return
       ;(svgEl as HTMLElement).style.cursor = 'pointer'
-      svgEl.addEventListener('click', () => emit('noteClicked', { midi, name: Note.fromMidi(midi) }))
+      svgEl.addEventListener('click', () => {
+        store.applyCommand(spec.id, '__strike', { midi })
+        emit('noteClicked', { midi, name: Note.fromMidi(midi) })
+      })
     })
 
     // 高亮样式
@@ -291,7 +294,10 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
             style={{ left: `${i * whiteW}%`, width: `${whiteW}%` }}
             data-midi={k.midi}
             title={Note.fromMidi(k.midi) ?? String(k.midi)}
-            onClick={() => emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })}
+            onClick={() => {
+              store.applyCommand(spec.id, '__strike', { midi: k.midi })
+              emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })
+            }}
           />
         )
       })}
@@ -308,7 +314,10 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
               style={{ left: `${whitesBefore * whiteW - blackW / 2}%`, width: `${blackW}%` }}
               data-midi={k.midi}
               title={Note.fromMidi(k.midi) ?? String(k.midi)}
-              onClick={() => emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })}
+              onClick={() => {
+                store.applyCommand(spec.id, '__strike', { midi: k.midi })
+                emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })
+              }}
             />
           )
         })}

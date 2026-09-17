@@ -78,6 +78,15 @@ describe('ComponentStore', () => {
     expect(() => store.applyCommand('u1', 'launch', {})).not.toThrow()
   })
 
+  it('staff/fingering __strike 产出单击音符效果（点击即发该音）', () => {
+    const store = new ComponentStore()
+    store.init([spec('st1', 'staff'), spec('k1', 'fingering')])
+    const expected = (midi: number) => [{ type: 'audio.play', notes: [{ midi, dur: '8n' }], mode: 'chord' }]
+    expect(store.applyCommand('st1', '__strike', { midi: 64 })).toEqual(expected(64))
+    expect(store.applyCommand('k1', '__strike', { midi: 60 })).toEqual(expected(60))
+    expect(store.applyCommand('st1', '__strike', {})).toEqual([]) // 非 midi 参数静默忽略
+  })
+
   it('不存在的组件 id 抛错（运行器会兜底）', () => {
     const store = new ComponentStore()
     store.init([])

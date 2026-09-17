@@ -170,6 +170,11 @@ export const STAFF_DEF: ComponentDef<StaffState> = {
       return { state: { ...s, highlights: { ...s.highlights, [String(args.target)]: style } } }
     }
     if (cmd === 'clear') return { state: { ...s, highlights: {}, clearToken: s.clearToken + 1 } }
+    // 内部命令：点击音符立即发出该音高（对比式试听），判定音效仍由关卡规则决定
+    if (cmd === '__strike') {
+      if (typeof args.midi !== 'number') return { state: s }
+      return { state: s, effects: [{ type: 'audio.play', notes: [{ midi: args.midi, dur: '8n' }], mode: 'chord' }] }
+    }
     return { state: s }
   },
 }
@@ -292,6 +297,10 @@ export const FINGERING_DEF: ComponentDef<FingeringState> = {
       return { state: { ...s, highlights: { ...s.highlights, [String(args.target)]: style } } }
     }
     if (cmd === 'clear') return { state: { ...s, highlights: {}, clearToken: s.clearToken + 1 } }
+    if (cmd === '__strike') {
+      if (typeof args.midi !== 'number') return { state: s }
+      return { state: s, effects: [{ type: 'audio.play', notes: [{ midi: args.midi, dur: '8n' }], mode: 'chord' }] }
+    }
     return { state: s }
   },
 }
