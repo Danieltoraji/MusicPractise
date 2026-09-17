@@ -229,6 +229,7 @@ function EditorCanvas({
             }}
             onPointerMove={(e) => onBoxPointerMove(e, comp)}
             onPointerUp={onBoxPointerUp}
+            onPointerCancel={onBoxPointerUp}
             title={`${comp.type} · ${comp.name ?? comp.id}`}
           >
             <span className="box-label">{comp.name ?? comp.id}</span>
@@ -442,12 +443,8 @@ function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDo
             <input value={rule.on} list="event-options" onChange={(e) => patchRule(ri, { on: e.target.value })} />
           </label>
           <label>
-            条件（每行一个表达式，全部满足才走 do；留空 = 恒真）
-            <textarea
-              rows={2}
-              value={(rule.when ?? []).join('\n')}
-              onChange={(e) => patchRule(ri, { when: e.target.value.split('\n').filter((s) => s.trim() !== '') })}
-            />
+            条件（每行一个表达式，全部满足才走 do；失焦时提交，留空 = 恒真）
+            <LinesField value={rule.when ?? []} onCommit={(lines) => patchRule(ri, { when: lines })} />
           </label>
           <ActionList
             label="则执行（do）"
@@ -466,6 +463,19 @@ function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDo
         变量：{JSON.stringify(doc.content.logic.variables ?? {})}（编辑器可视化变量管理在后续版本提供）
       </p>
     </div>
+  )
+}
+
+/** 多行条件输入：本地编辑、失焦提交（避免受控值过滤空行导致无法换行） */
+function LinesField({ value, onCommit }: { value: string[]; onCommit: (lines: string[]) => void }) {
+  const [text, setText] = useState(value.join('\n'))
+  return (
+    <textarea
+      rows={2}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => onCommit(text.split('\n').map((s) => s.trim()).filter((s) => s !== ''))}
+    />
   )
 }
 
@@ -573,8 +583,9 @@ function QuestionsEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: Lev
   const patchQ = (index: number, patch: Partial<Question>): void => {
     onChange(updateQuestion(doc, index, patch))
   }
-  const [dataTexts, setDataTexts] = useState<Record<number, string>>({})
-  const [dataErrs, setDataErrs] = useState<Record<number, string>>({})
+  // 草稿文本按题目 id 键控（id 在编辑中变化时以新 id 重新草稿化）
+  const [dataTexts, setDataTexts] = useState<Record<string, string>>({})
+  const [dataErrs, setDataErrs] = useState<Record<string, string>>({})
 
   return (
     <div className="questions-editor">
@@ -583,7 +594,10 @@ function QuestionsEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: Lev
           type="button"
           onClick={() => {
             const next = structuredClone(doc)
-            next.content.questions.push({ id: `q${next.content.questions.length + 1}`, data: {}, scoring: { max: 10 } })
+            let n = next.content.questions.length + 1
+            const used = new Set(next.content.questions.map((q) => q.id))
+            while (used.has(`q${n}`)) n++
+            next.content.questions.push({ id: `q${n}`, data: {}, scoring: { max: 10 } })
             onChange(next)
           }}
         >
@@ -591,9 +605,9 @@ function QuestionsEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: Lev
         </button>
       </div>
       {questions.map((q, i) => {
-        const dataText = dataTexts[i] ?? JSON.stringify(q.data ?? {}, null, 2)
+        const dataText = dataTexts[q.id] ?? JSON.stringify(q.data ?? {}, null, 2)
         return (
-          <div key={`${q.id}-${i}`} className="rule-card">
+          <div key={i} className="rule-card">
             <div className="rule-head">
               <b>{q.id}</b>
               <button
@@ -630,16 +644,16 @@ function QuestionsEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: Lev
                 rows={6}
                 value={dataText}
                 onChange={(e) => {
-                  setDataTexts((s) => ({ ...s, [i]: e.target.value }))
+                  setDataTexts((s) => ({ ...s, [q.id]: e.target.value }))
                   const v = parseJsonText(e.target.value)
-                  if (v === null || typeof v !== 'object' || Array.isArray(v)) setDataErrs((s) => ({ ...s, [i]: '需为 JSON 对象' }))
+                  if (v === null || typeof v !== 'object' || Array.isArray(v)) setDataErrs((s) => ({ ...s, [q.id]: '需为 JSON 对象' }))
                   else {
-                    setDataErrs((s) => ({ ...s, [i]: '' }))
+                    setDataErrs((s) => ({ ...s, [q.id]: '' }))
                     patchQ(i, { data: v })
                   }
                 }}
               />
-              {dataErrs[i] && <span className="tone-error">{dataErrs[i]}</span>}
+              {dataErrs[q.id] && <span className="tone-error">{dataErrs[q.id]}</span>}
             </label>
           </div>
         )

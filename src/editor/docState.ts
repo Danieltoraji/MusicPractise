@@ -24,7 +24,16 @@ export function blankLevelDoc(): LevelDoc {
     refs: [],
     content: {
       components: [],
-      logic: { variables: {}, rules: [] },
+      logic: {
+        variables: { score: 0 },
+        rules: [
+          {
+            id: 'score-on-correct',
+            on: 'level:correct',
+            do: [{ set: 'score', expr: 'v.score + 10' }],
+          },
+        ],
+      },
       questions: [{ id: 'q1', data: {}, scoring: { max: 10 } }],
       flow: { order: 'sequential', pass: { expr: 'v.score >= 10' } },
     },
@@ -47,8 +56,10 @@ export function defaultLayout(index: number): { x: number; y: number; w: number;
 
 export function addComponent(doc: LevelDoc, type: string): LevelDoc {
   const next = structuredClone(doc)
-  const index = next.content.components.length
-  const comp: ComponentInstance = { id: `${type}${index + 1}`, type, visible: true, layout: defaultLayout(index) }
+  const used = new Set(next.content.components.map((c) => c.id))
+  let n = 1
+  while (used.has(`${type}${n}`)) n++
+  const comp: ComponentInstance = { id: `${type}${n}`, type, visible: true, layout: defaultLayout(next.content.components.length) }
   next.content.components.push(comp)
   return next
 }
