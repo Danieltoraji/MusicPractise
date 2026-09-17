@@ -255,7 +255,11 @@ export class LogicEngine {
   }
 
   reset(): void {
-    this.vars = structuredClone(this.initialVars)
+    // 原地清空再回填，保持 vars 对象身份不变：
+    // 级联中途 restart 时，同批后续 set 动作仍持有 dispatch 捕获的旧引用，
+    // 若整体替换对象会造成"读旧写新"的状态错乱
+    for (const key of Object.keys(this.vars)) delete this.vars[key]
+    Object.assign(this.vars, structuredClone(this.initialVars))
   }
 
   private fail(err: unknown, context: { ruleId?: string; event?: string }): void {

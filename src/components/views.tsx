@@ -249,7 +249,8 @@ export function InputView({ spec, store, emit }: ViewProps) {
       value={value}
       onChange={(e) => store.applyCommand(spec.id, 'setValue', { value: e.target.value })}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') emit('submitted', { value })
+        // 中文输入法组合态下按 Enter 是确认候选，不是提交
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) emit('submitted', { value })
       }}
     />
   )
@@ -265,7 +266,7 @@ interface KeyInfo {
 }
 
 export function FingeringView({ spec, store, emit }: ViewProps) {
-  const { highlights, clearToken } = useComponentState<FingeringState>(store, spec.id)
+  const { highlights } = useComponentState<FingeringState>(store, spec.id)
   const p = (spec.props ?? {}) as Record<string, Json>
   const low = typeof p.lowMidi === 'number' ? p.lowMidi : 48
   const high = typeof p.highMidi === 'number' ? p.highMidi : 72
@@ -279,7 +280,7 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
   const blackW = whiteW * 0.62
 
   return (
-    <div style={boxStyle(spec)} className="comp-fingering" data-clear={clearToken}>
+    <div style={boxStyle(spec)} className="comp-fingering">
       {whites.map((k, i) => {
         const hl = highlights?.[String(k.midi)]
         return (

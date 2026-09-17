@@ -74,7 +74,14 @@
           "type": "object",
           "description": "单题逻辑补丁 v1：追加规则/覆盖变量初值",
           "properties": {
-            "variables": { "type": "object", "additionalProperties": { "type": ["number", "string", "boolean", "null"] } },
+            "variables": {
+              "additionalProperties": {
+                "anyOf": [
+                  { "type": ["number", "string", "boolean", "null"] },
+                  { "type": "array", "items": { "type": ["number", "string", "boolean", "null"] }, "maxItems": 128 }
+                ]
+              }
+            },
             "appendRules": { "type": "array", "items": { "$ref": "https://music-practise.local/schemas/v1/logic.json#/$defs/Rule" } }
           },
           "additionalProperties": false

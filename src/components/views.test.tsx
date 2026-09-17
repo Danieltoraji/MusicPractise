@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentInstance } from '../engine/level'
 import { ComponentStore } from '../runtime/store'
-import { ButtonView, ChoiceView, StaffView } from './views'
+import { ButtonView, ChoiceView, FingeringView, StaffView } from './views'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -87,6 +87,36 @@ describe('组件视图（jsdom 冒烟）', () => {
     const renewed = container.querySelectorAll('.choice-item')
     expect(renewed).toHaveLength(3)
     expect((renewed[0] as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('FingeringView 渲染黑白键并挂 data-midi，点击发 keyClicked、高亮生效', () => {
+    const store = new ComponentStore()
+    const spec: ComponentInstance = {
+      id: 'k1',
+      type: 'fingering',
+      layout: { x: 0, y: 0, w: 720, h: 180 },
+      props: { lowMidi: 60, highMidi: 64 }, // 60..64：白 60/62/64，黑 61/63
+    }
+    store.init([spec])
+    const emit = vi.fn()
+    const container = renderEl(<FingeringView spec={spec} store={store} emit={emit} />)
+
+    expect(container.querySelectorAll('.key')).toHaveLength(5)
+    expect(container.querySelectorAll('.key.white')).toHaveLength(3)
+    expect(container.querySelectorAll('.key.black')).toHaveLength(2)
+    expect(container.querySelectorAll('[data-midi="61"]')).toHaveLength(1)
+
+    act(() => {
+      ;(container.querySelector('[data-midi="60"]') as HTMLElement).dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+    expect(emit).toHaveBeenCalledWith('keyClicked', { midi: 60, name: 'C4' })
+
+    act(() => {
+      store.applyCommand('k1', 'highlight', { target: 60, style: 'correct' })
+    })
+    expect(container.querySelector('[data-midi="60"]')!.className).toContain('correct')
   })
 
   it('ButtonView 禁用时不发 clicked，启用后可发', () => {

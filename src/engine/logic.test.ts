@@ -107,12 +107,14 @@ describe('LogicEngine', () => {
     expect(errors.length).toBe(1)
   })
 
-  it('reset 恢复变量初值', () => {
+  it('reset 恢复变量初值且保持对象身份（级联中途 restart 不丢同批写入）', () => {
     const { host } = makeHost(null)
     const engine = new LogicEngine({ variables: { score: 0 }, rules: [{ id: 'r', on: 'x', do: [{ set: 'score', expr: '99' }] }] }, host)
+    const ref = engine.vars
     engine.dispatch('x')
     expect(engine.vars.score).toBe(99)
     engine.reset()
+    expect(engine.vars).toBe(ref) // 身份不变：级联中捕获的旧引用依然有效
     expect(engine.vars.score).toBe(0)
   })
 })

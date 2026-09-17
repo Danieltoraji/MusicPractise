@@ -64,6 +64,8 @@ export interface TimerState {
 }
 export interface SliderState {
   value: number
+  min: number
+  max: number
 }
 export interface InputState {
   value: string
@@ -186,7 +188,11 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
   applyCommand: (s, cmd, args) => {
     if (cmd === 'play') {
       const notes = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
-      const tempo = typeof args.tempo === 'number' ? args.tempo : undefined
+      // tempo 钳到常规音乐区间，防止 60/0=Infinity 把后续音符排到无穷远
+      const tempo = typeof args.tempo === 'number' ? Math.min(300, Math.max(20, args.tempo)) : undefined
+      if (args.mode !== undefined && args.mode !== 'chord' && args.mode !== 'seq') {
+        console.warn(`[sound] 未知播放模式 "${String(args.mode)}"，按 chord 处理`)
+      }
       const mode = args.mode === 'seq' ? 'seq' : 'chord'
       return {
         state: { lastPlay: args.notes ?? null },
@@ -211,7 +217,8 @@ export const TIMER_DEF: ComponentDef<TimerState> = {
   applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'start') {
-      const ms = typeof args.ms === 'number' ? Math.max(1, args.ms) : 1000
+      // 下界 1ms 防零/负；上界 24h（setTimeout 规范对 >2^31-1 会立即触发）
+      const ms = typeof args.ms === 'number' ? Math.min(24 * 60 * 60 * 1000, Math.max(1, args.ms)) : 1000
       const repeat = args.repeat === true
       return { state: { ...s, running: true, count: 0, ms }, effects: [{ type: 'timer.start', ms, repeat }] }
     }
@@ -235,13 +242,14 @@ export const SLIDER_DEF: ComponentDef<SliderState> = {
     const min = typeof p.min === 'number' ? p.min : 0
     const max = typeof p.max === 'number' ? p.max : 100
     const initial = typeof p.initial === 'number' ? p.initial : min
-    return { value: Math.min(max, Math.max(min, initial)) }
+    return { value: Math.min(max, Math.max(min, initial)), min, max }
   },
   applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'setValue' || cmd === '__set') {
       if (typeof args.value !== 'number') return { state: s }
-      return { state: { ...s, value: args.value } }
+      // 逻辑 setValue 与视图输入统一钳制，保证状态与 DOM 显示一致
+      return { state: { ...s, value: Math.min(s.max, Math.max(s.min, args.value)) } }
     }
     return { state: s }
   },

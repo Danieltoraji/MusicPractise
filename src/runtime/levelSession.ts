@@ -103,6 +103,9 @@ export class LevelSession {
   }
 
   private loadQuestion(p: number): void {
+    // 换题即停掉上一题的计时器：logicPatch 的 arm 规则已随题移除，
+    // 但已运行的句柄不会自动消失，不清会跨题泄漏触发 tick
+    this.stopAllTimers()
     this.pos = p
     const q = this.doc.content.questions[this.order[p]] ?? null
     this.question = q

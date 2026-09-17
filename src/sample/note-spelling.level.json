@@ -6,8 +6,14 @@
   "meta": {
     "title": "音名拼写 · 输入框作答",
     "description": "听和弦，用音名拼写它并回车提交。演示 input 组件与大小写无关的文本判定。",
-    "author": { "name": "POC 内置示例" },
-    "tags": ["乐理", "和弦", "拼写"],
+    "author": {
+      "name": "POC 内置示例"
+    },
+    "tags": [
+      "乐理",
+      "和弦",
+      "拼写"
+    ],
     "locale": "zh-CN",
     "license": "CC0-1.0",
     "difficulty": 2
@@ -20,40 +26,77 @@
         "type": "label",
         "name": "得分",
         "visible": true,
-        "layout": { "x": 40, "y": 20, "w": 300, "h": 40 },
-        "props": { "text": "得分: 0" }
+        "layout": {
+          "x": 40,
+          "y": 20,
+          "w": 300,
+          "h": 40
+        },
+        "props": {
+          "text": "得分: 0"
+        }
       },
       {
         "id": "feedback",
         "type": "label",
         "name": "反馈文本",
         "visible": true,
-        "layout": { "x": 40, "y": 100, "w": 720, "h": 48 },
-        "props": { "text": "" }
+        "layout": {
+          "x": 40,
+          "y": 100,
+          "w": 720,
+          "h": 48
+        },
+        "props": {
+          "text": ""
+        }
       },
       {
         "id": "input1",
         "type": "input",
         "name": "答案输入框",
         "visible": true,
-        "layout": { "x": 40, "y": 180, "w": 400, "h": 56 },
-        "props": { "placeholder": "如 CEG，回车提交" }
+        "layout": {
+          "x": 40,
+          "y": 180,
+          "w": 400,
+          "h": 56
+        },
+        "props": {
+          "placeholder": "如 CEG，回车提交"
+        }
       },
       {
         "id": "listenBtn",
         "type": "button",
         "name": "重听",
         "visible": true,
-        "layout": { "x": 40, "y": 280, "w": 140, "h": 48 },
-        "props": { "text": "🔊 重听", "enabled": true }
+        "layout": {
+          "x": 40,
+          "y": 280,
+          "w": 140,
+          "h": 48
+        },
+        "props": {
+          "text": "🔊 重听",
+          "enabled": true
+        }
       },
       {
         "id": "nextBtn",
         "type": "button",
         "name": "下一题",
         "visible": true,
-        "layout": { "x": 620, "y": 280, "w": 140, "h": 48 },
-        "props": { "text": "下一题 →", "enabled": false }
+        "layout": {
+          "x": 620,
+          "y": 280,
+          "w": 140,
+          "h": 48
+        },
+        "props": {
+          "text": "下一题 →",
+          "enabled": false
+        }
       },
       {
         "id": "sound1",
@@ -63,63 +106,190 @@
       }
     ],
     "logic": {
-      "variables": { "score": 0, "done": false },
+      "variables": {
+        "score": 0,
+        "done": false
+      },
       "rules": [
         {
           "id": "load-question",
           "on": "level.questionLoaded",
           "do": [
-            { "cmd": "sound1.play", "args": { "notes": "$q.data.listenNotes" } },
-            { "cmd": "input1.clear" },
-            { "cmd": "nextBtn.setEnabled", "args": { "enabled": false } },
-            { "cmd": "feedback.show", "args": { "text": "听和弦，用音名拼写它（回车提交）", "tone": "info" } }
+            {
+              "cmd": "sound1.play",
+              "args": {
+                "notes": "$q.data.listenNotes"
+              }
+            },
+            {
+              "cmd": "input1.clear"
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": false
+              }
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "听和弦，用音名拼写它（回车提交）",
+                "tone": "info"
+              }
+            }
           ]
         },
         {
           "id": "replay",
           "on": "listenBtn.clicked",
           "do": [
-            { "cmd": "sound1.play", "args": { "notes": "$q.data.listenNotes" } }
+            {
+              "cmd": "sound1.play",
+              "args": {
+                "notes": "$q.data.listenNotes"
+              }
+            }
           ]
         },
         {
-          "id": "judge",
+          "id": "judge-correct",
           "on": "input1.submitted",
-          "when": [ "upper(event.value) == q.data.answer" ],
-          "do": [
-            { "cmd": "sound1.play", "args": { "notes": "$q.data.rewardChord" } },
-            { "cmd": "feedback.show", "args": { "text": "拼对了！", "tone": "success" } },
-            { "set": "score", "expr": "v.score + q.scoring.max" },
-            { "cmd": "scoreLabel.show", "args": { "text": "$expr:'得分: ' + v.score", "tone": "success" } },
-            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+          "when": [
+            "!v.answered",
+            "upper(event.value) == q.data.answer"
           ],
-          "else": [
-            { "cmd": "sound1.play", "args": { "notes": "$q.data.wrongBuzz" } },
-            { "cmd": "feedback.show", "args": { "text": "$expr:'提示：' + q.data.hint", "tone": "error" } }
+          "do": [
+            {
+              "set": "answered",
+              "expr": "true"
+            },
+            {
+              "cmd": "sound1.play",
+              "args": {
+                "notes": "$q.data.rewardChord"
+              }
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "拼对了！",
+                "tone": "success"
+              }
+            },
+            {
+              "set": "score",
+              "expr": "v.score + q.scoring.max"
+            },
+            {
+              "cmd": "scoreLabel.show",
+              "args": {
+                "text": ":'得分: ' + v.score",
+                "tone": "success"
+              }
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "judge-wrong",
+          "on": "input1.submitted",
+          "when": [
+            "!v.answered",
+            "!(upper(event.value) == q.data.answer)"
+          ],
+          "do": [
+            {
+              "cmd": "sound1.play",
+              "args": {
+                "notes": "$q.data.wrongBuzz"
+              }
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": ":'提示：' + q.data.hint",
+                "tone": "error"
+              }
+            }
           ]
         },
         {
           "id": "next-or-restart",
           "on": "nextBtn.clicked",
-          "when": [ "!v.done" ],
-          "do": [ { "cmd": "level.next" } ],
-          "else": [ { "cmd": "level.restart" } ]
+          "when": [
+            "!v.done"
+          ],
+          "do": [
+            {
+              "cmd": "level.next"
+            }
+          ],
+          "else": [
+            {
+              "cmd": "level.restart"
+            }
+          ]
         },
         {
           "id": "on-finish",
           "on": "level.finished",
-          "when": [ "event.passed" ],
+          "when": [
+            "event.passed"
+          ],
           "do": [
-            { "set": "done", "expr": "true" },
-            { "cmd": "feedback.show", "args": { "text": "$expr:'完成！得分 ' + v.score + ' 🎉 理论扎实'", "tone": "success" } },
-            { "cmd": "nextBtn.setText", "args": { "text": "重新开始" } },
-            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+            {
+              "set": "done",
+              "expr": "true"
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "$expr:'完成！得分 ' + v.score + ' 🎉 理论扎实'",
+                "tone": "success"
+              }
+            },
+            {
+              "cmd": "nextBtn.setText",
+              "args": {
+                "text": "重新开始"
+              }
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": true
+              }
+            }
           ],
           "else": [
-            { "set": "done", "expr": "true" },
-            { "cmd": "feedback.show", "args": { "text": "$expr:'完成！得分 ' + v.score + '，再练一次'", "tone": "info" } },
-            { "cmd": "nextBtn.setText", "args": { "text": "重新开始" } },
-            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+            {
+              "set": "done",
+              "expr": "true"
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "$expr:'完成！得分 ' + v.score + '，再练一次'",
+                "tone": "info"
+              }
+            },
+            {
+              "cmd": "nextBtn.setText",
+              "args": {
+                "text": "重新开始"
+              }
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": true
+              }
+            }
           ]
         }
       ]
@@ -127,51 +297,176 @@
     "questions": [
       {
         "id": "q1",
-        "prompt": { "text": "拼写这个和弦的音名" },
+        "prompt": {
+          "text": "拼写这个和弦的音名"
+        },
         "data": {
           "answer": "CEG",
-          "listenNotes": [ { "midi": 60 }, { "midi": 64 }, { "midi": 67 } ],
-          "rewardChord": [ { "midi": 60 }, { "midi": 64 }, { "midi": 67 }, { "midi": 72 } ],
-          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ],
+          "listenNotes": [
+            {
+              "midi": 60
+            },
+            {
+              "midi": 64
+            },
+            {
+              "midi": 67
+            }
+          ],
+          "rewardChord": [
+            {
+              "midi": 60
+            },
+            {
+              "midi": 64
+            },
+            {
+              "midi": 67
+            },
+            {
+              "midi": 72
+            }
+          ],
+          "wrongBuzz": [
+            {
+              "midi": 43,
+              "dur": "8n"
+            }
+          ],
           "hint": "从 C 开始：C + 大三度 + 小三度"
         },
-        "scoring": { "max": 10 },
-        "hints": [ { "text": "C 大三和弦" } ],
-        "explanation": "C-E-G。"
+        "scoring": {
+          "max": 10
+        },
+        "hints": [
+          {
+            "text": "C 大三和弦"
+          }
+        ],
+        "explanation": "C-E-G。",
+        "logicPatch": {
+          "variables": {
+            "answered": false
+          }
+        }
       },
       {
         "id": "q2",
-        "prompt": { "text": "拼写这个和弦的音名" },
+        "prompt": {
+          "text": "拼写这个和弦的音名"
+        },
         "data": {
           "answer": "FAC",
-          "listenNotes": [ { "midi": 53 }, { "midi": 57 }, { "midi": 60 } ],
-          "rewardChord": [ { "midi": 53 }, { "midi": 57 }, { "midi": 60 }, { "midi": 65 } ],
-          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ],
+          "listenNotes": [
+            {
+              "midi": 53
+            },
+            {
+              "midi": 57
+            },
+            {
+              "midi": 60
+            }
+          ],
+          "rewardChord": [
+            {
+              "midi": 53
+            },
+            {
+              "midi": 57
+            },
+            {
+              "midi": 60
+            },
+            {
+              "midi": 65
+            }
+          ],
+          "wrongBuzz": [
+            {
+              "midi": 43,
+              "dur": "8n"
+            }
+          ],
           "hint": "从 F 开始的大三和弦"
         },
-        "scoring": { "max": 10 },
-        "hints": [ { "text": "F 大三和弦" } ],
-        "explanation": "F-A-C。"
+        "scoring": {
+          "max": 10
+        },
+        "hints": [
+          {
+            "text": "F 大三和弦"
+          }
+        ],
+        "explanation": "F-A-C。",
+        "logicPatch": {
+          "variables": {
+            "answered": false
+          }
+        }
       },
       {
         "id": "q3",
-        "prompt": { "text": "拼写这个和弦的音名" },
+        "prompt": {
+          "text": "拼写这个和弦的音名"
+        },
         "data": {
           "answer": "GBD",
-          "listenNotes": [ { "midi": 55 }, { "midi": 59 }, { "midi": 62 } ],
-          "rewardChord": [ { "midi": 55 }, { "midi": 59 }, { "midi": 62 }, { "midi": 67 } ],
-          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ],
+          "listenNotes": [
+            {
+              "midi": 55
+            },
+            {
+              "midi": 59
+            },
+            {
+              "midi": 62
+            }
+          ],
+          "rewardChord": [
+            {
+              "midi": 55
+            },
+            {
+              "midi": 59
+            },
+            {
+              "midi": 62
+            },
+            {
+              "midi": 67
+            }
+          ],
+          "wrongBuzz": [
+            {
+              "midi": 43,
+              "dur": "8n"
+            }
+          ],
           "hint": "从 G 开始的大三和弦"
         },
-        "scoring": { "max": 10 },
-        "hints": [ { "text": "G 大三和弦" } ],
-        "explanation": "G-B-D。"
+        "scoring": {
+          "max": 10
+        },
+        "hints": [
+          {
+            "text": "G 大三和弦"
+          }
+        ],
+        "explanation": "G-B-D。",
+        "logicPatch": {
+          "variables": {
+            "answered": false
+          }
+        }
       }
     ],
     "flow": {
       "order": "sequential",
       "count": null,
-      "pass": { "expr": "v.score >= 20" }
+      "pass": {
+        "expr": "v.score >= 20"
+      }
     }
   }
 }

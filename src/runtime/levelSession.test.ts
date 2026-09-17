@@ -249,6 +249,44 @@ describe('LevelSession', () => {
     }
   })
 
+  it('换题清理计时器：logicPatch arm 的重复计时器在换题后不再触发（P1 回归）', () => {
+    vi.useFakeTimers()
+    try {
+      const questions: Question[] = [
+        {
+          id: 'q1',
+          data: {},
+          scoring: { max: 10 },
+          logicPatch: {
+            appendRules: [
+              { id: 'p-arm', on: 'level.questionLoaded', do: [{ cmd: 'timer1.start', args: { ms: 20, repeat: true } }] },
+              { id: 'p-tick', on: 'timer1.tick', do: [{ set: 'ticks', expr: 'v.ticks + 1' }] },
+            ],
+          },
+        },
+        { id: 'q2', data: {}, scoring: { max: 10 } },
+      ]
+      const doc = makeDoc({
+        questions,
+        rules: [{ id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'level.next' }] }],
+        variables: { score: 0, done: false, ticks: 0 },
+      })
+      doc.content.components.push({ id: 'timer1', type: 'timer', visible: false })
+      const { host } = makeHost()
+      const session = new LevelSession(doc, host)
+      session.start()
+      vi.advanceTimersByTime(60)
+      const before = session.engine.vars.ticks as number
+      expect(before).toBeGreaterThanOrEqual(2)
+
+      session.dispatch('nextBtn.clicked') // → q2：追加规则已移除，且换题强制清理计时器
+      vi.advanceTimersByTime(200)
+      expect(session.engine.vars.ticks).toBe(before)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('未知组件引用被 lint 捕获（console.warn 不抛错）', () => {
     const rules: LevelDoc['content']['logic']['rules'] = [
       { id: 'bad', on: 'ghost.noteClicked', do: [{ cmd: 'ghost.clear' }] },
