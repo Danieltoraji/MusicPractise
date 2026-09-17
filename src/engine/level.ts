@@ -9,7 +9,7 @@ export interface Note {
 
 export interface MusicDoc {
   notes: Note[]
-  clef?: 'treble' | 'bass'
+  clef?: 'treble' | 'alto' | 'bass'
   timeSig?: [number, number]
   tempo?: number
   key?: string

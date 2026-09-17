@@ -48,7 +48,7 @@ describe('importDocuments', () => {
     expect(report.aborted).toBe(false)
     expect(report.added).toEqual([copy.id])
     expect(report.rejected).toHaveLength(0)
-    expect((await db.resources.count())).toBe(9) // 8 内置 + 1 新增
+    expect((await db.resources.count())).toBe(10) // 9 内置 + 1 新增
   })
 
   it('重复导入：同 id 同 version 跳过', async () => {

@@ -8,6 +8,7 @@ import theoryChoiceDoc from '../sample/theory-choice.level.json'
 import melodyDictationDoc from '../sample/melody-dictation.level.json'
 import timedReactionDoc from '../sample/timed-reaction.level.json'
 import noteSpellingDoc from '../sample/note-spelling.level.json'
+import clefTestDoc from '../sample/clef-test.level.json'
 import starterSeries from '../sample/starter.series.json'
 import starterTopic1 from '../sample/starter-topic1.topic.json'
 import starterTopic2 from '../sample/starter-topic2.topic.json'
@@ -53,6 +54,7 @@ const LEVEL_DOCS = [
   melodyDictationDoc,
   timedReactionDoc,
   noteSpellingDoc,
+  clefTestDoc,
 ] as unknown as Parameters<typeof toRecord>[0][]
 
 const STARTER_DOCS = [

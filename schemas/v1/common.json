@@ -21,7 +21,7 @@
       "description": "谱面渲染器与发声器共享的最小音乐数据",
       "properties": {
         "notes": { "$ref": "#/$defs/NoteList" },
-        "clef": { "enum": ["treble", "bass"] },
+        "clef": { "enum": ["treble", "alto", "bass"] },
         "timeSig": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 32 }, "minItems": 2, "maxItems": 2 },
         "tempo": { "type": "number", "minimum": 20, "maximum": 300 },
         "key": { "type": "string" }
