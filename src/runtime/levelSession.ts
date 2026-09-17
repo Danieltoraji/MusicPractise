@@ -35,6 +35,8 @@ export class LevelSession {
     this.host = host
     const content = doc.content
     this.store.init(content.components)
+    // 视图直调 applyCommand 产生的效果（点击发音等）与规则链路共用同一执行通道
+    this.store.setEffectSink((cid, effects) => this.runEffects(cid, effects))
 
     this.order = content.questions.map((_, i) => i)
     if (content.flow?.order === 'shuffle') {
@@ -151,8 +153,8 @@ export class LevelSession {
       return
     }
     try {
-      const effects = this.store.applyCommand(cid, cmd, args as Record<string, Json>)
-      this.runEffects(cid, effects)
+      // 效果在 applyCommand 内经 sink 转入 runEffects，这里不再重复执行
+      this.store.applyCommand(cid, cmd, args as Record<string, Json>)
     } catch (err) {
       console.error(`[session] 命令执行失败 ${path}:`, err)
     }

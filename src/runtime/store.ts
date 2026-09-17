@@ -70,6 +70,16 @@ export class ComponentStore {
   private versions = new Map<string, number>()
   private snaps = new Map<string, Snapshot>()
   private listeners = new Set<() => void>()
+  private effectSink: ((id: string, effects: Effect[]) => void) | null = null
+
+  /**
+   * 效果出口：视图直调 applyCommand（如点击发音的 __strike）产生的影响
+   * 也必须被执行——由 LevelSession 注册 sink，统一走同一条执行通道，
+   * 避免视图拿到的返回值无人消费、效果静默丢失。
+   */
+  setEffectSink(sink: (id: string, effects: Effect[]) => void): void {
+    this.effectSink = sink
+  }
 
   init(specs: ComponentInstance[]): void {
     this.specs.clear()
@@ -116,7 +126,10 @@ export class ComponentStore {
     this.bump(id)
   }
 
-  /** 逻辑引擎命令 → 组件状态变更，返回需要宿主执行的效果 */
+  /**
+   * 命令 → 组件状态变更。产生的效果经 effectSink 统一交执行器
+   * （规则链路与视图直调两条路径都走这里，返回值仅供测试断言）。
+   */
   applyCommand(id: string, command: string, args: Record<string, Json>): Effect[] {
     const def = this.defs.get(id)
     const state = this.states.get(id)
@@ -126,7 +139,9 @@ export class ComponentStore {
     const { state: next, effects } = def.applyCommand(state as never, command, args)
     this.states.set(id, next)
     this.bump(id)
-    return effects ?? []
+    const out = effects ?? []
+    if (out.length > 0) this.effectSink?.(id, out)
+    return out
   }
 
   /** 关卡重开：全部组件回到初始态 */

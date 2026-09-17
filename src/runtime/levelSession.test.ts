@@ -287,6 +287,18 @@ describe('LevelSession', () => {
     }
   })
 
+  it('视图直调 applyCommand 的效果也经执行通道（strike 发声回归）', () => {
+    const doc = makeDoc()
+    doc.content.components.push({ id: 'keys1', type: 'fingering' })
+    const { host, rec } = makeHost()
+    const session = new LevelSession(doc, host)
+    // 模拟视图层点击琴键：不经逻辑引擎，直接 applyCommand
+    session.store.applyCommand('keys1', '__strike', { midi: 60 })
+    expect(rec.effects).toEqual([
+      { type: 'audio.play', notes: [{ midi: 60, dur: '8n' }], mode: 'chord' },
+    ])
+  })
+
   it('未知组件引用被 lint 捕获（console.warn 不抛错）', () => {
     const rules: LevelDoc['content']['logic']['rules'] = [
       { id: 'bad', on: 'ghost.noteClicked', do: [{ cmd: 'ghost.clear' }] },
