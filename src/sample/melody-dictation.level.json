@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "kind": "level",
+  "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A3",
+  "version": "1.0.0",
+  "meta": {
+    "title": "旋律听写 · 键盘输入",
+    "description": "听一段短旋律，在键盘上按顺序弹出它。演示序列播放（seq）、fingering 键盘输入与数组累加判定。",
+    "author": { "name": "POC 内置示例" },
+    "tags": ["练耳", "旋律", "键盘"],
+    "locale": "zh-CN",
+    "license": "CC0-1.0",
+    "difficulty": 3
+  },
+  "refs": [],
+  "content": {
+    "components": [
+      {
+        "id": "scoreLabel",
+        "type": "label",
+        "name": "得分",
+        "visible": true,
+        "layout": { "x": 40, "y": 20, "w": 300, "h": 40 },
+        "props": { "text": "得分: 0" }
+      },
+      {
+        "id": "feedback",
+        "type": "label",
+        "name": "反馈文本",
+        "visible": true,
+        "layout": { "x": 40, "y": 90, "w": 720, "h": 48 },
+        "props": { "text": "" }
+      },
+      {
+        "id": "keys1",
+        "type": "fingering",
+        "name": "答题键盘",
+        "visible": true,
+        "layout": { "x": 40, "y": 160, "w": 720, "h": 180 },
+        "props": { "lowMidi": 60, "highMidi": 76 }
+      },
+      {
+        "id": "listenBtn",
+        "type": "button",
+        "name": "重听",
+        "visible": true,
+        "layout": { "x": 40, "y": 370, "w": 140, "h": 48 },
+        "props": { "text": "🔊 重听", "enabled": true }
+      },
+      {
+        "id": "resetBtn",
+        "type": "button",
+        "name": "清空重输",
+        "visible": true,
+        "layout": { "x": 200, "y": 370, "w": 140, "h": 48 },
+        "props": { "text": "↺ 清空", "enabled": true }
+      },
+      {
+        "id": "nextBtn",
+        "type": "button",
+        "name": "下一题",
+        "visible": true,
+        "layout": { "x": 620, "y": 370, "w": 140, "h": 48 },
+        "props": { "text": "下一题 →", "enabled": false }
+      },
+      {
+        "id": "sound1",
+        "type": "sound",
+        "name": "发声器",
+        "visible": false
+      }
+    ],
+    "logic": {
+      "variables": { "score": 0, "typed": [], "done": false },
+      "rules": [
+        {
+          "id": "load-question",
+          "on": "level.questionLoaded",
+          "do": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.listenNotes", "mode": "seq", "tempo": 90 } },
+            { "cmd": "keys1.clear" },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": false } },
+            { "cmd": "feedback.show", "args": { "text": "听旋律，在键盘上按顺序弹出它", "tone": "info" } }
+          ]
+        },
+        {
+          "id": "replay",
+          "on": "listenBtn.clicked",
+          "do": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.listenNotes", "mode": "seq", "tempo": 90 } }
+          ]
+        },
+        {
+          "id": "reset-input",
+          "on": "resetBtn.clicked",
+          "do": [
+            { "set": "typed", "expr": "[]" },
+            { "cmd": "keys1.clear" },
+            { "cmd": "feedback.show", "args": { "text": "已清空，重新输入", "tone": "info" } }
+          ]
+        },
+        {
+          "id": "collect-key",
+          "on": "keys1.keyClicked",
+          "do": [
+            { "set": "typed", "expr": "append(v.typed, event.midi)" }
+          ]
+        },
+        {
+          "id": "judge-when-full",
+          "on": "keys1.keyClicked",
+          "when": [ "len(v.typed) == len(q.data.answerSeq)" ],
+          "do": [
+            { "emit": "dict:judge" }
+          ]
+        },
+        {
+          "id": "judged",
+          "on": "dict:judge",
+          "when": [ "join(v.typed, ',') == join(q.data.answerSeq, ',')" ],
+          "do": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.rewardChord", "mode": "seq", "tempo": 120 } },
+            { "cmd": "feedback.show", "args": { "text": "完全正确！", "tone": "success" } },
+            { "set": "score", "expr": "v.score + q.scoring.max" },
+            { "cmd": "scoreLabel.show", "args": { "text": "$expr:'得分: ' + v.score", "tone": "success" } },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+          ],
+          "else": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.wrongBuzz" } },
+            { "cmd": "keys1.clear" },
+            { "set": "typed", "expr": "[]" },
+            { "cmd": "feedback.show", "args": { "text": "顺序不对，点「🔊 重听」再试", "tone": "error" } }
+          ]
+        },
+        {
+          "id": "next-or-restart",
+          "on": "nextBtn.clicked",
+          "when": [ "!v.done" ],
+          "do": [ { "cmd": "level.next" } ],
+          "else": [ { "cmd": "level.restart" } ]
+        },
+        {
+          "id": "on-finish",
+          "on": "level.finished",
+          "when": [ "event.passed" ],
+          "do": [
+            { "set": "done", "expr": "true" },
+            { "cmd": "feedback.show", "args": { "text": "$expr:'完成！得分 ' + v.score + ' 🎉 耳朵不错'", "tone": "success" } },
+            { "cmd": "nextBtn.setText", "args": { "text": "重新开始" } },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+          ],
+          "else": [
+            { "set": "done", "expr": "true" },
+            { "cmd": "feedback.show", "args": { "text": "$expr:'完成！得分 ' + v.score + '，再练一次'", "tone": "info" } },
+            { "cmd": "nextBtn.setText", "args": { "text": "重新开始" } },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+          ]
+        }
+      ]
+    },
+    "questions": [
+      {
+        "id": "q1",
+        "prompt": { "text": "听旋律，在键盘上弹出它（C-D-E）" },
+        "data": {
+          "listenNotes": [ { "midi": 60, "dur": "4n" }, { "midi": 62, "dur": "4n" }, { "midi": 64, "dur": "2n" } ],
+          "answerSeq": [60, 62, 64],
+          "rewardChord": [ { "midi": 60 }, { "midi": 64 }, { "midi": 67 }, { "midi": 72 } ],
+          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
+        },
+        "scoring": { "max": 10 },
+        "hints": [ { "text": "do re mi，三个音都在白键上" } ],
+        "explanation": "C4-D4-E4，级进上行。"
+      },
+      {
+        "id": "q2",
+        "prompt": { "text": "听旋律，在键盘上弹出它（有一个跳进）" },
+        "data": {
+          "listenNotes": [ { "midi": 60, "dur": "4n" }, { "midi": 64, "dur": "4n" }, { "midi": 67, "dur": "2n" } ],
+          "answerSeq": [60, 64, 67],
+          "rewardChord": [ { "midi": 60 }, { "midi": 64 }, { "midi": 67 }, { "midi": 72 } ],
+          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
+        },
+        "scoring": { "max": 10 },
+        "hints": [ { "text": "do mi sol，三度跳进" } ],
+        "explanation": "C4-E4-G4，主和弦分解上行。"
+      },
+      {
+        "id": "q3",
+        "prompt": { "text": "听旋律，在键盘上弹出它" },
+        "data": {
+          "listenNotes": [ { "midi": 64, "dur": "4n" }, { "midi": 67, "dur": "4n" }, { "midi": 69, "dur": "2n" } ],
+          "answerSeq": [64, 67, 69],
+          "rewardChord": [ { "midi": 64 }, { "midi": 69 }, { "midi": 72 } ],
+          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
+        },
+        "scoring": { "max": 10 },
+        "hints": [ { "text": "从 mi 开始：mi sol la" } ],
+        "explanation": "E4-G4-A4。"
+      }
+    ],
+    "flow": {
+      "order": "sequential",
+      "count": null,
+      "pass": { "expr": "v.score >= 20" }
+    }
+  }
+}
