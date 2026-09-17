@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type LibraryRecord, type ProgressRecord } from '../library/db'
+import { db, type ProgressRecord } from '../library/db'
 import { partitionLevels } from '../library/browse'
 import type { LevelDoc } from '../engine/level'
 import { ErrorBoundary } from '../library/ErrorBoundary'
@@ -20,10 +20,19 @@ function ProgressBadge({ levelId, progress }: { levelId: string; progress: Progr
 }
 
 export function HomePage() {
-  const series = useLiveQuery(() => db.resources.where('kind').equals('series').toArray(), [], [] as LibraryRecord[])
-  const topics = useLiveQuery(() => db.resources.where('kind').equals('topic').toArray(), [], [] as LibraryRecord[])
-  const levels = useLiveQuery(() => db.resources.where('kind').equals('level').toArray(), [], [] as LibraryRecord[])
-  const progress = useLiveQuery(() => db.progress.toArray(), [], [] as ProgressRecord[])
+  const series = useLiveQuery(() => db.resources.where('kind').equals('series').toArray(), [], undefined)
+  const topics = useLiveQuery(() => db.resources.where('kind').equals('topic').toArray(), [], undefined)
+  const levels = useLiveQuery(() => db.resources.where('kind').equals('level').toArray(), [], undefined)
+  const progress = useLiveQuery(() => db.progress.toArray(), [], undefined)
+
+  // undefined = 查询未完成（loading），与"查询完成但为空"区分，避免闪现空态文案
+  if (series === undefined || topics === undefined || levels === undefined || progress === undefined) {
+    return (
+      <div className="page">
+        <p className="muted">加载中…</p>
+      </div>
+    )
+  }
 
   const { independent } = partitionLevels(levels, topics)
 

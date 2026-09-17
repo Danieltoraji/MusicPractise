@@ -80,12 +80,18 @@ function toRecord(doc: {
 
 /**
  * 内置示例入库（5 关卡 + 入门系列 1 系列 2 专题）。
- * 无条件 bulkPut（幂等且让内置内容跟随应用版本更新）——导入的同 id 文档
- * 若版本相同会被刷新，异版本由导入时的冲突策略决定，二者互不干扰。
+ * 只补"缺失或仍为内置"的记录：用户导入的同 id 文档（builtIn=0，可能异版本）
+ * 不会被应用内置版本静默覆盖。
  */
 export async function ensureSeeded(): Promise<void> {
-  const records = [...LEVEL_DOCS, ...STARTER_DOCS].map((doc) => toRecord(doc, true))
-  await db.resources.bulkPut(records)
+  const builtIns = [...LEVEL_DOCS, ...STARTER_DOCS].map((doc) => toRecord(doc, true))
+  const existing = await db.resources.bulkGet(builtIns.map((r) => r.id))
+  const toPut: LibraryRecord[] = []
+  builtIns.forEach((record, i) => {
+    const ex = existing[i]
+    if (!ex || ex.builtIn === 1) toPut.push(record)
+  })
+  if (toPut.length > 0) await db.resources.bulkPut(toPut)
 }
 
 export async function listResources(kind?: ResourceKind): Promise<LibraryRecord[]> {

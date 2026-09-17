@@ -76,6 +76,21 @@ describe('资源库（Dexie，简化单态）', () => {
     await deleteResource(temp.id)
     expect(await getResource(temp.id)).toBeUndefined()
   })
+
+  it('ensureSeeded 不覆盖用户导入的同 id 文档（P1 回归）', async () => {
+    const seeded = (await listResources('level'))[0]
+    const imported = {
+      ...(seeded.doc as { id: string; kind: 'level'; version: string; meta: { title: string } }),
+      version: '2.0.0',
+      meta: { title: '用户修改版' },
+    }
+    await putResource(imported) // builtIn=0
+    await ensureSeeded()
+    const rec = await getResource(seeded.id)
+    expect(rec!.version).toBe('2.0.0') // 不被内置 1.0.0 覆盖
+    expect(rec!.builtIn).toBe(0)
+    expect(rec!.title).toBe('用户修改版')
+  })
 })
 
 describe('练习进度存档', () => {
