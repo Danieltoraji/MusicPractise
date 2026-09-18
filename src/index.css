@@ -1040,3 +1040,63 @@ a.level-row:hover {
   margin: 4px 0;
   color: var(--ink);
 }
+
+/* ---------- 逻辑图谱 ---------- */
+
+.logic-graph {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lg-node.lg-event {
+  background: #fff7ed;
+  border: 1.5px solid var(--warn);
+  color: #9a3412;
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px;
+}
+.lg-node.lg-rule {
+  background: #eef2ff;
+  border: 1.5px solid var(--accent);
+  color: #3730a3;
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px;
+}
+.lg-node.lg-action {
+  background: #eff6ff;
+  border: 1px solid #3b82f6;
+  color: #1e3a8a;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  padding: 4px 6px;
+}
+.lg-node.lg-var {
+  background: #f0fdf4;
+  border: 1.5px solid var(--ok);
+  color: #14532d;
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+}
+.lg-label-main {
+  font-weight: 600;
+}
+.lg-label-sub {
+  font-size: 10px;
+  opacity: 0.75;
+}

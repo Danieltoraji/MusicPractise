@@ -2,7 +2,7 @@
  * 关卡编辑器 MVP：组件面板 / 画布拖放 / 属性检查器 / 规则表单 / 题目编辑 / JSON 视图 / 保存与试运行。
  * 组件类型与事件/命令枚举全部来自组件注册表契约（单一来源）。
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../library/db'
 import type { LibraryRecord } from '../library/db'
@@ -27,7 +27,10 @@ import {
   updateQuestion,
 } from './docState'
 
-type Tab = 'canvas' | 'rules' | 'questions' | 'json'
+type Tab = 'canvas' | 'rules' | 'questions' | 'graph' | 'json'
+
+/** 节点图视图懒加载：React Flow 体量较大，不进主包 */
+const LogicGraph = lazy(() => import('../graph/LogicGraph'))
 
 /** 表达式实时校验：语法错误返回消息，合法返回 null */
 export function checkExprText(text: string): string | null {
@@ -134,6 +137,7 @@ export function EditorPage({ id }: Props) {
           ['canvas', '画布'],
           ['rules', '规则'],
           ['questions', '题目'],
+          ['graph', '节点图'],
           ['json', 'JSON'],
         ] as [Tab, string][]).map(([t, label]) => (
           <button key={t} type="button" className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
@@ -171,6 +175,12 @@ export function EditorPage({ id }: Props) {
 
       {tab === 'questions' && (
         <QuestionsEditor doc={doc} onChange={update} />
+      )}
+
+      {tab === 'graph' && (
+        <Suspense fallback={<p className="muted">节点图加载中…</p>}>
+          <LogicGraph program={doc.content.logic} height={560} />
+        </Suspense>
       )}
 
       {tab === 'json' && (

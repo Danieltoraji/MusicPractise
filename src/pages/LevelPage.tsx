@@ -62,7 +62,7 @@ export function LevelPage({ id }: { id: string }) {
   return (
     <div className="page">
       <div className="breadcrumb">
-        <a href="#/">← 返回首页</a>
+        <a href="#/">← 返回首页</a> · <a href={`#/graph/${id}`}>🧭 逻辑图谱</a>
       </div>
       {load.lintWarnings.length > 0 && (
         <details className="json-view">
