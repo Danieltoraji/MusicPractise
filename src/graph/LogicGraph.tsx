@@ -3,10 +3,11 @@
  * dagre 自动分层布局（LR）；节点按类别着色；MiniMap/Controls 内置。
  * 默认导出 + 懒加载（编辑器/图谱页按需加载，控制主包体积）。
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import dagre from '@dagrejs/dagre'
-import { Background, Controls, MiniMap, ReactFlow } from '@xyflow/react'
+import { Background, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import type { Edge, Node } from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
 import type { LogicProgram } from '../engine/logic'
 import { programToGraph, type GraphNode } from './programToGraph'
 
@@ -45,6 +46,21 @@ export default function LogicGraph({
   program: LogicProgram
   height?: number
 }) {
+  return (
+    <ReactFlowProvider>
+      <LogicGraphInner program={program} height={height} />
+    </ReactFlowProvider>
+  )
+}
+
+function LogicGraphInner({
+  program,
+  height,
+}: {
+  program: LogicProgram
+  height: number
+}) {
+  const { fitView } = useReactFlow()
   const graph = useMemo(() => programToGraph(program), [program])
 
   const rfNodes = useMemo<Node[]>(() => {
@@ -86,6 +102,14 @@ export default function LogicGraph({
       labelBgStyle: { fill: '#f6f7fb' },
     }))
   }, [graph])
+
+  // RF12 的初始 fitView 可能在节点测量完成前执行而失效——节点就绪后再框选一次
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void fitView({ padding: 0.12, duration: 200 })
+    }, 150)
+    return () => clearTimeout(t)
+  }, [fitView, rfNodes])
 
   return (
     <div className="logic-graph" style={{ height }}>
