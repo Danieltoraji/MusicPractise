@@ -96,7 +96,7 @@
             {
               "cmd": "rhythm1.start",
               "args": {
-                "bpm": 80,
+                "bpm": "$q.data.bpm",
                 "beats": 8,
                 "countInBeats": 4
               }
@@ -191,7 +191,7 @@
             {
               "cmd": "rhythm1.start",
               "args": {
-                "bpm": 80,
+                "bpm": "$q.data.bpm",
                 "beats": 8,
                 "countInBeats": 4
               }
@@ -262,7 +262,8 @@
             3.75,
             4.5,
             5.25
-          ]
+          ],
+          "bpm": 80
         },
         "scoring": {
           "max": 10
@@ -283,7 +284,8 @@
             2.885,
             3.462,
             4.038
-          ]
+          ],
+          "bpm": 104
         },
         "scoring": {
           "max": 10

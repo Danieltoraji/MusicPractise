@@ -333,12 +333,10 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
 // 节奏训练：节拍网格 + 节拍器 + tap 采集（时钟全部取自 AudioContext）
 // ---------------------------------------------------------------------------
 
-import { getCtx, playClick } from '../runtime/audio'
-
-const RHYTHM_COUNT_IN_DEFAULT = 4
+import { getCtx, playClick, stopAllClicks } from '../runtime/audio'
 
 export function RhythmView({ spec, store, emit }: ViewProps) {
-  const { running, beats, bpm } = useComponentState<RhythmState>(store, spec.id)
+  const { running, beats, bpm, countIn, runId } = useComponentState<RhythmState>(store, spec.id)
   const [activeBeat, setActiveBeat] = useState(-1)
   const [tapped, setTapped] = useState(false)
   const timersRef = useRef<{ raf: number; end: number } | null>(null)
@@ -346,7 +344,8 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
   const t0Ref = useRef(0)
 
   useEffect(() => {
-    if (!running) {
+    // runId 在 deps 中：judged.else 里"同参数重发 start"也会重建本轮排程
+    if (!running || runId === 0) {
       runningRef.current = false
       if (timersRef.current) {
         cancelAnimationFrame(timersRef.current.raf)
@@ -358,7 +357,6 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
     }
     const ctx = getCtx()
     const spb = 60 / Math.max(1, bpm)
-    const countIn = Number(((spec.props ?? {}) as Record<string, Json>).countInBeats ?? RHYTHM_COUNT_IN_DEFAULT)
     const t0 = ctx.currentTime + countIn * spb + 0.2
     t0Ref.current = t0
     const grid = Array.from({ length: beats }, (_, i) => t0 + i * spb)
@@ -386,8 +384,9 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
       runningRef.current = false
       if (timersRef.current) cancelAnimationFrame(timersRef.current.raf)
       timersRef.current = null
+      stopAllClicks()
     }
-  }, [running, beats, bpm, spec.props, emit])
+  }, [running, beats, bpm, countIn, runId, spec.props, emit])
 
   function tap(): void {
     if (!runningRef.current) return

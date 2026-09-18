@@ -78,6 +78,9 @@ export interface RhythmState {
   running: boolean
   beats: number
   bpm: number
+  countIn: number
+  /** 每次 start 递增：视图 effect 以此感知"重开一轮"（参数不变也要重排） */
+  runId: number
 }
 export interface TunerState {
   running: boolean
@@ -323,16 +326,21 @@ export const RHYTHM_DEF: ComponentDef<RhythmState> = {
       roundDone: '{ duration: number }（一轮结束）',
     },
     commands: { start: '{ bpm: number, beats?: number, countInBeats?: number }', stop: '无参数' },
-    state: { running: 'boolean', beats: 'number', bpm: 'number' },
-    propsDoc: 'props: { countInBeats?: number }（预备拍数量，缺省 4）',
+    state: { running: 'boolean', beats: 'number', bpm: 'number', countIn: 'number', runId: 'number' },
+    propsDoc: 'props: { countInBeats?: number }（预备拍数量缺省值，start 参数可覆盖）',
   },
-  initialState: () => ({ running: false, beats: 8, bpm: 80 }),
+  initialState: (spec) => {
+    const p = (spec.props ?? {}) as Record<string, Json>
+    return { running: false, beats: 8, bpm: 80, countIn: typeof p.countInBeats === 'number' ? p.countInBeats : 4, runId: 0 }
+  },
   applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'start') {
       const bpm = typeof args.bpm === 'number' ? Math.min(300, Math.max(20, args.bpm)) : 80
       const beats = typeof args.beats === 'number' ? Math.min(64, Math.max(1, Math.round(args.beats))) : 8
-      return { state: { ...s, running: true, beats, bpm } }
+      const countIn = typeof args.countInBeats === 'number' ? Math.min(16, Math.max(0, Math.round(args.countInBeats))) : s.countIn
+      // runId 每次 start +1：驱动视图 effect 重排，即便参数与上一轮完全相同
+      return { state: { ...s, running: true, beats, bpm, countIn, runId: s.runId + 1 } }
     }
     if (cmd === 'stop') return { state: { ...s, running: false } }
     return { state: s }
