@@ -100,6 +100,39 @@ describe('migrateLogicV1toV2', () => {
       }),
     ).toThrow(/id 重复/)
   })
+
+  it('args 边界：标量/数组包装为单参数；emit 非对象 payload 包装进 value（已知限制，docs/12 §10）', () => {
+    const g = migrateLogicV1toV2({
+      rules: [
+        { id: 'a', on: 'app:x', do: [{ cmd: 'label1.show', args: 'plain' }] },
+        { id: 'b', on: 'app:x', do: [{ cmd: 'label1.show', args: [1, 2] }] },
+        { id: 'c', on: 'app:x', do: [{ emit: 'app:y', payload: 5 }] },
+      ],
+    })
+    const callA = g.nodes.find((n) => n.id === 'a_d0') as Extract<GNode, { kind: 'call' }>
+    expect(callA.args).toEqual(["'plain'"])
+    const callB = g.nodes.find((n) => n.id === 'b_d0') as Extract<GNode, { kind: 'call' }>
+    expect(callB.args).toEqual(['[1, 2]'])
+    // ECA 引擎原样派发标量 payload（event === 5）；迁移后形状变为 {value: 5}——已记录的行为差异
+    const emit = g.nodes.find((n) => n.id === 'c_d0') as Extract<GNode, { kind: 'emit' }>
+    expect(emit.payload).toEqual({ value: '5' })
+  })
+
+  it('when 混合布尔优先级：逐项加括号保护', () => {
+    const g = migrateLogicV1toV2({
+      rules: [{ id: 'r', on: 'app:x', when: ['v.a ? v.b : v.c', 'v.d'], do: [] }],
+    })
+    const branch = g.nodes.find((n) => n.kind === 'branch') as Extract<GNode, { kind: 'branch' }>
+    expect(branch.cond).toBe('(v.a ? v.b : v.c) && (v.d)')
+  })
+
+  it('自环 emit：单节点触发环被 lint 报告', () => {
+    const g = migrateLogicV1toV2({
+      rules: [{ id: 'r', on: 'app:x', do: [{ emit: 'app:x' }] }],
+    })
+    const errors = lintGraphProgram(g)
+    expect(errors.some((x) => x.startsWith('emit 触发环'))).toBe(true)
+  })
 })
 
 // ---------------------------------------------------------------------------

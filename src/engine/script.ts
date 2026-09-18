@@ -33,16 +33,10 @@ export class ScriptError extends Error {
 interface WalkCtx {
   byId: Map<string, GNode>
   edges: GEdge[]
-  /** handler 级已渲染节点（跨循环体汇合检测） */
+  /** handler 级已渲染节点 */
   visited: Set<string>
-  /** 循环体子树内已渲染节点（含循环头） */
-  bodyVisited: Set<string> | null
-  /** 循环体禁止到达的节点（循环后继 = 体掉出） */
-  forbid: Set<string>
-  /** 当前所在循环头；体遍历到达它 = 回边 */
-  loopHead: string | null
-  /** 体渲染期间是否发生了回边 */
-  returned: boolean
+  /** 汇合点缓存：branch id → 结构化汇合点（null = 无后继） */
+  joins: Map<string, string | null>
 }
 
 function outOf(ctx: WalkCtx, id: string, port?: 'true' | 'false'): string | null {
@@ -50,44 +44,84 @@ function outOf(ctx: WalkCtx, id: string, port?: 'true' | 'false'): string | null
   return e ? e.to : null
 }
 
-export function generateScript(prog: GraphProgram): string {
-  const base: WalkCtx = {
-    byId: new Map(prog.nodes.map((n) => [n.id, n])),
-    edges: prog.edges,
-    visited: new Set(),
-    bodyVisited: null,
-    forbid: new Set(),
-    loopHead: null,
-    returned: false,
+/** 从 start 沿执行边 BFS 距离图 */
+function bfsFrom(ctx: WalkCtx, start: string): Map<string, number> {
+  const dist = new Map<string, number>([[start, 0]])
+  const queue = [start]
+  while (queue.length) {
+    const cur = queue.shift()!
+    const node = ctx.byId.get(cur)
+    if (!node) continue
+    const nexts =
+      node.kind === 'branch' || node.kind === 'loop'
+        ? [outOf(ctx, cur, 'true'), outOf(ctx, cur, 'false')].filter((x): x is string => !!x)
+        : [outOf(ctx, cur)].filter((x): x is string => !!x)
+    for (const next of nexts) {
+      if (!dist.has(next)) {
+        dist.set(next, dist.get(cur)! + 1)
+        queue.push(next)
+      }
+    }
   }
-  const chunks: string[] = []
-  for (const node of prog.nodes) {
-    if (node.kind !== 'on') continue
-    base.visited = new Set()
-    const start = outOf(base, node.id)
-    const lines = start ? stmtLines(start, base) : []
-    // renderIf/loop 返回多行字符串，先展开为单行数组再统一缩进
-    const expanded = lines.flatMap((l) => l.split('\n')).map((l) => `  ${l}`)
-    chunks.push([`on ${node.event} {`, ...expanded, `}`].join('\n'))
-  }
-  return chunks.join('\n\n') + (chunks.length ? '\n' : '')
+  return dist
 }
 
-/** 渲染从 cur 开始的语句链；分支/循环递归消费子树 */
-function stmtLines(curId: string, ctx: WalkCtx): string[] {
-  const lines: string[] = []
-  let cur: string | null = curId
-  while (cur) {
-    if (ctx.loopHead && cur === ctx.loopHead) {
-      ctx.returned = true
-      return lines // 循环体回边：静默终止
+/**
+ * branch 的结构化汇合点：true/false 两分支都可达的节点中（BFS 距离和最小）者。
+ * `if (c) {A} else {B}; C` 的图上 A 尾与 B 尾都连 C —— C 即汇合点，渲染 if 后顺序继续。
+ * 无公共后继（任一分支掉出 = 处理器结束）返回 null。
+ */
+function joinOf(ctx: WalkCtx, branchId: string): string | null {
+  if (ctx.joins.has(branchId)) return ctx.joins.get(branchId)!
+  const t = outOf(ctx, branchId, 'true')
+  const f = outOf(ctx, branchId, 'false')
+  let best: string | null = null
+  if (t && f) {
+    const distT = bfsFrom(ctx, t)
+    const distF = bfsFrom(ctx, f)
+    let bestSum = Infinity
+    for (const [n, d1] of distT) {
+      const d2 = distF.get(n)
+      if (d2 !== undefined && d1 + d2 < bestSum) {
+        best = n
+        bestSum = d1 + d2
+      }
     }
-    if (ctx.bodyVisited) {
-      if (ctx.forbid.has(cur)) {
+  }
+  ctx.joins.set(branchId, best)
+  return best
+}
+
+interface ChainOpts {
+  /** 汇合点：到达即停（不渲染，由外层顺序链消费） */
+  stopAt?: string | null
+  /** 循环体子树内已渲染节点（含循环头） */
+  bodyVisited?: Set<string> | null
+  /** 循环体禁止到达的节点（循环后继 = 体掉出） */
+  forbid?: Set<string>
+  /** 当前所在循环头；体遍历到达它 = 回边 */
+  loopHead?: string | null
+}
+
+/** 渲染从 curId 开始的语句链，直到掉出 / 到达 stopAt（汇合点，不渲染）/ 回边 */
+function chain(curId: string, ctx: WalkCtx, opts: ChainOpts = {}): { lines: string[]; returned: boolean } {
+  const lines: string[] = []
+  let returned = false
+  let cur: string | null = curId
+  const loopHead = opts.loopHead ?? null
+  const bodyVisited = opts.bodyVisited ?? null
+  const forbid = opts.forbid ?? null
+  while (cur && cur !== opts.stopAt) {
+    if (loopHead && cur === loopHead) {
+      returned = true
+      break
+    }
+    if (bodyVisited) {
+      if (forbid?.has(cur)) {
         throw new Error(`伪代码无法表达从循环体跳出到节点 ${cur}（请用 branch 包裹提前结束的逻辑，或改用节点图编辑）`)
       }
-      if (ctx.bodyVisited.has(cur)) throw new Error(`伪代码无法表达节点 ${cur} 被循环体内多条路径汇入（请简化图，或改用节点图编辑）`)
-      ctx.bodyVisited.add(cur)
+      if (bodyVisited.has(cur)) throw new Error(`伪代码无法表达节点 ${cur} 被循环体内多条路径汇入（请简化图，或改用节点图编辑）`)
+      bodyVisited.add(cur)
     }
     if (ctx.visited.has(cur)) throw new Error(`伪代码无法表达节点 ${cur} 被多条路径汇入（请简化图结构，或改用节点图编辑）`)
     ctx.visited.add(cur)
@@ -119,8 +153,9 @@ function stmtLines(curId: string, ctx: WalkCtx): string[] {
         cur = outOf(ctx, cur)
         break
       case 'branch': {
-        lines.push(renderIf(cur, ctx))
-        cur = null // branch 出边只有端口边，子树已被消费
+        const j = joinOf(ctx, cur)
+        lines.push(renderIf(cur, j, ctx, opts))
+        cur = j
         break
       }
       case 'loop': {
@@ -128,47 +163,73 @@ function stmtLines(curId: string, ctx: WalkCtx): string[] {
         if (node.mode === 'repeat' && node.times === undefined) throw new Error(`节点 ${node.id}: repeat 缺少 times`)
         const t = outOf(ctx, node.id, 'true')
         const f = outOf(ctx, node.id, 'false')
-        const bodyVisited = new Set<string>([node.id])
-        const forbid = new Set<string>(f ? [f] : [])
-        const bodyCtx: WalkCtx = {
-          ...ctx,
-          bodyVisited,
-          forbid,
-          loopHead: node.id,
-          returned: false,
-        }
-        const body = t ? stmtLines(t, bodyCtx) : []
-        if (t && !bodyCtx.returned) {
+        const body = t
+          ? chain(t, ctx, {
+              bodyVisited: new Set<string>([node.id]),
+              forbid: new Set<string>(f ? [f] : []),
+              loopHead: node.id,
+            })
+          : { lines: [] as string[], returned: false }
+        if (t && !body.returned) {
           throw new Error(
             `伪代码无法表达循环体（节点 ${node.id}）的提前结束：体末尾必须回到循环头（如需提前结束请用 branch 包裹，或改用节点图编辑）`,
           )
         }
         const kw = node.mode === 'while' ? `while (${node.cond})` : `repeat (${node.times})`
-        lines.push(`${kw} {${body.length ? `\n${indent(body)}\n` : ''}}`)
-        cur = f // 循环后继走 false 边
+        lines.push(`${kw} {${body.lines.length ? `
+${indent(body.lines)}
+` : ''}}`)
+        cur = f
         break
       }
     }
   }
-  return lines
+  return { lines, returned }
 }
 
-function renderIf(branchId: string, ctx: WalkCtx): string {
+/** 渲染 if / else-if 链；两分支体渲染到汇合点 j 为止（继承当前循环上下文 opts） */
+function renderIf(branchId: string, j: string | null, ctx: WalkCtx, opts: ChainOpts = {}): string {
   const node = ctx.byId.get(branchId) as Extract<GNode, { kind: 'branch' }>
   const t = outOf(ctx, branchId, 'true')
   const f = outOf(ctx, branchId, 'false')
-  const body = t ? stmtLines(t, ctx) : []
-  let s = `if (${node.cond}) {${body.length ? `\n${indent(body)}\n` : ''}}`
-  if (f) {
+  const body = t ? chain(t, ctx, { ...opts, stopAt: j }).lines : []
+  let s = `if (${node.cond}) {${body.length ? `
+${indent(body)}
+` : ''}}`
+  // false 出口直达汇合点 = 语义上无 else 分支体，省略 else
+  if (f && f !== j) {
     const fNode = ctx.byId.get(f)
     if (fNode?.kind === 'branch') {
-      s += ` else ${renderIf(f, ctx)}`
+      s += ` else ${renderIf(f, j, ctx, opts)}`
     } else {
-      const els = stmtLines(f, ctx)
-      s += ` else {${els.length ? `\n${indent(els)}\n` : ''}}`
+      const els = chain(f, ctx, { ...opts, stopAt: j }).lines
+      s += ` else {${els.length ? `
+${indent(els)}
+` : ''}}`
     }
   }
   return s
+}
+
+export function generateScript(prog: GraphProgram): string {
+  const base: WalkCtx = {
+    byId: new Map(prog.nodes.map((n) => [n.id, n])),
+    edges: prog.edges,
+    visited: new Set(),
+    joins: new Map(),
+  }
+  const chunks: string[] = []
+  for (const node of prog.nodes) {
+    if (node.kind !== 'on') continue
+    base.visited = new Set()
+    base.joins = new Map()
+    const start = outOf(base, node.id)
+    const lines = start ? chain(start, base).lines : []
+    // renderIf/loop 返回多行字符串，先展开为单行数组再统一缩进
+    const expanded = lines.flatMap((l) => l.split('\n')).map((l) => `  ${l}`)
+    chunks.push([`on ${node.event} {`, ...expanded, `}`].join('\n'))
+  }
+  return chunks.join('\n\n') + (chunks.length ? '\n' : '')
 }
 
 function rvalueText(rv: RValue): string {
@@ -185,7 +246,7 @@ function indent(lines: string[]): string {
 // ---------------------------------------------------------------------------
 
 interface STok {
-  t: 'ident' | 'num' | 'str' | 'op' | 'term'
+  t: 'ident' | 'num' | 'str' | 'op' | 'term' | 'comment'
   v: string
   /** 与前一 token 之间的原始空白（含注释文本），tokensToString 还原源文本用 */
   pre: string
@@ -224,9 +285,11 @@ function lexScript(src: string): STok[] {
       continue
     }
     if (c === '/' && src[i + 1] === '/') {
-      const start = i
-      while (i < src.length && src[i] !== '\n') advance(1)
-      pending += src.slice(start, i)
+      // 注释成为独立 token：语句位置被提升为 comment 节点，表达式内/行尾被丢弃
+      let j = i + 2
+      while (j < src.length && src[j] !== '\n') j++
+      push('comment', src.slice(i + 2, j).trim())
+      advance(j - i)
       continue
     }
     if (c === ';') {
@@ -287,9 +350,12 @@ function lexScript(src: string): STok[] {
   return toks
 }
 
-/** token 流 → expr 源文本（pre 还原原始间隔，信息无损，parseExpr 重新词法） */
+/** token 流 → expr 源文本（pre 还原原始间隔，信息无损，parseExpr 重新词法；comment 不应出现在表达式内） */
 function tokensToString(toks: STok[]): string {
-  return toks.map((t) => t.pre + (t.t === 'str' ? exprStringLiteral(t.v) : t.v)).join('')
+  return toks
+    .filter((t) => t.t !== 'comment')
+    .map((t) => t.pre + (t.t === 'str' ? exprStringLiteral(t.v) : t.v))
+    .join('')
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +363,16 @@ function tokensToString(toks: STok[]): string {
 // ---------------------------------------------------------------------------
 
 const ID_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/** 语句/块的出口：需要连接「块内下一条语句（顺序后继）」的边 */
+interface Exit {
+  node: string
+  port?: 'true' | 'false'
+}
+interface StmtPiece {
+  head: string | null
+  exits: Exit[]
+}
 
 class ScriptParser {
   private toks: STok[]
@@ -366,35 +442,57 @@ class ScriptParser {
   parse(): { nodes: GNode[]; edges: GEdge[] } {
     this.skipTerms()
     while (this.peek()) {
+      const t = this.peek()!
+      if (t.t === 'comment') {
+        // 顶层独立注释保留为 comment 节点（不参与连线，往返不丢失）
+        this.pos++
+        this.newNode({ id: this.genId(), kind: 'comment', text: t.v.trim() })
+        this.skipTerms()
+        continue
+      }
       this.expectKw('on')
       const event = this.parseEventName()
       const onId = this.genId()
       this.newNode({ id: onId, kind: 'on', event })
-      const head = this.parseBlock()
-      this.link(onId, head)
+      const piece = this.parseBlock()
+      this.link(onId, piece.head)
+      // piece.exits 挂空 = 处理器结束
       this.skipTerms()
     }
     return { nodes: this.nodes, edges: this.edges }
   }
 
-  /** 事件名：ident (.|:) ident，如 level.started / app:tick */
+  /** 事件名：ident (.|:) ident 的重复段，如 level.started / app:tick（与 EVENT_RE 多段一致） */
   private parseEventName(): string {
+    let out = ''
     const a = this.peek()
     if (!a || a.t !== 'ident') throw new ScriptError('期望事件名', a?.line ?? 0, a?.col ?? 0)
-    const dot = this.peek(1)
-    const b = this.peek(2)
-    if (!dot || dot.t !== 'op' || (dot.v !== '.' && dot.v !== ':') || !b || b.t !== 'ident') {
+    out += a.v
+    this.pos++
+    for (;;) {
+      const dot = this.peek()
+      const b = this.peek(1)
+      if (dot?.t === 'op' && (dot.v === '.' || dot.v === ':') && b?.t === 'ident') {
+        out += dot.v + b.v
+        this.pos += 2
+        continue
+      }
+      break
+    }
+    if (!out.includes('.') && !out.includes(':')) {
       throw new ScriptError('事件名格式应为 前缀.事件 或 名字:名字', a.line, a.col)
     }
-    this.pos += 3
-    return `${a.v}${dot.v}${b.v}`
+    return out
   }
 
-  /** 解析 { stmt* }，返回块内语句链的头节点（空块返回 null）；尾节点登记到 blockTails 供 loop 回边构造 */
-  private parseBlock(): string | null {
+  /**
+   * 解析 { stmt* }。块内顺序链接：每条语句的 exits 按端口连到下一条语句的头；
+   * branch/loop 的块级出口自动带 'false' 端口（与 connect/lint 的端口协议一致）。
+   */
+  private parseBlock(): StmtPiece {
     this.expectOp('{')
-    const heads: string[] = []
-    let tail: string | null = null
+    let head: string | null = null
+    let pending: Exit[] = []
     for (;;) {
       this.skipTerms()
       const t = this.peek()
@@ -403,18 +501,23 @@ class ScriptParser {
         this.pos++
         break
       }
-      const { head, last } = this.parseStmt()
-      if (tail) this.link(tail, head)
-      else heads.push(head)
-      tail = last
+      const piece: StmtPiece = t.t === 'comment' ? this.commentPiece() : this.parseStmt()
+      if (head === null) head = piece.head
+      else for (const e of pending) this.link(e.node, piece.head, e.port)
+      pending = piece.exits
     }
-    const head = heads[0] ?? null
-    if (head) this.blockTails.set(head, tail!)
-    return head
+    return { head, exits: pending }
   }
 
-  /** 解析一条语句；返回 { head, last }（head===last，单语句单节点） */
-  private parseStmt(): { head: string; last: string } {
+  /** 独立成行的注释 → comment 语句节点（执行直通，往返保留） */
+  private commentPiece(): StmtPiece {
+    const t = this.peek()!
+    this.pos++
+    const id = this.newNode({ id: this.genId(), kind: 'comment', text: t.v.trim() })
+    return { head: id, exits: [{ node: id }] }
+  }
+
+  private parseStmt(): StmtPiece {
     const t = this.peek()!
     const line = t.line
     const col = t.col
@@ -427,7 +530,7 @@ class ScriptParser {
       const ms = this.readBalancedExpr()
       this.endStmt()
       const id = this.newNode({ id: this.genId(), kind: 'wait', ms })
-      return { head: id, last: id }
+      return { head: id, exits: [{ node: id }] }
     }
     if (t.v === 'emit') {
       this.pos++
@@ -442,7 +545,7 @@ class ScriptParser {
       }
       this.endStmt()
       const id = this.newNode({ id: this.genId(), kind: 'emit', event: ev.v, ...(payload ? { payload } : {}) })
-      return { head: id, last: id }
+      return { head: id, exits: [{ node: id }] }
     }
     // 赋值：v . ident = rvalue
     if (t.v === 'v' && this.peek(1)?.t === 'op' && this.peek(1)!.v === '.') {
@@ -454,7 +557,7 @@ class ScriptParser {
       const value = this.parseRValue()
       this.endStmt()
       const id = this.newNode({ id: this.genId(), kind: 'assign', target: name.v, value })
-      return { head: id, last: id }
+      return { head: id, exits: [{ node: id }] }
     }
     // 调用语句：ident . ident ( args? )
     if (
@@ -471,56 +574,55 @@ class ScriptParser {
       this.expectOp(')')
       this.endStmt()
       const id = this.newNode({ id: this.genId(), kind: 'call', target, method, args })
-      return { head: id, last: id }
+      return { head: id, exits: [{ node: id }] }
     }
     throw new ScriptError(`无法识别的语句 "${t.v}"（赋值应以 v. 开头，方法调用应为 实例.方法(…)）`, line, col)
   }
 
-  private parseIf(): { head: string; last: string } {
+  /**
+   * if 语句。出口协议：
+   * - 有 else：两分支体各自的 exits（无端口汇合边）都成为块级出口；空 else 块时
+   *   branch 的 false 出口没有目标节点，以 { branch, 'false' } 上传（连到块级后继）
+   * - 无 else：分支体 exits + branch 自身的 'false' 出口
+   */
+  private parseIf(): StmtPiece {
     this.expectKw('if')
     const cond = this.readBalancedExpr()
     const branchId = this.newNode({ id: this.genId(), kind: 'branch', cond })
-    const trueHead = this.parseBlock()
-    this.link(branchId, trueHead, 'true')
-    // else？
+    const thenPiece = this.parseBlock()
+    this.link(branchId, thenPiece.head, 'true')
     const save = this.pos
     this.skipTerms()
     if (this.isKw('else')) {
       this.pos++
       this.skipTerms()
-      if (this.isKw('if')) {
-        const elseChain = this.parseIf()
-        this.link(branchId, elseChain.head, 'false')
-      } else {
-        const elseHead = this.parseBlock()
-        this.link(branchId, elseHead, 'false')
-      }
-    } else {
-      this.pos = save
+      const elsePiece: StmtPiece = this.isKw('if') ? this.parseIf() : this.parseBlock()
+      this.link(branchId, elsePiece.head, 'false')
+      const elseExits: Exit[] = elsePiece.head ? elsePiece.exits : [{ node: branchId, port: 'false' }]
+      return { head: branchId, exits: [...thenPiece.exits, ...elseExits] }
     }
-    return { head: branchId, last: branchId }
+    this.pos = save
+    return { head: branchId, exits: [...thenPiece.exits, { node: branchId, port: 'false' }] }
   }
 
-  private parseLoop(): { head: string; last: string } {
+  /** while/repeat 语句：体块出口全部连回循环头（无端口回边），循环自身以 'false' 出口进入后继 */
+  private parseLoop(): StmtPiece {
     const kw = this.peek()!.v as 'while' | 'repeat'
     this.pos++
     const exprSrc = this.readBalancedExpr()
     const loopId = this.genId()
     const node: GNode =
-      kw === 'while' ? { id: loopId, kind: 'loop', mode: 'while', cond: exprSrc } : { id: loopId, kind: 'loop', mode: 'repeat', times: exprSrc }
+      kw === 'while'
+        ? { id: loopId, kind: 'loop', mode: 'while', cond: exprSrc }
+        : { id: loopId, kind: 'loop', mode: 'repeat', times: exprSrc }
     this.newNode(node)
-    const bodyHead = this.parseBlock()
-    // 文本 while/repeat 语义：体完自动回条件——显式构造回边
-    this.link(loopId, bodyHead, 'true')
-    if (bodyHead) {
-      const tail = this.blockTails.get(bodyHead)
-      if (tail) this.edges.push({ id: `e${this.edges.length + 1}`, from: tail, to: loopId })
-    }
-    return { head: loopId, last: loopId }
+    const bodyPiece = this.parseBlock()
+    this.link(loopId, bodyPiece.head, 'true')
+    // 文本 while/repeat 语义：体完自动回条件——体块所有出口连回循环头。
+    // 保留出口端口：体尾若是 branch/loop，其出口带端口（该边同时是它们的端口出边）
+    for (const e of bodyPiece.exits) this.link(e.node, loopId, e.port)
+    return { head: loopId, exits: [{ node: loopId, port: 'false' }] }
   }
-
-  /** 各块头节点对应的尾节点（构造 loop 回边用） */
-  private blockTails = new Map<string, string>()
 
   // —— 表达式/参数提取 ——
 
@@ -537,6 +639,10 @@ class ScriptParser {
     for (;;) {
       const t = this.peek()
       if (!t) throw new ScriptError('括号未闭合（已到文件末尾）', this.lastLine, this.lastCol)
+      if (t.t === 'comment') {
+        this.pos++
+        continue
+      }
       if (t.t === 'op' && (t.v === '(' || t.v === '[' || t.v === '{')) depth++
       else if (t.t === 'op' && (t.v === ')' || t.v === ']' || t.v === '}')) {
         out.push(t)
@@ -558,6 +664,10 @@ class ScriptParser {
     for (;;) {
       const t = this.peek()
       if (!t) throw new ScriptError('参数列表未闭合（已到文件末尾）', this.lastLine, this.lastCol)
+      if (t.t === 'comment') {
+        this.pos++
+        continue
+      }
       if (depth === 0 && t.t === 'op' && t.v === ')') {
         if (toks.length) parts.push(tokensToString(toks).trim())
         return parts
@@ -565,6 +675,7 @@ class ScriptParser {
       if (t.t === 'op' && (t.v === '(' || t.v === '[' || t.v === '{')) depth++
       if (t.t === 'op' && (t.v === ')' || t.v === ']' || t.v === '}')) depth--
       if (depth === 0 && t.t === 'op' && t.v === ',') {
+        if (!toks.length) throw new ScriptError('函数调用存在空参数', t.line, t.col)
         parts.push(tokensToString(toks).trim())
         toks.length = 0
         this.pos++
@@ -627,9 +738,17 @@ class ScriptParser {
       return { call: { target: a.v, method: c.v, args } }
     }
     const toks: STok[] = []
+    let depth = 0
     for (;;) {
       const t = this.peek()
-      if (!t || t.t === 'term' || (t.t === 'op' && t.v === '}')) break
+      if (!t || t.t === 'term' || t.t === 'comment') break
+      if (t.t === 'op') {
+        if (t.v === '{' || t.v === '(' || t.v === '[') depth++
+        else if (t.v === '}' || t.v === ')' || t.v === ']') {
+          if (depth === 0) break // 块闭合 = 语句边界（对象字面量内部的 } 已被深度保护）
+          depth--
+        }
+      }
       toks.push(t)
       this.pos++
     }
@@ -643,8 +762,9 @@ class ScriptParser {
     return { expr }
   }
 
-  /** 语句结束：消费分隔符（; 或换行）；块尾 } 前允许无分隔符 */
+  /** 语句结束：消费分隔符（; 或换行）；行尾注释随语句结束被丢弃；块尾 } 前允许无分隔符 */
   private endStmt(): void {
+    while (this.peek()?.t === 'comment') this.pos++
     const t = this.peek()
     if (t && t.t === 'term') {
       this.pos++

@@ -12,7 +12,7 @@
  */
 
 import type { Json } from './expr'
-import { evalExpr } from './expr'
+import { evalExpr, ExprError } from './expr'
 
 export interface GraphProgram {
   logicVersion: 2
@@ -60,7 +60,11 @@ export const LEVEL_METHODS = ['next', 'restart', 'finish'] as const
 export function isGraphProgram(x: unknown): x is GraphProgram {
   if (x === null || typeof x !== 'object') return false
   const p = x as Record<string, unknown>
-  return p.logicVersion === 2 && Array.isArray(p.nodes) && Array.isArray(p.edges)
+  if (p.logicVersion !== 2 || !Array.isArray(p.nodes) || !Array.isArray(p.edges)) return false
+  if (p.variables !== undefined) {
+    if (p.variables === null || typeof p.variables !== 'object' || Array.isArray(p.variables)) return false
+  }
+  return true
 }
 
 export function blankGraphProgram(): GraphProgram {
@@ -167,6 +171,7 @@ export function setGraphVariable(prog: GraphProgram, name: string, value: Json):
 export function renameGraphVariable(prog: GraphProgram, oldName: string, newName: string): GraphProgram {
   if (!ID_RE.test(newName)) throw new Error(`非法变量名: ${newName}`)
   if (oldName === newName) return prog
+  if (oldName !== newName && newName in (prog.variables ?? {})) throw new Error(`变量名已存在: ${newName}`)
   const next = clone(prog)
   const vars: Record<string, Json> = {}
   for (const [k, v] of Object.entries(next.variables ?? {})) vars[k === oldName ? newName : k] = v
@@ -186,37 +191,67 @@ export function removeGraphVariable(prog: GraphProgram, name: string): GraphProg
 }
 
 // ---------------------------------------------------------------------------
-// 装载期 lint（与 LogicEngine.lint 同风格：返回错误消息列表）
+// 装载期 lint
 // ---------------------------------------------------------------------------
 
 const EVENT_RE = /^[A-Za-z_][A-Za-z0-9_]*([.:][A-Za-z_][A-Za-z0-9_]*)+$/
 
-/** 收集节点中出现的全部表达式源文本（语法检查用） */
+export type LintCode =
+  | 'syntax'
+  | 'undeclared-var'
+  | 'dangling-ref'
+  | 'structure'
+  | 'port'
+  | 'duplicate-edge'
+  | 'unknown-kind'
+  | 'emit-cycle'
+
+/** 结构化 lint 结果：nodeId/field 直接定位到节点图与代码视图的出错位置 */
+export interface LintIssue {
+  code: LintCode
+  message: string
+  nodeId?: string
+  edgeId?: string
+  field?: string
+}
+
+export interface GraphLintCtx {
+  /** 组件 id 集合：提供时做悬空实例检查 */
+  componentIds?: Iterable<string>
+  /** 题目 logicPatch.variables 声明的变量豁免 */
+  extraVariableKeys?: Iterable<string>
+}
+
+/** 收集节点中出现的全部表达式源文本（仅在字段为字符串时收集，schema 问题由 structure 检查报告） */
 function exprTexts(node: GNode): [string, string][] {
   const out: [string, string][] = []
-  const rvalue = (label: string, rv: RValue) => {
-    if ('expr' in rv) out.push([label, rv.expr])
-    else rv.call.args.forEach((a, i) => out.push([`${label} call 参数[${i}]`, a]))
+  const push = (field: string, v: unknown): void => {
+    if (typeof v === 'string') out.push([field, v])
+  }
+  const rvalue = (label: string, rv: RValue | undefined) => {
+    if (!rv || typeof rv !== 'object') return
+    if ('expr' in rv) push(`${label}.expr`, rv.expr)
+    else if ('call' in rv) rv.call.args?.forEach((a, i) => push(`${label}.call 参数[${i}]`, a))
   }
   switch (node.kind) {
     case 'assign':
       rvalue('value', node.value)
       break
     case 'call':
-      node.args.forEach((a, i) => out.push([`args[${i}]`, a]))
+      node.args?.forEach((a, i) => push(`args[${i}]`, a))
       break
     case 'branch':
-      out.push(['cond', node.cond])
+      push('cond', node.cond)
       break
     case 'loop':
-      if (node.cond !== undefined) out.push(['cond', node.cond])
-      if (node.times !== undefined) out.push(['times', node.times])
+      push('cond', node.cond)
+      push('times', node.times)
       break
     case 'wait':
-      out.push(['ms', node.ms])
+      push('ms', node.ms)
       break
     case 'emit':
-      for (const [k, v] of Object.entries(node.payload ?? {})) out.push([`payload.${k}`, v])
+      for (const [k, v] of Object.entries(node.payload ?? {})) push(`payload.${k}`, v)
       break
     default:
       break
@@ -224,98 +259,202 @@ function exprTexts(node: GNode): [string, string][] {
   return out
 }
 
+const VAR_REF_RE = /\bv\.([A-Za-z_][A-Za-z0-9_]*)/g
+
 /**
- * GraphProgram 装载期校验。
- * ctx.componentIds 提供组件 id 集合时做悬空实例检查；extraVariableKeys 豁免题目 logicPatch 声明的变量。
+ * GraphProgram 结构化校验（字符串消息版见 lintGraphProgram）。
+ * 覆盖：未知类型/缺失字段、节点 id 重复、边引用与端口协议、重复 (from, port) 出边、
+ * 表达式语法、变量声明（赋值目标 + 表达式 v.* 引用）、实例存在性、level 方法白名单、
+ * on 入边、emit 事件格式与触发环。
  * 方法存在性校验（契约 v2）在 3-1 执行器批次接入。
  */
-export function lintGraphProgram(
-  program: GraphProgram,
-  ctx?: { componentIds?: Iterable<string>; extraVariableKeys?: Iterable<string> },
-): string[] {
-  const errors: string[] = []
+export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintCtx): LintIssue[] {
+  const issues: LintIssue[] = []
   const compIds = ctx?.componentIds ? new Set(ctx.componentIds) : null
   const declaredVars = new Set<string>(ctx?.extraVariableKeys ?? [])
   for (const key of Object.keys(program.variables ?? {})) declaredVars.add(key)
 
-  // 0) 节点 id 唯一性
+  // 0) schema：未知类型与必填字段
+  for (const node of program.nodes as GNode[]) {
+    const where = `节点 ${node.id}(${String((node as { kind?: string }).kind)})`
+    const structural = (field: string, problem: string): LintIssue => ({
+      code: 'structure',
+      nodeId: node.id,
+      field,
+      message: `${where}: ${field} ${problem}`,
+    })
+    switch (node.kind) {
+      case 'on':
+        break
+      case 'assign': {
+        if (typeof node.target !== 'string' || !node.target) issues.push(structural('target', '缺失'))
+        const v = node.value as unknown
+        if (v === null || typeof v !== 'object') issues.push(structural('value', '缺失'))
+        break
+      }
+      case 'call': {
+        if (typeof node.target !== 'string' || !node.target) issues.push(structural('target', '缺失'))
+        if (typeof node.method !== 'string' || !node.method) issues.push(structural('method', '缺失'))
+        if (!Array.isArray(node.args)) issues.push(structural('args', '缺失（应为数组）'))
+        break
+      }
+      case 'emit':
+        break
+      case 'branch':
+        if (typeof node.cond !== 'string' || !node.cond) issues.push(structural('cond', '缺失'))
+        break
+      case 'loop': {
+        if (node.mode !== 'while' && node.mode !== 'repeat') issues.push(structural('mode', '必须是 while 或 repeat'))
+        else if (node.mode === 'while' && typeof node.cond !== 'string') issues.push(structural('cond', '缺失（while 需要 cond）'))
+        else if (node.mode === 'repeat' && typeof node.times !== 'string') issues.push(structural('times', '缺失（repeat 需要 times）'))
+        break
+      }
+      case 'wait':
+        if (typeof node.ms !== 'string' || !node.ms) issues.push(structural('ms', '缺失'))
+        break
+      case 'comment':
+        if (typeof node.text !== 'string') issues.push(structural('text', '缺失'))
+        break
+      default: {
+        const unknown = node as { id: string; kind?: string }
+        issues.push({
+          code: 'unknown-kind',
+          nodeId: unknown.id,
+          message: `节点 ${unknown.id}: 未知类型 "${String(unknown.kind)}"`,
+        })
+      }
+    }
+  }
+
+  // 1) 节点 id 唯一性 + 边引用完整性
   const seen = new Set<string>()
   for (const node of program.nodes) {
-    if (seen.has(node.id)) errors.push(`节点 id 重复: ${node.id}`)
+    if (seen.has(node.id)) issues.push({ code: 'structure', nodeId: node.id, message: `节点 id 重复: ${node.id}` })
     seen.add(node.id)
   }
   const byId = new Map(program.nodes.map((n) => [n.id, n]))
-
-  // 1) 边引用完整性
   for (const e of program.edges) {
-    if (!byId.has(e.from)) errors.push(`边 ${e.id}: 起点节点不存在 "${e.from}"`)
-    if (!byId.has(e.to)) errors.push(`边 ${e.id}: 终点节点不存在 "${e.to}"`)
+    if (!byId.has(e.from)) issues.push({ code: 'dangling-ref', edgeId: e.id, message: `边 ${e.id}: 起点节点不存在 "${e.from}"` })
+    if (!byId.has(e.to)) issues.push({ code: 'dangling-ref', edgeId: e.id, message: `边 ${e.id}: 终点节点不存在 "${e.to}"` })
   }
 
-  // 2) 表达式语法（只收集解析期错误，作用域错误属运行时）
+  // 2) 端口协议：branch/loop 出边必须带 true/false 端口，其余节点不得带；(from, port) 唯一
+  const portSeen = new Set<string>()
+  for (const e of program.edges) {
+    const from = byId.get(e.from)
+    if (!from) continue
+    const needsPort = from.kind === 'branch' || from.kind === 'loop'
+    if (needsPort && e.port !== 'true' && e.port !== 'false') {
+      issues.push({ code: 'port', edgeId: e.id, nodeId: e.from, message: `边 ${e.id}: ${from.kind} 节点的出边缺少 true/false 端口` })
+      continue
+    }
+    if (!needsPort && e.port !== undefined) {
+      issues.push({ code: 'port', edgeId: e.id, nodeId: e.from, message: `边 ${e.id}: ${from.kind} 节点的出边不应带端口` })
+      continue
+    }
+    const key = `${e.from}|${e.port ?? ''}`
+    if (portSeen.has(key)) {
+      issues.push({ code: 'duplicate-edge', edgeId: e.id, nodeId: e.from, message: `边 ${e.id}: 节点 ${e.from} 的同端口出边重复（执行流只能有一条）` })
+    }
+    portSeen.add(key)
+  }
+
+  // 3) 表达式语法：只收集解析期错误；作用域/类型错误（如空作用域下的「未知属性」）属运行时
+  const SYNTAX_RE = /未闭合|无法识别|期望|意外|多余内容|嵌套过深|过长|键应为标识符|禁止属性名/
   for (const node of program.nodes) {
-    for (const [where, src] of exprTexts(node)) {
+    for (const [field, src] of exprTexts(node)) {
       try {
         evalExpr(src, { event: {}, q: null, v: {} })
       } catch (err) {
-        if (err instanceof Error && /未闭合|无法识别|期望|意外|多余内容|嵌套过深|过长|键应为标识符|禁止属性名/.test(err.message)) {
-          errors.push(`节点 ${node.id}(${node.kind}) ${where}: ${err.message}`)
+        if (!(err instanceof ExprError)) {
+          // 求值器之外的异常（实现缺陷或坏数据），如实上报
+          issues.push({ code: 'syntax', nodeId: node.id, field, message: `节点 ${node.id}(${node.kind}) ${field}: ${err instanceof Error ? err.message : String(err)}` })
+        } else if (SYNTAX_RE.test(err.message)) {
+          issues.push({ code: 'syntax', nodeId: node.id, field, message: `节点 ${node.id}(${node.kind}) ${field}: ${err.message}` })
         }
       }
     }
   }
 
-  // 3) 结构与引用检查
-  const checkCompRef = (cid: string, where: string): boolean => {
-    if (cid === 'level') return true
+  // 4) 引用检查：on/emit 事件名、实例存在性、level 方法、变量声明（赋值目标 + 表达式 v.* 引用）
+  const checkCompRef = (cid: string, where: string, nodeId: string, field?: string): void => {
+    if (cid === 'level') return
     if (compIds && !compIds.has(cid)) {
-      errors.push(`${where}: 引用不存在的实例 "${cid}"`)
-      return false
+      issues.push({ code: 'dangling-ref', nodeId, field, message: `${where}: 引用不存在的实例 "${cid}"` })
     }
-    return true
   }
   for (const node of program.nodes) {
     const where = `节点 ${node.id}(${node.kind})`
     switch (node.kind) {
       case 'on':
-        if (!EVENT_RE.test(node.event)) errors.push(`${where}: 非法事件名 "${node.event}"`)
-        if (program.edges.some((e) => e.to === node.id)) errors.push(`${where}: 事件入口节点不能有入边`)
-        break
-      case 'assign':
-        if (!declaredVars.has(node.target)) {
-          errors.push(`${where}: 赋值未声明变量 "${node.target}"（请在 variables 中声明，或由题目 logicPatch.variables 提供）`)
+        if (typeof node.event === 'string' && !EVENT_RE.test(node.event)) {
+          issues.push({ code: 'structure', nodeId: node.id, field: 'event', message: `${where}: 非法事件名 "${node.event}"` })
         }
-        if ('call' in node.value) checkCompRef(node.value.call.target, where)
+        if (program.edges.some((e) => e.to === node.id)) {
+          issues.push({ code: 'structure', nodeId: node.id, message: `${where}: 事件入口节点不能有入边` })
+        }
         break
-      case 'call':
+      case 'assign': {
+        if (typeof node.target === 'string' && node.target && !declaredVars.has(node.target)) {
+          issues.push({
+            code: 'undeclared-var',
+            nodeId: node.id,
+            field: 'target',
+            message: `${where}: 赋值未声明变量 "${node.target}"（请在 variables 中声明，或由题目 logicPatch.variables 提供）`,
+          })
+        }
+        if (node.value && typeof node.value === 'object' && 'call' in node.value) {
+          checkCompRef(node.value.call.target, where, node.id, 'value')
+        }
+        break
+      }
+      case 'call': {
         if (node.target === 'level') {
           if (!(LEVEL_METHODS as readonly string[]).includes(node.method)) {
-            errors.push(`${where}: level 没有 "${node.method}" 方法（可用: ${LEVEL_METHODS.join('/')}）`)
+            issues.push({
+              code: 'dangling-ref',
+              nodeId: node.id,
+              field: 'method',
+              message: `${where}: level 没有 "${node.method}" 方法（可用: ${LEVEL_METHODS.join('/')}）`,
+            })
           }
         } else {
-          checkCompRef(node.target, where)
+          checkCompRef(node.target, where, node.id, 'target')
         }
         break
+      }
       case 'emit':
-        if (!EVENT_RE.test(node.event) || !node.event.includes(':')) {
-          errors.push(`${where}: emit 只能触发内部事件（格式 名字:名字）`)
+        if (typeof node.event === 'string' && (!EVENT_RE.test(node.event) || !node.event.includes(':'))) {
+          issues.push({
+            code: 'structure',
+            nodeId: node.id,
+            field: 'event',
+            message: `${where}: emit 只能触发内部事件（格式 名字:名字）`,
+          })
         }
-        break
-      case 'branch':
-        break
-      case 'loop':
-        if (node.mode === 'while' && node.cond === undefined) errors.push(`${where}: while 缺少 cond`)
-        if (node.mode === 'repeat' && node.times === undefined) errors.push(`${where}: repeat 缺少 times`)
         break
       default:
         break
     }
+    // 表达式中的 v.* 引用扫描（字符串字面量内可能出现假阳性，提示性质）
+    for (const [field, src] of exprTexts(node)) {
+      for (const m of src.matchAll(VAR_REF_RE)) {
+        if (!declaredVars.has(m[1])) {
+          issues.push({
+            code: 'undeclared-var',
+            nodeId: node.id,
+            field,
+            message: `${where} ${field}: 表达式引用未声明变量 "${m[1]}"（请在 variables 中声明）`,
+          })
+        }
+      }
+    }
   }
 
-  // 4) emit 触发环（emit → on(事件) 沿执行边的三色可达性）
+  // 5) emit 触发环（emit → on(事件) 沿执行边的三色可达性）
   const onsByEvent = new Map<string, GNode[]>()
   for (const node of program.nodes) {
-    if (node.kind === 'on') {
+    if (node.kind === 'on' && typeof node.event === 'string') {
       const list = onsByEvent.get(node.event) ?? []
       list.push(node)
       onsByEvent.set(node.event, list)
@@ -331,10 +470,14 @@ export function lintGraphProgram(
   const visit = (id: string, path: string[]): void => {
     state.set(id, 1)
     const node = byId.get(id)
-    if (node?.kind === 'emit') {
+    if (node?.kind === 'emit' && typeof node.event === 'string') {
       for (const entry of onsByEvent.get(node.event) ?? []) {
         if (state.get(entry.id) === 1) {
-          errors.push(`emit 触发环: ${path.concat(node.id).join(' → ')} → ${entry.id}（运行时会被级联预算拦截，应修正逻辑）`)
+          issues.push({
+            code: 'emit-cycle',
+            nodeId: node.id,
+            message: `emit 触发环: ${path.concat(node.id).join(' → ')} → ${entry.id}（运行时会被级联预算拦截，应修正逻辑）`,
+          })
           continue
         }
         if (!state.has(entry.id)) visit(entry.id, path.concat(node.id))
@@ -348,5 +491,10 @@ export function lintGraphProgram(
   }
   for (const node of program.nodes) if (!state.has(node.id)) visit(node.id, [node.id])
 
-  return errors
+  return issues
+}
+
+/** 装载管线/测试用字符串消息列表 */
+export function lintGraphProgram(program: GraphProgram, ctx?: GraphLintCtx): string[] {
+  return lintGraphProgramDetailed(program, ctx).map((i) => i.message)
 }

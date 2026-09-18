@@ -6,6 +6,7 @@ import {
   disconnect,
   isGraphProgram,
   lintGraphProgram,
+  lintGraphProgramDetailed,
   moveNode,
   newNodeId,
   removeGraphVariable,
@@ -141,18 +142,20 @@ describe('graphProgram 变量操作', () => {
     expect(() => renameGraphVariable(prog, 'total', '9x')).toThrow(/非法变量名/)
   })
 
-  it('rename 保留其它键与顺序', () => {
+  it('rename 保留其它键与顺序；撞新名抛错', () => {
     let prog = blankGraphProgram()
     prog = setGraphVariable(prog, 'a', 1)
     prog = setGraphVariable(prog, 'b', 2)
     prog = renameGraphVariable(prog, 'a', 'c')
     expect(prog.variables).toEqual({ score: 0, c: 1, b: 2 })
+    expect(() => renameGraphVariable(prog, 'b', 'c')).toThrow(/已存在/)
   })
 })
 
 describe('lintGraphProgram', () => {
   it('合法程序零错误', () => {
     let prog = simple()
+    prog = setGraphVariable(prog, 'i', 0)
     prog = addNode(prog, on('b1', 'app:tick'))
     prog = addNode(prog, { id: 'b2', kind: 'branch', cond: 'v.score >= 10' })
     prog = connect(prog, 'b1', 'b2')
@@ -168,12 +171,45 @@ describe('lintGraphProgram', () => {
     prog = setGraphVariable(prog, 'score', 0)
     prog = addNode(prog, on('e', 'level.started'))
     prog = addNode(prog, assign('a', 'score', '1 +'))
-    prog = addNode(prog, assign('a2', 'ghost', 'v.score'))
+    prog = addNode(prog, assign('a2', 'ghost', 'v.ghost + 1'))
     prog = addNode(prog, { id: 'w', kind: 'loop', mode: 'while' })
     const errors = lintGraphProgram(prog)
-    expect(errors.some((x) => x.includes('节点 a(assign) value:'))).toBe(true)
-    expect(errors.some((x) => x.includes('未声明变量 "ghost"'))).toBe(true)
-    expect(errors.some((x) => x.includes('while 缺少 cond'))).toBe(true)
+    expect(errors.some((x) => x.includes('节点 a(assign) value.expr:'))).toBe(true)
+    expect(errors.some((x) => x.includes('赋值未声明变量 "ghost"'))).toBe(true)
+    expect(errors.some((x) => x.includes('表达式引用未声明变量 "ghost"'))).toBe(true)
+    expect(errors.some((x) => x.includes('cond 缺失（while 需要 cond）'))).toBe(true)
+  })
+
+  it('结构化 lint：端口协议 / 重复出边 / 未知类型 / 边字段定位', () => {
+    // branch 带无端口出边 + 同端口重复出边
+    const prog: GraphProgram = {
+      logicVersion: 2,
+      variables: {},
+      nodes: [
+        { id: 'e', kind: 'on', event: 'level.started' },
+        { id: 'b', kind: 'branch', cond: 'true' },
+        { id: 'c', kind: 'call', target: 'level', method: 'next', args: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'e', to: 'b' },
+        { id: 'e2', from: 'b', to: 'c' }, // branch 无端口出边 → port 错误
+        { id: 'e3', from: 'b', to: 'c', port: 'true' },
+        { id: 'e4', from: 'b', to: 'c', port: 'true' }, // 重复
+      ],
+    }
+    const issues = lintGraphProgramDetailed(prog)
+    expect(issues.some((x) => x.code === 'port' && x.edgeId === 'e2')).toBe(true)
+    expect(issues.some((x) => x.code === 'duplicate-edge' && x.edgeId === 'e4')).toBe(true)
+    expect(issues.every((x) => x.nodeId !== undefined || x.edgeId !== undefined)).toBe(true)
+
+    // 未知类型节点
+    const bad: GraphProgram = {
+      logicVersion: 2,
+      nodes: [{ id: 'x', kind: 'bogus' } as unknown as GNode],
+      edges: [],
+    }
+    const badIssues = lintGraphProgramDetailed(bad)
+    expect(badIssues.some((x) => x.code === 'unknown-kind' && x.nodeId === 'x')).toBe(true)
   })
 
   it('on 入边 / 非法事件名 / emit 格式 / level 方法白名单 / 悬空实例', () => {

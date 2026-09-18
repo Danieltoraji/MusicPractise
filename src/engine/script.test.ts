@@ -119,21 +119,23 @@ describe('generateScript', () => {
     expect(text).toContain('repeat (3) {')
   })
 
-  it('汇合与循环体掉出抛错', () => {
-    // 菱形汇合：两分支连到同一节点
+  it('结构化汇合：两分支汇到公共后继 = if/else 后顺序语句；循环体掉出抛错', () => {
+    // 菱形汇合（c1/c2 都连 t）= if/else 之后的顺序语句，合法
     const g = linked(
       [
         { id: 'a', kind: 'on', event: 'level.started' },
         { id: 'br', kind: 'branch', cond: 'v.x' },
         { id: 'c1', kind: 'call', target: 'l', method: 'show', args: [] },
-        { id: 'c2', kind: 'call', target: 'l', method: 'show', args: [] },
-        { id: 't', kind: 'call', target: 'l', method: 'hide', args: [] },
+        { id: 'c2', kind: 'call', target: 'l', method: 'hide', args: [] },
+        { id: 't', kind: 'call', target: 'l', method: 'off', args: [] },
       ],
       [['a', 'br'], ['br', 'c1', 'true'], ['br', 'c2', 'false'], ['c1', 't'], ['c2', 't']],
     )
-    expect(() => generateScript(g)).toThrow(/汇入/)
+    expect(generateScript(g)).toBe(
+      ['on level.started {', '  if (v.x) {', '    l.show()', '  } else {', '    l.hide()', '  }', '  l.off()', '}', ''].join('\n'),
+    )
 
-    // 循环体末尾连到循环后继（跳出）
+    // 循环体末尾连到循环后继（跳出）——伪代码无法表达
     const g2 = linked(
       [
         { id: 'a', kind: 'on', event: 'level.started' },
@@ -144,6 +146,19 @@ describe('generateScript', () => {
       [['a', 'w'], ['w', 'b', 'true'], ['b', 'z'], ['w', 'z', 'false']],
     )
     expect(() => generateScript(g2)).toThrow(/提前结束|跳出/)
+
+    // 非结构化汇合：两分支各自跳回分支前已渲染的节点
+    const g3 = linked(
+      [
+        { id: 'a', kind: 'on', event: 'level.started' },
+        { id: 'p', kind: 'call', target: 'l', method: 'show', args: [] },
+        { id: 'br', kind: 'branch', cond: 'v.x' },
+        { id: 'c1', kind: 'call', target: 'l', method: 'hide', args: [] },
+        { id: 'c2', kind: 'call', target: 'l', method: 'off', args: [] },
+      ],
+      [['a', 'p'], ['p', 'br'], ['br', 'c1', 'true'], ['br', 'c2', 'false'], ['c1', 'p'], ['c2', 'p']],
+    )
+    expect(() => generateScript(g3)).toThrow(/汇入|汇合/)
   })
 })
 
@@ -239,4 +254,57 @@ describe('golden：内置关卡迁移 → 脚本文本往返', () => {
       expect(events2).toEqual(events1)
     })
   }
+})
+
+describe('P0 回归：块内 if/loop 的顺序后继（端口协议）', () => {
+  it('if（无 else）后的语句挂在 branch 的 false 出口', () => {
+    const g = parseScript('on app:e {\n  if (v.c) {\n    v.a = 1\n  }\n  v.b = 2\n}')
+    const branch = g.nodes.find((n) => n.kind === 'branch') as Extract<GNode, { kind: 'branch' }>
+    const assignB = g.nodes.find((n) => n.kind === 'assign' && (n as Extract<GNode, { kind: 'assign' }>).target === 'b')!
+    expect(g.edges).toContainEqual(expect.objectContaining({ from: branch.id, to: assignB.id, port: 'false' }))
+    // 文本往返
+    const text = generateScript(g)
+    expect(generateScript(parseScript(text, { variables: g.variables }))).toBe(text)
+    expect(text).toContain('v.b = 2')
+  })
+
+  it('while 后的语句挂在 loop 的 false 出口；嵌套循环往返', () => {
+    const text = ['on app:e {', '  while (v.a) {', '    while (v.b) {', '      v.j = v.j + 1', '    }', '  }', '  v.k = 2', '}'].join('\n')
+    const g = parseScript(text)
+    const loops = g.nodes.filter((n) => n.kind === 'loop')
+    expect(loops).toHaveLength(2)
+    // 外层 loop 的 false 出口连到 v.k 赋值
+    const assignK = g.nodes.find((n) => n.kind === 'assign' && (n as Extract<GNode, { kind: 'assign' }>).target === 'k')!
+    const outer = loops.find((l) => (l as Extract<GNode, { kind: 'loop' }>).cond === 'v.a')!
+    expect(g.edges).toContainEqual(expect.objectContaining({ from: outer.id, to: assignK.id, port: 'false' }))
+    // 往返恒等（嵌套循环 + 循环后语句）
+    expect(generateScript(parseScript(text, { variables: g.variables }))).toBe(generateScript(g))
+  })
+
+  it('对象字面量赋值（含嵌套）解析与往返', () => {
+    const text = 'on app:e {\n  v.o = {a: 1, b: {c: 2}}\n  v.n = len(v.o)\n}'
+    const g = parseScript(text, { variables: { o: {}, n: 0 } })
+    const assign = g.nodes.find((n) => n.kind === 'assign') as Extract<GNode, { kind: 'assign' }>
+    expect(assign.value).toEqual({ expr: '{a: 1, b: {c: 2}}' })
+    expect(generateScript(parseScript(text, { variables: g.variables }))).toBe(generateScript(g))
+  })
+
+  it('行首注释提升为 comment 节点并参与往返', () => {
+    const text = 'on app:e {\n  // 递增计数\n  v.i = v.i + 1\n}'
+    const g = parseScript(text, { variables: { i: 0 } })
+    const comments = g.nodes.filter((n) => n.kind === 'comment')
+    expect(comments).toHaveLength(1)
+    expect((comments[0] as Extract<GNode, { kind: 'comment' }>).text).toBe('递增计数')
+    // comment 节点在链上：往返后注释仍在
+    const text2 = generateScript(g)
+    expect(text2).toContain('// 递增计数')
+    expect(generateScript(parseScript(text2, { variables: g.variables }))).toBe(text2)
+  })
+
+  it('多段事件名（a.b.c）与空参数报错', () => {
+    const g = parseScript('on a.b.c {\n  v.i = 1\n}')
+    const on = g.nodes.find((n) => n.kind === 'on') as Extract<GNode, { kind: 'on' }>
+    expect(on.event).toBe('a.b.c')
+    expect(() => parseScript('on app:e {\n  label1.show(, 1)\n}')).toThrow(/空参数/)
+  })
 })
