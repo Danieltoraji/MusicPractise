@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Json } from './expr'
-import { lintGraphProgram, type GraphProgram } from './graphProgram'
+import { lintGraphProgram, type GNode, type GraphProgram } from './graphProgram'
 import { jsonToExpr, migrateLogicV1toV2 } from './migrate'
 import type { LogicProgram } from './logic'
 

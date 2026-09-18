@@ -112,7 +112,7 @@ export function removeNode(prog: GraphProgram, id: string): GraphProgram {
 }
 
 /** 局部更新节点字段（不含 id；kind 变更时原有关联边保留，由调用方决定是否清理） */
-export function updateNode(prog: GraphProgram, id: string, patch: Partial<GNode> & { id?: never }): GraphProgram {
+export function updateNode<N extends GNode>(prog: GraphProgram, id: string, patch: Partial<Omit<N, 'id'>>): GraphProgram {
   requireNode(prog, id)
   const next = clone(prog)
   const idx = next.nodes.findIndex((n) => n.id === id)
@@ -121,21 +121,20 @@ export function updateNode(prog: GraphProgram, id: string, patch: Partial<GNode>
 }
 
 export function moveNode(prog: GraphProgram, id: string, x: number, y: number): GraphProgram {
-  return updateNode(prog, id, { x, y } as Partial<GNode>)
+  return updateNode(prog, id, { x, y })
 }
 
 /**
  * 连一条执行边。规则：
- * - on/comment 不能作为 to；comment 不能作为 from
+ * - on 不能作为 to（事件入口无入边）
  * - branch/loop 出边必须带 port（'true'|'false'），其余节点出边不能带 port
  * - 同一 (from, port) 只保留一条出边，重复连接替换旧边
- * - 允许自环（空循环体等，运行时由节点预算兜底）
+ * - 允许自环（空循环体等，运行时由节点预算兜底）；comment 执行时直通，可参与连线
  */
 export function connect(prog: GraphProgram, from: string, to: string, port?: 'true' | 'false'): GraphProgram {
   const f = requireNode(prog, from)
   const t = requireNode(prog, to)
   if (t.kind === 'on') throw new Error('事件入口节点（on）不能有入边')
-  if (f.kind === 'comment' || t.kind === 'comment') throw new Error('注释节点不参与连线')
   const needsPort = f.kind === 'branch' || f.kind === 'loop'
   if (needsPort && port !== 'true' && port !== 'false') throw new Error(`${f.kind} 节点的出边必须选择端口 true/false`)
   if (!needsPort && port !== undefined) throw new Error(`${f.kind} 节点的出边不接受端口`)

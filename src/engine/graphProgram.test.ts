@@ -70,12 +70,12 @@ describe('graphProgram 基础', () => {
 
   it('updateNode / moveNode', () => {
     let prog = simple()
-    prog = updateNode(prog, 'a2', { method: 'stop', args: [] })
+    prog = updateNode<Extract<GNode, { kind: 'call' }>>(prog, 'a2', { method: 'stop', args: [] })
     const node = prog.nodes.find((n) => n.id === 'a2')
     expect(node).toMatchObject({ kind: 'call', method: 'stop' })
     prog = moveNode(prog, 'a2', 120, 80)
     expect(prog.nodes.find((n) => n.id === 'a2')).toMatchObject({ x: 120, y: 80 })
-    expect(() => updateNode(prog, 'ghost', { text: '' })).toThrow(/不存在/)
+    expect(() => updateNode<Extract<GNode, { kind: 'comment' }>>(prog, 'ghost', { text: '' })).toThrow(/不存在/)
   })
 })
 
@@ -93,15 +93,16 @@ describe('graphProgram connect 校验', () => {
     expect(() => connect(prog, 'e', 'c1', 'true')).toThrow(/不接受端口/)
   })
 
-  it('on 不能有入边，comment 不参与连线', () => {
+  it('on 不能有入边；comment 作为直通节点可参与连线', () => {
     let prog = blankGraphProgram()
     prog = addNode(prog, on('e1', 'level.started'))
     prog = addNode(prog, on('e2', 'level.finished'))
     prog = addNode(prog, { id: 'cm', kind: 'comment', text: 'note' })
     prog = addNode(prog, call('c', 'label1', 'show'))
     expect(() => connect(prog, 'c', 'e2')).toThrow(/入边/)
-    expect(() => connect(prog, 'cm', 'c')).toThrow(/注释/)
-    expect(() => connect(prog, 'c', 'cm')).toThrow(/注释/)
+    prog = connect(prog, 'e1', 'cm')
+    prog = connect(prog, 'cm', 'c')
+    expect(prog.edges).toHaveLength(2)
   })
 
   it('同一 (from, port) 重复连接替换旧边；非 on 节点允许自环', () => {

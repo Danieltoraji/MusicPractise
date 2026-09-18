@@ -16,10 +16,11 @@ import type { GEdge, GNode, GraphProgram } from './graphProgram'
 const REF_RE = /^\$(q|event|v)(\.[A-Za-z_][A-Za-z0-9_]*)+$/
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-/** 字符串字面量：单引号包裹，按 expr 词法转义 */
-function strLit(s: string): string {
+/** 字符串字面量：单引号包裹，按 expr 词法转义（script.ts 的生成器复用） */
+export function exprStringLiteral(s: string): string {
   return `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}'`
 }
+const strLit = exprStringLiteral
 
 /** ECA 动作参数（Json）→ expr 源文本。$q/$v/$event 引用去前缀，$expr: 去前缀，其余为字面量。 */
 export function jsonToExpr(value: Json): string {
