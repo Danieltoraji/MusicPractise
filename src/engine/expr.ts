@@ -42,7 +42,7 @@ interface Tok {
 
 const OPS3: string[] = []
 const OPS2 = ['==', '!=', '<=', '>=', '&&', '||']
-const OPS1 = ['+', '-', '*', '/', '%', '<', '>', '!', '?', ':', '(', ')', ',', '.', '[', ']']
+const OPS1 = ['+', '-', '*', '/', '%', '<', '>', '!', '?', ':', '(', ')', ',', '.', '[', ']', '{', '}']
 
 function tokenize(src: string): Tok[] {
   const toks: Tok[] = []
@@ -119,6 +119,7 @@ export type Ast =
   | { k: 'lit'; v: Json }
   | { k: 'path'; parts: string[] }
   | { k: 'array'; items: Ast[] }
+  | { k: 'obj'; entries: { key: string; value: Ast }[] }
   | { k: 'index'; obj: Ast; idx: Ast }
   | { k: 'call'; name: string; args: Ast[] }
   | { k: 'un'; op: '!' | '-'; a: Ast }
@@ -254,6 +255,22 @@ class Parser {
         this.expectOp(']')
       }
       return this.postfix({ k: 'array', items })
+    }
+    if (t.t === 'op' && t.v === '{') {
+      // 对象字面量：{ key: expr, ... }；键为标识符（表达式位置，与语句块无歧义）
+      this.pos++
+      const entries: { key: string; value: Ast }[] = []
+      if (!this.eatOp('}')) {
+        do {
+          const key = this.peek()
+          if (!key || key.t !== 'ident') throw new ExprError('对象字面量的键应为标识符')
+          this.pos++
+          this.expectOp(':')
+          entries.push({ key: String(key.v), value: this.ternary() })
+        } while (this.eatOp(','))
+        this.expectOp('}')
+      }
+      return this.postfix({ k: 'obj', entries })
     }
     if (t.t === 'ident') {
       this.pos++
@@ -481,6 +498,14 @@ class Evaluator {
         return node.v
       case 'array':
         return node.items.map((item) => this.evalAst(item))
+      case 'obj': {
+        const out: Record<string, Json> = {}
+        for (const { key, value } of node.entries) {
+          if (FORBIDDEN_PROPS.has(key)) throw new ExprError(`对象字面量禁止属性名 "${key}"`)
+          out[key] = this.evalAst(value)
+        }
+        return out
+      }
       case 'index': {
         const obj = this.evalAst(node.obj)
         const rawIdx = this.evalAst(node.idx)

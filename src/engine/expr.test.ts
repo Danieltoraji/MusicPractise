@@ -134,4 +134,24 @@ describe('表达式求值', () => {
   it('步数预算', () => {
     expect(() => evalExpr('1 + 1 + 1 + 1', base, { stepBudget: 3 })).toThrow(/超预算/)
   })
+
+  it('对象字面量：构造与嵌套', () => {
+    expect(evalExpr('{}', base)).toEqual({})
+    expect(evalExpr('{a: 1, b: "x"}', base)).toEqual({ a: 1, b: 'x' })
+    expect(evalExpr('{notes: [{midi: 60}, {midi: 64}], tempo: 90}', base)).toEqual({
+      notes: [{ midi: 60 }, { midi: 64 }],
+      tempo: 90,
+    })
+    expect(evalExpr('{x: 1 + 2, y: event.k}', { ...base, event: { k: true } })).toEqual({ x: 3, y: true })
+    // 引用作用域：payload 构造 { n: v.i } 这类形态
+    expect(evalExpr('{n: v.i, tag: upper("ab")}', { ...base, v: { i: 7 } })).toEqual({ n: 7, tag: 'AB' })
+  })
+
+  it('对象字面量：语法错误与安全边界', () => {
+    expect(() => evalExpr('{a: 1', base)).toThrow(ExprError) // 未闭合
+    expect(() => evalExpr('{a 1}', base)).toThrow(ExprError) // 缺冒号
+    expect(() => evalExpr('{1: 2}', base)).toThrow(ExprError) // 键必须是标识符
+    expect(() => evalExpr('{__proto__: 1}', base)).toThrow(ExprError) // 禁止危险键
+    expect(() => evalExpr('{a:}', base)).toThrow(ExprError)
+  })
 })
