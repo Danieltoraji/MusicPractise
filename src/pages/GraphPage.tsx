@@ -11,11 +11,19 @@ export function GraphPage({ id }: { id: string }) {
   const record = useLiveQuery(async () => (await db.resources.get(id)) ?? null, [id], 'loading')
 
   if (record === 'loading') return <p className="muted page">从资源库加载…</p>
-  if (record === null || (record as LibraryRecord).kind !== 'level') {
+  if (record === null) {
     return (
       <div className="page">
         <div className="breadcrumb"><a href="#/">← 返回首页</a></div>
         <p className="muted">资源库中没有这个关卡（id: {id}）。</p>
+      </div>
+    )
+  }
+  if ((record as LibraryRecord).kind !== 'level') {
+    return (
+      <div className="page">
+        <div className="breadcrumb"><a href="#/">← 返回首页</a></div>
+        <p className="muted">该资源不是关卡，无法生成逻辑图谱。</p>
       </div>
     )
   }

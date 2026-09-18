@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { unlockAudio } from './runtime/audio'
 import { HomePage } from './pages/HomePage'
 import { LevelPage } from './pages/LevelPage'
 import { LibraryPage } from './pages/LibraryPage'
 import { SeriesPage } from './pages/SeriesPage'
-import { GraphPage } from './pages/GraphPage'
 import { EditorPage } from './editor/EditorPage'
 import { TunerDemo } from './pages/TunerDemo'
 import { RhythmDemo } from './pages/RhythmDemo'
 import { ensureSeeded } from './library/db'
+
+/** 节点图/编辑器涉及 React Flow 等重组件，路由级懒加载控制主包体积 */
+const GraphPage = lazy(() => import('./pages/GraphPage').then((m) => ({ default: m.GraphPage })))
 
 function useHashRoute(): string {
   const [hash, setHash] = useState(() => window.location.hash)
@@ -64,7 +66,11 @@ export default function App() {
   } else if (hash.startsWith('#/series/')) {
     page = <SeriesPage key={hash} id={hash.slice('#/series/'.length)} />
   } else if (hash.startsWith('#/graph/')) {
-    page = <GraphPage key={hash} id={hash.slice('#/graph/'.length)} />
+    page = (
+      <Suspense fallback={<p className="muted">加载中…</p>}>
+        <GraphPage key={hash} id={hash.slice('#/graph/'.length)} />
+      </Suspense>
+    )
   } else if (hash.startsWith('#/edit/')) {
     page = <EditorPage key={hash} id={hash.slice('#/edit/'.length)} />
   } else if (hash === '#/library') {
