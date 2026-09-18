@@ -316,6 +316,7 @@ function num(x: Json, fn: string): number {
 }
 
 import { Note } from 'tonal'
+import { rhythmMatch } from './rhythm'
 
 const FUNCS: Record<string, FuncDef> = {
   abs: { minArgs: 1, maxArgs: 1, fn: ([a]) => Math.abs(num(a, 'abs')) },
@@ -437,6 +438,15 @@ const FUNCS: Record<string, FuncDef> = {
       if (Array.isArray(x)) return x.slice(s, e)
       if (typeof x === 'string') return x.slice(s, e)
       throw new ExprError('slice 需要数组或字符串')
+    },
+  },
+  rhythmScore: {
+    minArgs: 3,
+    maxArgs: 3,
+    fn: ([taps, grid, tol]) => {
+      if (!Array.isArray(taps) || !taps.every((t) => typeof t === 'number')) throw new ExprError('rhythmScore 第一个参数需要数字数组')
+      if (!Array.isArray(grid) || !grid.every((g) => typeof g === 'number')) throw new ExprError('rhythmScore 第二个参数需要数字数组')
+      return rhythmMatch(taps as number[], grid as number[], num(tol, 'rhythmScore')).score
     },
   },
 }

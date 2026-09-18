@@ -74,6 +74,14 @@ export interface FingeringState {
   highlights: Record<string, string>
   clearToken: number
 }
+export interface RhythmState {
+  running: boolean
+  beats: number
+  bpm: number
+}
+export interface TunerState {
+  running: boolean
+}
 
 const str = (v: Json | undefined, dflt: string): string => (typeof v === 'string' ? v : dflt)
 const bool = (v: Json | undefined, dflt: boolean): boolean => (typeof v === 'boolean' ? v : dflt)
@@ -301,6 +309,50 @@ export const FINGERING_DEF: ComponentDef<FingeringState> = {
       if (typeof args.midi !== 'number') return { state: s }
       return { state: s, effects: [{ type: 'audio.play', notes: [{ midi: args.midi, dur: '8n' }], mode: 'chord' }] }
     }
+    return { state: s }
+  },
+}
+
+export const RHYTHM_DEF: ComponentDef<RhythmState> = {
+  contract: {
+    type: 'rhythm',
+    displayName: '节奏训练',
+    category: 'music',
+    events: {
+      tap: '{ t: number }（相对起拍的秒数，预备拍期间为负）',
+      roundDone: '{ duration: number }（一轮结束）',
+    },
+    commands: { start: '{ bpm: number, beats?: number, countInBeats?: number }', stop: '无参数' },
+    state: { running: 'boolean', beats: 'number', bpm: 'number' },
+    propsDoc: 'props: { countInBeats?: number }（预备拍数量，缺省 4）',
+  },
+  initialState: () => ({ running: false, beats: 8, bpm: 80 }),
+  applyBinding: (s) => s,
+  applyCommand: (s, cmd, args) => {
+    if (cmd === 'start') {
+      const bpm = typeof args.bpm === 'number' ? Math.min(300, Math.max(20, args.bpm)) : 80
+      const beats = typeof args.beats === 'number' ? Math.min(64, Math.max(1, Math.round(args.beats))) : 8
+      return { state: { ...s, running: true, beats, bpm } }
+    }
+    if (cmd === 'stop') return { state: { ...s, running: false } }
+    return { state: s }
+  },
+}
+
+export const TUNER_DEF: ComponentDef<TunerState> = {
+  contract: {
+    type: 'tuner',
+    displayName: '校音器',
+    category: 'music',
+    events: { pitch: '{ freq: number, midi: number, cents: number, clarity: number }（约 10Hz 节流）' },
+    commands: { start: '无参数（请求麦克风）', stop: '无参数' },
+    state: { running: 'boolean' },
+  },
+  initialState: () => ({ running: false }),
+  applyBinding: (s) => s,
+  applyCommand: (s, cmd) => {
+    if (cmd === 'start') return { state: { ...s, running: true } }
+    if (cmd === 'stop') return { state: { ...s, running: false } }
     return { state: s }
   },
 }

@@ -7,7 +7,7 @@ import { Accidental, Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'v
 import { Note } from 'tonal'
 import type { ComponentInstance } from '../engine/level'
 import type { Json } from '../engine/expr'
-import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, SliderState, StaffState } from '../runtime/componentDef'
+import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, RhythmState, SliderState, StaffState, TunerState } from '../runtime/componentDef'
 import type { ComponentStore } from '../runtime/store'
 import type { MusicDoc } from '../engine/level'
 
@@ -200,6 +200,10 @@ export function ComponentView(props: ViewProps): React.ReactNode {
       return <InputView {...props} />
     case 'fingering':
       return <FingeringView {...props} />
+    case 'rhythm':
+      return <RhythmView {...props} />
+    case 'tuner':
+      return <TunerView {...props} />
     default:
       // 未知组件类型：降级为占位框而不是崩溃（docs §7 承诺）
       return (
@@ -321,6 +325,173 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
             />
           )
         })}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 节奏训练：节拍网格 + 节拍器 + tap 采集（时钟全部取自 AudioContext）
+// ---------------------------------------------------------------------------
+
+import { getCtx, playClick } from '../runtime/audio'
+
+const RHYTHM_COUNT_IN_DEFAULT = 4
+
+export function RhythmView({ spec, store, emit }: ViewProps) {
+  const { running, beats, bpm } = useComponentState<RhythmState>(store, spec.id)
+  const [activeBeat, setActiveBeat] = useState(-1)
+  const [tapped, setTapped] = useState(false)
+  const timersRef = useRef<{ raf: number; end: number } | null>(null)
+  const runningRef = useRef(false)
+
+  useEffect(() => {
+    if (!running) {
+      runningRef.current = false
+      if (timersRef.current) {
+        cancelAnimationFrame(timersRef.current.raf)
+        clearTimeout(timersRef.current.end)
+        timersRef.current = null
+      }
+      setActiveBeat(-1)
+      return
+    }
+    const ctx = getCtx()
+    const spb = 60 / Math.max(1, bpm)
+    const countIn = Number(((spec.props ?? {}) as Record<string, Json>).countInBeats ?? RHYTHM_COUNT_IN_DEFAULT)
+    const t0 = ctx.currentTime + countIn * spb + 0.2
+    const grid = Array.from({ length: beats }, (_, i) => t0 + i * spb)
+    // 预备拍 + 全部节拍一次性精排（AudioContext 时钟，不依赖定时器精度）
+    for (let i = 0; i < countIn; i++) playClick(ctx.currentTime + 0.2 + i * spb, false)
+    grid.forEach((g, i) => playClick(g, i % 4 === 0))
+    runningRef.current = true
+
+    const tick = (): void => {
+      if (!runningRef.current) return
+      const now = ctx.currentTime
+      const beat = Math.floor((now - t0) / spb)
+      setActiveBeat(beat >= 0 && beat < beats ? beat : -1)
+      if (now > t0 + beats * spb + 0.5) {
+        emit('roundDone', { duration: beats * spb })
+        runningRef.current = false
+        setActiveBeat(-1)
+        return
+      }
+      timersRef.current = { raf: requestAnimationFrame(tick), end: 0 }
+    }
+    timersRef.current = { raf: requestAnimationFrame(tick), end: 0 }
+
+    return () => {
+      runningRef.current = false
+      if (timersRef.current) cancelAnimationFrame(timersRef.current.raf)
+      timersRef.current = null
+    }
+  }, [running, beats, bpm, spec.props, emit])
+
+  function tap(): void {
+    if (!runningRef.current) return
+    const t = getCtx().currentTime
+    setTapped(true)
+    setTimeout(() => setTapped(false), 120)
+    emit('tap', { t })
+  }
+
+  return (
+    <div style={boxStyle(spec)} className="comp-rhythm">
+      <div className="beat-row">
+        {Array.from({ length: beats }, (_, i) => (
+          <span key={i} className={`beat-dot ${i === activeBeat ? 'active' : ''}`} />
+        ))}
+      </div>
+      <div className={`tap-pad ${running ? 'live' : ''} ${tapped ? 'hit' : ''}`} onPointerDown={tap}>
+        {running ? 'TAP' : '未开始'}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 校音器：麦克风音高流 + 表盘
+// ---------------------------------------------------------------------------
+
+import { PitchDetector } from 'pitchy'
+
+const TUNER_CLARITY_GATE = 0.9
+
+export function TunerView({ spec, store, emit }: ViewProps) {
+  const { running } = useComponentState<TunerState>(store, spec.id)
+  const [display, setDisplay] = useState<{ name: string; freq: number; cents: number; clarity: number } | null>(null)
+  const [micError, setMicError] = useState('')
+
+  useEffect(() => {
+    if (!running) return
+    let alive = true
+    let stream: MediaStream | null = null
+    let source: MediaStreamAudioSourceNode | null = null
+    let analyser: AnalyserNode | null = null
+    let timer: number | null = null
+    ;(async () => {
+      try {
+        setMicError('')
+        const ctx = getCtx()
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        })
+        if (!alive) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        source = ctx.createMediaStreamSource(stream)
+        analyser = ctx.createAnalyser()
+        analyser.fftSize = 2048
+        source.connect(analyser)
+        const buf = new Float32Array(analyser.fftSize)
+        const detector = PitchDetector.forFloat32Array(analyser.fftSize)
+        timer = window.setInterval(() => {
+          if (!analyser) return
+          analyser.getFloatTimeDomainData(buf)
+          const [freq, clarity] = detector.findPitch(buf, ctx.sampleRate)
+          if (freq > 40 && clarity > TUNER_CLARITY_GATE) {
+            const midi = Math.round(69 + 12 * Math.log2(freq / 440))
+            const target = 440 * Math.pow(2, (midi - 69) / 12)
+            const cents = Math.round(1200 * Math.log2(freq / target))
+            const name = Note.fromMidi(midi) ?? String(midi)
+            setDisplay({ freq, clarity, cents, name })
+            emit('pitch', { freq, midi, cents, clarity })
+          }
+        }, 100)
+      } catch (e) {
+        setMicError(e instanceof Error ? e.message : String(e))
+        stream?.getTracks().forEach((t) => t.stop())
+      }
+    })()
+    return () => {
+      alive = false
+      if (timer !== null) window.clearInterval(timer)
+      source?.disconnect()
+      stream?.getTracks().forEach((t) => t.stop())
+    }
+  }, [running])
+
+  const cents = display?.cents ?? 0
+  const inTune = display !== null && Math.abs(cents) <= 5
+
+  return (
+    <div style={boxStyle(spec)} className="comp-tuner">
+      {micError ? (
+        <p className="tone-error">麦克风不可用：{micError}</p>
+      ) : (
+        <>
+          <div className={`tuner-note ${inTune ? 'ok-text' : ''}`}>{display ? display.name : '—'}</div>
+          <div className="tuner-freq">{display ? `${display.freq.toFixed(1)} Hz · ${cents > 0 ? '+' : ''}${cents}¢` : '等待检测…'}</div>
+          <div className="cents-bar">
+            <div className="cents-tick" />
+            <div className={`cents-needle ${inTune ? 'ok' : ''}`} style={{ left: `${50 + Math.max(-50, Math.min(50, cents))}%` }} />
+          </div>
+          <div className="muted" style={{ marginTop: 8 }}>
+            {running ? '♪ 对麦克风演奏…' : '已停止'}
+          </div>
+        </>
+      )}
     </div>
   )
 }

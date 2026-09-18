@@ -101,6 +101,13 @@ describe('表达式求值', () => {
     expect(evalExpr('slice("hello", 1)', base)).toBe('ello')
   })
 
+  it('rhythmScore：节奏判定接入表达式', () => {
+    expect(evalExpr('rhythmScore([0.01, 0.49, 1.01, 1.49], [0, 0.5, 1, 1.5], 120)', base)).toBe(1)
+    expect(evalExpr('rhythmScore([0.4], [0, 0.5, 1, 1.5], 120)', base)).toBeCloseTo(0.25, 10)
+    expect(evalExpr('rhythmScore([], [0, 0.5], 120)', base)).toBe(0)
+    expect(() => evalExpr('rhythmScore([1], "x", 120)', base)).toThrow(ExprError)
+  })
+
   it('安全边界：拒绝作用域外标识符', () => {
     expect(() => evalExpr('foo + 1', base)).toThrow(ExprError)
     expect(() => evalExpr('globalThis', base)).toThrow(ExprError)

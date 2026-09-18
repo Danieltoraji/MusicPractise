@@ -1,0 +1,301 @@
+{
+  "schemaVersion": 1,
+  "kind": "level",
+  "id": "res_01J9F0F0F0F0F0F0F0F0F0F0F0",
+  "version": "1.0.0",
+  "meta": {
+    "title": "节奏跟拍",
+    "description": "跟随节拍器在圆盘上打拍子，节奏判定全在规则里（rhythmScore 表达式函数）。",
+    "author": {
+      "name": "POC 内置示例"
+    },
+    "tags": [
+      "节奏",
+      "跟拍"
+    ],
+    "locale": "zh-CN",
+    "license": "CC0-1.0",
+    "difficulty": 2
+  },
+  "refs": [],
+  "content": {
+    "components": [
+      {
+        "id": "scoreLabel",
+        "type": "label",
+        "name": "得分",
+        "visible": true,
+        "layout": {
+          "x": 40,
+          "y": 20,
+          "w": 300,
+          "h": 40
+        },
+        "props": {
+          "text": "得分: 0"
+        }
+      },
+      {
+        "id": "rhythm1",
+        "type": "rhythm",
+        "name": "节奏训练",
+        "visible": true,
+        "layout": {
+          "x": 40,
+          "y": 90,
+          "w": 720,
+          "h": 280
+        },
+        "props": {
+          "countInBeats": 4
+        }
+      },
+      {
+        "id": "feedback",
+        "type": "label",
+        "name": "反馈",
+        "visible": true,
+        "layout": {
+          "x": 40,
+          "y": 390,
+          "w": 720,
+          "h": 48
+        },
+        "props": {
+          "text": ""
+        }
+      },
+      {
+        "id": "nextBtn",
+        "type": "button",
+        "name": "下一题",
+        "visible": true,
+        "layout": {
+          "x": 620,
+          "y": 460,
+          "w": 140,
+          "h": 48
+        },
+        "props": {
+          "text": "下一题 →",
+          "enabled": false
+        }
+      }
+    ],
+    "logic": {
+      "variables": {
+        "score": 0,
+        "taps": [],
+        "done": false
+      },
+      "rules": [
+        {
+          "id": "load",
+          "on": "level.questionLoaded",
+          "do": [
+            {
+              "cmd": "rhythm1.start",
+              "args": {
+                "bpm": 80,
+                "beats": 8,
+                "countInBeats": 4
+              }
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": false
+              }
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "预备拍后，跟着节拍在圆盘上打拍子",
+                "tone": "info"
+              }
+            }
+          ]
+        },
+        {
+          "id": "collect",
+          "on": "rhythm1.tap",
+          "do": [
+            {
+              "set": "taps",
+              "expr": "append(v.taps, event.t)"
+            }
+          ]
+        },
+        {
+          "id": "judge",
+          "on": "rhythm1.roundDone",
+          "do": [
+            {
+              "set": "taps",
+              "expr": "[]"
+            },
+            {
+              "emit": "rhythm:judge",
+              "payload": {
+                "score": "$expr:rhythmScore(v.taps, q.data.grid, 120)"
+              }
+            }
+          ]
+        },
+        {
+          "id": "judged",
+          "on": "rhythm:judge",
+          "when": [
+            "event.score >= 0.6"
+          ],
+          "do": [
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "$expr:'不错！节奏契合度 ' + round(event.score * 100) + '%'",
+                "tone": "success"
+              }
+            },
+            {
+              "set": "score",
+              "expr": "v.score + round(event.score * q.scoring.max)"
+            },
+            {
+              "cmd": "scoreLabel.show",
+              "args": {
+                "text": "$expr:'得分: ' + v.score",
+                "tone": "success"
+              }
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": true
+              }
+            }
+          ],
+          "else": [
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "节奏还不够稳，再来一轮",
+                "tone": "error"
+              }
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": true
+              }
+            },
+            {
+              "cmd": "rhythm1.start",
+              "args": {
+                "bpm": 80,
+                "beats": 8,
+                "countInBeats": 4
+              }
+            }
+          ]
+        },
+        {
+          "id": "next-or-restart",
+          "on": "nextBtn.clicked",
+          "when": [
+            "!v.done"
+          ],
+          "do": [
+            {
+              "cmd": "level.next"
+            }
+          ],
+          "else": [
+            {
+              "cmd": "level.restart"
+            }
+          ]
+        },
+        {
+          "id": "on-finish",
+          "on": "level.finished",
+          "do": [
+            {
+              "set": "done",
+              "expr": "true"
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "$expr:'节奏测试完成！得分 ' + v.score + ' 🎉'",
+                "tone": "info"
+              }
+            },
+            {
+              "cmd": "nextBtn.setText",
+              "args": {
+                "text": "重新开始"
+              }
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "questions": [
+      {
+        "id": "q1",
+        "prompt": {
+          "text": "80 BPM · 8 拍，跟着打"
+        },
+        "data": {
+          "grid": [
+            0,
+            0.75,
+            1.5,
+            2.25,
+            3,
+            3.75,
+            4.5,
+            5.25
+          ]
+        },
+        "scoring": {
+          "max": 10
+        }
+      },
+      {
+        "id": "q2",
+        "prompt": {
+          "text": "提高到 104 BPM"
+        },
+        "data": {
+          "grid": [
+            0,
+            0.577,
+            1.154,
+            1.731,
+            2.308,
+            2.885,
+            3.462,
+            4.038
+          ]
+        },
+        "scoring": {
+          "max": 10
+        }
+      }
+    ],
+    "flow": {
+      "order": "sequential",
+      "count": null,
+      "pass": {
+        "expr": "v.score >= 15"
+      }
+    }
+  }
+}
