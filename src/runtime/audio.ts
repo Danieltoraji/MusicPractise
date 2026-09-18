@@ -79,10 +79,8 @@ export function playNotes(notes: Note[], tempo = 90, mode: 'chord' | 'seq' = 'ch
     .catch((err) => console.error('[audio] 钢琴音色加载失败', err))
 }
 
-/** 节拍器短音（节奏组件用）：简单振荡器，无需采样。已排程节点登记入册，便于统一停止 */
-const activeClicks = new Set<{ osc: OscillatorNode }>()
-
-export function playClick(time: number, accent = false): void {
+/** 节拍器短音（节奏组件用）：简单振荡器，无需采样。返回停用函数（换轮/清理时静停单轮已排程音） */
+export function playClick(time: number, accent = false): () => void {
   const c = getCtx()
   const osc = c.createOscillator()
   const gain = c.createGain()
@@ -92,19 +90,11 @@ export function playClick(time: number, accent = false): void {
   osc.connect(gain).connect(c.destination)
   osc.start(time)
   osc.stop(time + 0.1)
-  const entry = { osc }
-  activeClicks.add(entry)
-  osc.onended = () => activeClicks.delete(entry)
-}
-
-/** 立即静停所有已排程的节拍音（换题/重开/卸载时防残响） */
-export function stopAllClicks(): void {
-  for (const c of activeClicks) {
+  return () => {
     try {
-      c.osc.stop()
+      osc.stop()
     } catch {
       /* 已停止的节点忽略 */
     }
   }
-  activeClicks.clear()
 }

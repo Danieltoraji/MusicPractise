@@ -333,7 +333,7 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
 // 节奏训练：节拍网格 + 节拍器 + tap 采集（时钟全部取自 AudioContext）
 // ---------------------------------------------------------------------------
 
-import { getCtx, playClick, stopAllClicks } from '../runtime/audio'
+import { getCtx, playClick } from '../runtime/audio'
 
 export function RhythmView({ spec, store, emit }: ViewProps) {
   const { running, beats, bpm, countIn, runId } = useComponentState<RhythmState>(store, spec.id)
@@ -360,9 +360,11 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
     const t0 = ctx.currentTime + countIn * spb + 0.2
     t0Ref.current = t0
     const grid = Array.from({ length: beats }, (_, i) => t0 + i * spb)
-    // 预备拍 + 全部节拍一次性精排（AudioContext 时钟，不依赖定时器精度）
-    for (let i = 0; i < countIn; i++) playClick(ctx.currentTime + 0.2 + i * spb, false)
-    grid.forEach((g, i) => playClick(g, i % 4 === 0))
+    // 预备拍 + 全部节拍一次性精排（AudioContext 时钟，不依赖定时器精度）；
+    // 每个已排程 click 记录停用函数，cleanup 时静停（防换轮残响，且不误杀新一轮）
+    const clickStops: Array<() => void> = []
+    for (let i = 0; i < countIn; i++) clickStops.push(playClick(ctx.currentTime + 0.2 + i * spb, false))
+    grid.forEach((g, i) => clickStops.push(playClick(g, i % 4 === 0)))
     runningRef.current = true
 
     const tick = (): void => {
@@ -384,7 +386,7 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
       runningRef.current = false
       if (timersRef.current) cancelAnimationFrame(timersRef.current.raf)
       timersRef.current = null
-      stopAllClicks()
+      clickStops.forEach((stop) => stop())
     }
   }, [running, beats, bpm, countIn, runId, spec.props, emit])
 

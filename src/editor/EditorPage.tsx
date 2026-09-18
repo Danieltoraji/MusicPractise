@@ -164,12 +164,13 @@ export function EditorPage({ id }: Props) {
       {tab === 'rules' && (
         <RulesEditor
           doc={doc}
-          onChange={setDoc}
+          onChange={update}
+          declaredVariables={Object.keys(doc.content.logic.variables ?? {})}
         />
       )}
 
       {tab === 'questions' && (
-        <QuestionsEditor doc={doc} onChange={setDoc} />
+        <QuestionsEditor doc={doc} onChange={update} />
       )}
 
       {tab === 'json' && (
@@ -405,8 +406,18 @@ function actionKind(a: RawAction): 'cmd' | 'set' | 'emit' {
   return 'emit'
 }
 
-export function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
+export function RulesEditor({
+  doc,
+  onChange,
+  declaredVariables = [],
+}: {
+  doc: LevelDoc
+  onChange: (doc: LevelDoc) => void
+  /** 已声明变量名（用于改名撞名守卫） */
+  declaredVariables?: string[]
+}) {
   const rules = doc.content.logic.rules
+  const declaredSet = new Set(declaredVariables)
   const patchRule = (index: number, patch: Partial<Rule>): void => {
     const next = structuredClone(doc)
     Object.assign(next.content.logic.rules[index], patch)
@@ -435,9 +446,11 @@ export function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
     onChange(setVariable(doc, name, parseScalarInput(text)))
   }
   const renameVar = (oldName: string, nextName: string): void => {
-    if (nextName === oldName) return
-    if (nextName.trim() === '') return
-    onChange(renameVariable(doc, oldName, nextName.trim()))
+    const next = nextName.trim()
+    if (next === oldName || next === '') return
+    // 撞名守卫：目标变量已存在时拒绝改名，避免静默吞掉已有初值
+    if (variableNames.includes(next) || declaredSet.has(next)) return
+    onChange(renameVariable(doc, oldName, next))
   }
 
   return (

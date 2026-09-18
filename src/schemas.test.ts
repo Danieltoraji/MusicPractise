@@ -9,6 +9,9 @@ import theoryChoiceDoc from './sample/theory-choice.level.json'
 import melodyDictationDoc from './sample/melody-dictation.level.json'
 import timedReactionDoc from './sample/timed-reaction.level.json'
 import noteSpellingDoc from './sample/note-spelling.level.json'
+import clefTestDoc from './sample/clef-test.level.json'
+import rhythmFollowDoc from './sample/rhythm-follow.level.json'
+import tuneIntroDoc from './sample/tune-intro.level.json'
 import starterSeries from './sample/starter.series.json'
 import starterTopic1 from './sample/starter-topic1.topic.json'
 import starterTopic2 from './sample/starter-topic2.topic.json'
@@ -48,6 +51,9 @@ describe('关卡文档 JSON Schema', () => {
     ['melody-dictation', melodyDictationDoc],
     ['timed-reaction', timedReactionDoc],
     ['note-spelling', noteSpellingDoc],
+    ['clef-test', clefTestDoc],
+    ['rhythm-follow', rhythmFollowDoc],
+    ['tune-intro', tuneIntroDoc],
   ])('示例关卡 %s 通过校验（含数组变量初值）', (_name, doc) => {
     const ok = validate!(doc)
     expect(validate!.errors ?? []).toEqual([])
