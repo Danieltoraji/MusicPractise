@@ -343,6 +343,7 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
   const [tapped, setTapped] = useState(false)
   const timersRef = useRef<{ raf: number; end: number } | null>(null)
   const runningRef = useRef(false)
+  const t0Ref = useRef(0)
 
   useEffect(() => {
     if (!running) {
@@ -359,6 +360,7 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
     const spb = 60 / Math.max(1, bpm)
     const countIn = Number(((spec.props ?? {}) as Record<string, Json>).countInBeats ?? RHYTHM_COUNT_IN_DEFAULT)
     const t0 = ctx.currentTime + countIn * spb + 0.2
+    t0Ref.current = t0
     const grid = Array.from({ length: beats }, (_, i) => t0 + i * spb)
     // 预备拍 + 全部节拍一次性精排（AudioContext 时钟，不依赖定时器精度）
     for (let i = 0; i < countIn; i++) playClick(ctx.currentTime + 0.2 + i * spb, false)
@@ -389,7 +391,8 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
 
   function tap(): void {
     if (!runningRef.current) return
-    const t = getCtx().currentTime
+    // 相对起拍的秒数（预备拍期间为负），与题面 grid 同一基准
+    const t = getCtx().currentTime - t0Ref.current
     setTapped(true)
     setTimeout(() => setTapped(false), 120)
     emit('tap', { t })

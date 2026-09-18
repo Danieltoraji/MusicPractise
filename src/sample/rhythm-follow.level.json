@@ -131,14 +131,14 @@
           "on": "rhythm1.roundDone",
           "do": [
             {
-              "set": "taps",
-              "expr": "[]"
-            },
-            {
               "emit": "rhythm:judge",
               "payload": {
                 "score": "$expr:rhythmScore(v.taps, q.data.grid, 120)"
               }
+            },
+            {
+              "set": "taps",
+              "expr": "[]"
             }
           ]
         },
