@@ -90,6 +90,44 @@ export function setMeta(doc: LevelDoc, patch: Partial<LevelDoc['meta']>): LevelD
   return next
 }
 
+// ---------------------------------------------------------------------------
+// 变量管理（RulesEditor 变量表用）
+// ---------------------------------------------------------------------------
+
+/** 值解析启发式：true/false → 布尔、可解析数字 → number、其余字符串 */
+export function parseScalarInput(text: string): number | boolean | string {
+  const t = text.trim()
+  if (t === 'true') return true
+  if (t === 'false') return false
+  if (t !== '' && !Number.isNaN(Number(t))) return Number(t)
+  return text
+}
+
+export function setVariable(doc: LevelDoc, name: string, value: number | boolean | string): LevelDoc {
+  const next = structuredClone(doc)
+  next.content.logic.variables = { ...(next.content.logic.variables ?? {}), [name]: value }
+  return next
+}
+
+export function renameVariable(doc: LevelDoc, oldName: string, newName: string): LevelDoc {
+  const next = structuredClone(doc)
+  const vars = { ...(next.content.logic.variables ?? {}) }
+  if (oldName in vars) {
+    vars[newName] = vars[oldName]
+    delete vars[oldName]
+  }
+  next.content.logic.variables = vars
+  return next
+}
+
+export function removeVariable(doc: LevelDoc, name: string): LevelDoc {
+  const next = structuredClone(doc)
+  const vars = { ...(next.content.logic.variables ?? {}) }
+  delete vars[name]
+  next.content.logic.variables = vars
+  return next
+}
+
 /** 解析 JSON 文本；失败返回 null（调用方显示错误） */
 export function parseJsonText(text: string): Json | null {
   try {

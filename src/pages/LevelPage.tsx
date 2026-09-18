@@ -7,7 +7,8 @@ import { loadLevelDoc } from '../library/validate'
 import { LevelRunner } from '../runtime/LevelRunner'
 
 
-export function LevelPage({ id }: { id: string }) {  const record = useLiveQuery(
+export function LevelPage({ id }: { id: string }) {
+  const record = useLiveQuery(
     async () => (await db.resources.get(id)) ?? null,
     [id],
     'loading',

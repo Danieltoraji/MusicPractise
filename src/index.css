@@ -862,6 +862,41 @@ a.level-row:hover {
   margin: 0 auto;
 }
 
+.vars-editor {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vars-editor > b {
+  font-size: 13px;
+  color: var(--muted);
+}
+.var-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.var-row input {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+.var-row input:first-child {
+  font-weight: 600;
+}
+.expr-err {
+  display: block;
+  color: var(--bad);
+  font-size: 12px;
+}
+
 /* ---------- 节奏 ---------- */
 
 .rhythm-controls {

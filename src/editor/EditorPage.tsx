@@ -12,17 +12,33 @@ import { allContracts, getDef } from '../runtime/store'
 import type { ComponentInstance, LevelDoc, Question } from '../engine/level'
 import type { Rule } from '../engine/logic'
 import type { Json } from '../engine/expr'
+import { exprFunctionNames, parseExpr, ExprError } from '../engine/expr'
 import {
   addComponent,
   blankLevelDoc,
   parseJsonText,
   removeComponent,
+  removeVariable,
+  renameVariable,
   setMeta,
+  setVariable,
+  parseScalarInput,
   updateComponent,
   updateQuestion,
 } from './docState'
 
 type Tab = 'canvas' | 'rules' | 'questions' | 'json'
+
+/** 表达式实时校验：语法错误返回消息，合法返回 null */
+export function checkExprText(text: string): string | null {
+  if (text.trim() === '') return null
+  try {
+    parseExpr(text)
+    return null
+  } catch (e) {
+    return e instanceof ExprError ? e.message : String(e)
+  }
+}
 
 interface Props {
   id: string
@@ -46,22 +62,34 @@ export function EditorPage({ id }: Props) {
   }, [record, doc])
   const selectedComp = doc?.content.components.find((c) => c.id === selected) ?? null
 
-  const save = useCallback((): boolean => {
+  /** 编辑器内所有文档修改走这里：修改即清「已保存」提示 */
+  const update = useCallback((next: LevelDoc) => {
+    setSavedTip('')
+    setDoc(next)
+  }, [])
+
+  const save = useCallback(async (): Promise<boolean> => {
     if (!doc) return false
     const result = loadLevelDoc(doc)
     if (!result.ok) {
       setSaveErrors(result.errors)
       return false
     }
+    // 内置示例不可被编辑器覆盖保存（会让 builtIn 记录被翻成用户文档）
+    const existing = await db.resources.get(doc.id)
+    if (existing?.builtIn === 1) {
+      setSaveErrors(['内置示例不可直接覆盖保存——请在资源库对该关卡使用「编辑副本」获得可保存的副本'])
+      return false
+    }
     setSaveErrors([])
     setLintWarnings(result.lintWarnings)
-    void putResource(result.doc as never)
+    await putResource(result.doc as never)
     setSavedTip(`已保存（v${result.doc.version}）`)
     return true
   }, [doc])
 
-  function tryRun(): void {
-    if (save() && doc) window.location.hash = `#/level/${doc.id}`
+  async function tryRun(): Promise<void> {
+    if ((await save()) && doc) window.location.hash = `#/level/${doc.id}`
   }
 
   if (record === 'loading' || record === undefined || !doc) {
@@ -75,7 +103,7 @@ export function EditorPage({ id }: Props) {
         <input
           className="editor-title"
           value={String(doc.meta.title ?? '')}
-          onChange={(e) => setDoc(setMeta(doc, { title: e.target.value }))}
+          onChange={(e) => update(setMeta(doc, { title: e.target.value }))}
         />
         <button type="button" className="primary" onClick={() => save()}>
           💾 保存
@@ -119,16 +147,15 @@ export function EditorPage({ id }: Props) {
           doc={doc}
           selected={selected}
           onSelect={setSelected}
-          onChange={setDoc}
+          onChange={update}
         />
       )}
       {tab === 'canvas' && selectedComp && (
         <Inspector
           comp={selectedComp}
-          allIds={doc.content.components.map((c) => c.id)}
-          onChange={(patch) => setDoc(updateComponent(doc, selectedComp.id, patch))}
+          onChange={(patch) => update(updateComponent(doc, selectedComp.id, patch))}
           onRemove={() => {
-            setDoc(removeComponent(doc, selectedComp.id))
+            update(removeComponent(doc, selectedComp.id))
             setSelected(null)
           }}
         />
@@ -146,7 +173,7 @@ export function EditorPage({ id }: Props) {
       )}
 
       {tab === 'json' && (
-        <JsonTab doc={doc} onApply={setDoc} />
+        <JsonTab doc={doc} onApply={update} />
       )}
     </div>
   )
@@ -183,8 +210,11 @@ function EditorCanvas({
     if (!drag || drag.id !== comp.id) return
     const rect = drag.rect
     const snap = (v: number) => Math.round(v / 10) * 10
-    const x = Math.max(0, snap(e.clientX - rect.left - drag.grabX))
-    const y = Math.max(0, snap(e.clientY - rect.top - drag.grabY))
+    const boxW = comp.layout?.w ?? 120
+    const boxH = comp.layout?.h ?? 40
+    // 双向 clamp：画布内自由拖动，不出界
+    const x = Math.min(rect.width - boxW, Math.max(0, snap(e.clientX - rect.left - drag.grabX)))
+    const y = Math.min(rect.height - boxH, Math.max(0, snap(e.clientY - rect.top - drag.grabY)))
     onChange(updateComponent(doc, comp.id, { layout: { ...(comp.layout ?? { w: 120, h: 40 }), x, y } }))
   }
 
@@ -262,12 +292,10 @@ function InspectorHint() {
 
 function Inspector({
   comp,
-  allIds,
   onChange,
   onRemove,
 }: {
   comp: ComponentInstance
-  allIds: string[]
   onChange: (patch: Partial<ComponentInstance>) => void
   onRemove: () => void
 }) {
@@ -351,7 +379,7 @@ function Inspector({
       <button type="button" className="danger" onClick={onRemove}>
         删除组件
       </button>
-      <p className="muted">id：{comp.id}{allIds.length > 0 ? '' : ''}</p>
+      <p className="muted">id：{comp.id}</p>
     </div>
   )
 }
@@ -371,12 +399,13 @@ function safeContract(type: string) {
 type RawAction = Record<string, unknown>
 
 function actionKind(a: RawAction): 'cmd' | 'set' | 'emit' {
-  if ('emit' in a) return 'emit'
+  // 与引擎运行时判定顺序对齐（cmd > set > emit）
+  if ('cmd' in a) return 'cmd'
   if ('set' in a) return 'set'
-  return 'cmd'
+  return 'emit'
 }
 
-function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
+export function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
   const rules = doc.content.logic.rules
   const patchRule = (index: number, patch: Partial<Rule>): void => {
     const next = structuredClone(doc)
@@ -393,9 +422,61 @@ function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDo
       if (!cmd.startsWith('__')) commandOptions.push(`${c.id}.${cmd}`)
     }
   }
+  const variableNames = Object.keys(doc.content.logic.variables ?? {})
+  const exprSuggestions = [
+    ...variableNames.map((v) => `v.${v}`),
+    'q.data',
+    'event.',
+    ...exprFunctionNames,
+  ]
+
+  const variables = doc.content.logic.variables ?? {}
+  const patchVarValue = (name: string, text: string): void => {
+    onChange(setVariable(doc, name, parseScalarInput(text)))
+  }
+  const renameVar = (oldName: string, nextName: string): void => {
+    if (nextName === oldName) return
+    if (nextName.trim() === '') return
+    onChange(renameVariable(doc, oldName, nextName.trim()))
+  }
 
   return (
     <div className="rules-editor">
+      <div className="vars-editor">
+        <b>变量（logic.variables）</b>
+        {variableNames.map((name) => (
+          <div key={name} className="var-row">
+            <input
+              value={name}
+              aria-label="变量名"
+              onChange={(e) => renameVar(name, e.target.value)}
+            />
+            <input
+              value={String(variables[name])}
+              aria-label="初始值"
+              onChange={(e) => patchVarValue(name, e.target.value)}
+            />
+            <button
+              type="button"
+              className="link danger"
+              onClick={() => onChange(removeVariable(doc, name))}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => {
+            let n = variableNames.length + 1
+            while (variableNames.includes(`var${n}`)) n++
+            onChange(setVariable(doc, `var${n}`, 0))
+          }}
+        >
+          + 添加变量
+        </button>
+      </div>
+
       <div className="rules-toolbar">
         <button
           type="button"
@@ -418,6 +499,11 @@ function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDo
       </datalist>
       <datalist id="command-options">
         {commandOptions.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+      <datalist id="expr-options">
+        {exprSuggestions.map((o) => (
           <option key={o} value={o} />
         ))}
       </datalist>
@@ -444,7 +530,11 @@ function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDo
           </label>
           <label>
             条件（每行一个表达式，全部满足才走 do；失焦时提交，留空 = 恒真）
-            <LinesField value={rule.when ?? []} onCommit={(lines) => patchRule(ri, { when: lines })} />
+            <LinesField
+              value={rule.when ?? []}
+              onCommit={(lines) => patchRule(ri, { when: lines })}
+              validateLine={checkExprText}
+            />
           </label>
           <ActionList
             label="则执行（do）"
@@ -466,16 +556,32 @@ function RulesEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDo
   )
 }
 
-/** 多行条件输入：本地编辑、失焦提交（避免受控值过滤空行导致无法换行） */
-function LinesField({ value, onCommit }: { value: string[]; onCommit: (lines: string[]) => void }) {
+/** 多行条件输入：本地编辑、失焦提交（避免受控值过滤空行导致无法换行）。
+ *  validateLine 可选：逐行实时校验，首个错误显示在输入下方。 */
+function LinesField({
+  value,
+  onCommit,
+  validateLine,
+}: {
+  value: string[]
+  onCommit: (lines: string[]) => void
+  validateLine?: (line: string) => string | null
+}) {
   const [text, setText] = useState(value.join('\n'))
+  const lines = text.split('\n')
+  const firstError = validateLine
+    ? lines.map((l, i) => ({ l, i })).map(({ l, i }) => ({ i, err: l.trim() === '' ? null : validateLine(l) })).find((x) => x.err !== null)
+    : null
   return (
-    <textarea
-      rows={2}
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => onCommit(text.split('\n').map((s) => s.trim()).filter((s) => s !== ''))}
-    />
+    <>
+      <textarea
+        rows={2}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => onCommit(text.split('\n').map((s) => s.trim()).filter((s) => s !== ''))}
+      />
+      {firstError && <span className="tone-error">第 {firstError.i + 1} 行：{firstError.err}</span>}
+    </>
   )
 }
 
@@ -540,8 +646,13 @@ function ActionList({
                 <input
                   value={String(a.expr ?? '')}
                   placeholder="表达式，如 v.score + 10"
+                  list="expr-options"
                   onChange={(e) => patch(i, { set: a.set, expr: e.target.value })}
                 />
+                {(() => {
+                  const err = checkExprText(String(a.expr ?? ''))
+                  return err ? <span className="tone-error expr-err">{err}</span> : null
+                })()}
               </>
             )}
             {kind === 'emit' && (
@@ -669,6 +780,13 @@ function QuestionsEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: Lev
 function JsonTab({ doc, onApply }: { doc: LevelDoc; onApply: (doc: LevelDoc) => void }) {
   const [text, setText] = useState(() => JSON.stringify(doc, null, 2))
   const [err, setErr] = useState('')
+
+  // doc 外部变化（保存/试运行返回等）时同步文本；应用 JSON 引起的 setDoc
+  // 会带上新 doc 再触发本 effect，文本被格式化刷新属预期
+  useEffect(() => {
+    setText(JSON.stringify(doc, null, 2))
+  }, [doc])
+
   return (
     <div className="json-tab">
       <button
@@ -680,6 +798,8 @@ function JsonTab({ doc, onApply }: { doc: LevelDoc; onApply: (doc: LevelDoc) => 
               setErr('kind 必须是 level')
               return
             }
+            // 保留当前关卡 id：应用 JSON 改 id 会让保存落为新记录、URL 与库脱节
+            parsed.id = doc.id
             onApply(parsed as LevelDoc)
             setErr('')
           } catch (e) {
