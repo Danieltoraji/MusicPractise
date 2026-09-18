@@ -59,11 +59,11 @@ export default function App() {
       <p className="muted">资源库初始化中…</p>
     )
   } else if (hash.startsWith('#/level/')) {
-    page = <LevelPage id={hash.slice('#/level/'.length)} />
+    page = <LevelPage key={hash} id={hash.slice('#/level/'.length)} />
   } else if (hash.startsWith('#/series/')) {
-    page = <SeriesPage id={hash.slice('#/series/'.length)} />
+    page = <SeriesPage key={hash} id={hash.slice('#/series/'.length)} />
   } else if (hash.startsWith('#/edit/')) {
-    page = <EditorPage id={hash.slice('#/edit/'.length)} />
+    page = <EditorPage key={hash} id={hash.slice('#/edit/'.length)} />
   } else if (hash === '#/library') {
     page = <LibraryPage />
   } else if (hash === '#/tuner') {
