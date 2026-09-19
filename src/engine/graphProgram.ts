@@ -507,22 +507,25 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
             })
             break
           }
-          // goto 的视图 id：字符串字面量 → 校验存在性；非字面量 → 只提示写法
+          // goto 的视图 id：支持字符串字面量与 {id: '...'} 对象字面量两种写法；字面量可校验存在性
           const raw = node.args?.[0]
-          const literal = typeof raw === 'string' ? /^["'](.+)["']$/.exec(raw.trim()) : null
-          if (!literal) {
+          const text = typeof raw === 'string' ? raw.trim() : ''
+          const bare = /^["']([^"']+)["']$/.exec(text)
+          const obj = /^\{\s*id\s*:\s*["']([^"']+)["']\s*\}$/.exec(text)
+          const id = bare?.[1] ?? obj?.[1] ?? null
+          if (id === null) {
             issues.push({
               code: 'structure',
               nodeId: node.id,
               field: 'args',
               message: `${where}: views.goto 需要视图 id（字符串字面量，如 "main"）`,
             })
-          } else if (viewIdSet && !viewIdSet.has(literal[1])) {
+          } else if (viewIdSet && !viewIdSet.has(id)) {
             issues.push({
               code: 'dangling-ref',
               nodeId: node.id,
               field: 'args',
-              message: `${where}: views.goto 指向不存在的视图 "${literal[1]}"`,
+              message: `${where}: views.goto 指向不存在的视图 "${id}"`,
             })
           }
           break

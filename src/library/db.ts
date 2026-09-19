@@ -3,6 +3,8 @@
  * 内置示例关卡首次启动时 seed（builtIn 标记，UI 禁删），此后应用只从库读内容。
  */
 import Dexie, { type EntityTable } from 'dexie'
+import tutorialHelloDoc from '../sample/tutorial-hello.level.json'
+import synthLabDoc from '../sample/synth-lab.level.json'
 import noteClickDoc from '../sample/note-click.level.json'
 import theoryChoiceDoc from '../sample/theory-choice.level.json'
 import melodyDictationDoc from '../sample/melody-dictation.level.json'
@@ -50,7 +52,10 @@ db.version(2).stores({
   progress: 'levelId',
 })
 
+// 教程与功能示例放在最前：新用户在资源库最先看到它们
 const LEVEL_DOCS = [
+  tutorialHelloDoc,
+  synthLabDoc,
   noteClickDoc,
   theoryChoiceDoc,
   melodyDictationDoc,
@@ -85,7 +90,7 @@ function toRecord(doc: {
 }
 
 /**
- * 内置示例入库（5 关卡 + 入门系列 1 系列 2 专题）。
+ * 内置示例入库（教程/示例关卡 + 5 经典关卡 + 入门系列 1 系列 2 专题）。
  * 只补"缺失或仍为内置"的记录：用户导入的同 id 文档（builtIn=0，可能异版本）
  * 不会被应用内置版本静默覆盖。
  */

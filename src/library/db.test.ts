@@ -12,23 +12,23 @@ beforeEach(async () => {
 describe('资源库（Dexie，简化单态）', () => {
   it('ensureSeeded 把内置内容入库：5 关卡 + 入门系列 1 系列 2 专题', async () => {
     const levels = await listResources('level')
-    expect(levels).toHaveLength(8)
+    expect(levels).toHaveLength(10)
     expect(levels.every((r) => r.builtIn === 1)).toBe(true)
     expect(levels.map((r) => r.title)).toContain('听音点击 · 入门')
     expect(await listResources('series')).toHaveLength(1)
     expect(await listResources('topic')).toHaveLength(2)
-    expect(await db.resources.count()).toBe(11)
+    expect(await db.resources.count()).toBe(13)
   })
 
   it('ensureSeeded 幂等：重复调用不产生重复记录', async () => {
     await ensureSeeded()
     await ensureSeeded()
-    expect(await db.resources.count()).toBe(11)
+    expect(await db.resources.count()).toBe(13)
   })
 
   it('listResources 按 kind 过滤', async () => {
     expect(await listResources('series')).toHaveLength(1)
-    expect(await listResources('level')).toHaveLength(8)
+    expect(await listResources('level')).toHaveLength(10)
   })
 
   it('putResource 新增与按信封取字段', async () => {
@@ -57,7 +57,7 @@ describe('资源库（Dexie，简化单态）', () => {
       content: (await getResource('res_01J9A0A0A0A0A0A0A0A0A0A0A1'))!.doc,
     }
     await putResource(doc)
-    expect(await db.resources.count()).toBe(11)
+    expect(await db.resources.count()).toBe(13)
   })
 
   it('deleteResource 拒绝删除内置文档，普通文档可删', async () => {
