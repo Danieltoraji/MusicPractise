@@ -345,15 +345,66 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
     if (!byId.has(e.to)) issues.push({ code: 'dangling-ref', edgeId: e.id, message: `边 ${e.id}: 终点节点不存在 "${e.to}"` })
   }
 
-  // 1.5) 孤儿节点：非 on 且无任何入边 = 执行流不可达（拖放遗留/断链）
-  for (const node of program.nodes) {
-    if (node.kind === 'on') continue
-    if (node.kind === 'comment' && !program.edges.some((e) => e.to === node.id || e.from === node.id)) continue
-    if (!program.edges.some((e) => e.to === node.id)) {
+  // 1.5) 孤儿/孤岛：从事件入口沿执行边不可达的节点（评审 P2 防刷屏改版）。
+  // 链只报链头（无入边者）；入边全来自不可达节点的（互相成环/悬挂环）按弱连通分量合并为一条。
+  const outEdges = new Map<string, GEdge[]>()
+  for (const e of program.edges) {
+    const list = outEdges.get(e.from) ?? []
+    list.push(e)
+    outEdges.set(e.from, list)
+  }
+  const reachable = new Set<string>()
+  {
+    const stack = program.nodes.filter((n) => n.kind === 'on').map((n) => n.id)
+    while (stack.length > 0) {
+      const id = stack.pop()!
+      if (reachable.has(id)) continue
+      reachable.add(id)
+      for (const e of outEdges.get(id) ?? []) if (!reachable.has(e.to)) stack.push(e.to)
+    }
+  }
+  const unreachableNodes = program.nodes.filter(
+    (n) =>
+      n.kind !== 'on' &&
+      !reachable.has(n.id) &&
+      !(n.kind === 'comment' && !program.edges.some((e) => e.to === n.id || e.from === n.id)),
+  )
+  // 按弱连通分量归组：每组有链头（无入边）→ 只报链头；纯环/悬挂环（互连、无入口）→ 合并一条孤岛
+  const memberIds = new Set(unreachableNodes.map((n) => n.id))
+  const parent = new Map<string, string>(unreachableNodes.map((n) => [n.id, n.id] as [string, string]))
+  const find = (x: string): string => {
+    let r = parent.get(x) ?? x
+    while (r !== (parent.get(r) ?? r)) r = parent.get(r) ?? r
+    return r
+  }
+  for (const e of program.edges) {
+    if (!memberIds.has(e.from) || !memberIds.has(e.to)) continue
+    const ra = find(e.from)
+    const rb = find(e.to)
+    if (ra !== rb) parent.set(ra, rb)
+  }
+  const groups = new Map<string, GNode[]>()
+  for (const node of unreachableNodes) {
+    const root = find(node.id)
+    const list = groups.get(root) ?? []
+    list.push(node)
+    groups.set(root, list)
+  }
+  for (const members of groups.values()) {
+    const heads = members.filter((n) => !program.edges.some((e) => e.to === n.id))
+    if (heads.length > 0) {
+      for (const node of heads) {
+        issues.push({
+          code: 'structure',
+          nodeId: node.id,
+          message: `节点 ${node.id}(${node.kind}) 没有任何入边——执行流到不了这里（从事件节点连一条线过来）`,
+        })
+      }
+    } else {
       issues.push({
         code: 'structure',
-        nodeId: node.id,
-        message: `节点 ${node.id}(${node.kind}) 没有任何入边——执行流到不了这里（从事件节点连一条线过来）`,
+        nodeId: members[0].id,
+        message: `节点 ${members.map((n) => n.id).join('、')} 构成无入口的执行流孤岛（互相连接但没有事件流进来——检查与事件节点的连线）`,
       })
     }
   }
@@ -479,12 +530,6 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
       list.push(node)
       onsByEvent.set(node.event, list)
     }
-  }
-  const outEdges = new Map<string, GEdge[]>()
-  for (const e of program.edges) {
-    const list = outEdges.get(e.from) ?? []
-    list.push(e)
-    outEdges.set(e.from, list)
   }
   const state = new Map<string, 1 | 2>()
   const visit = (id: string, path: string[]): void => {

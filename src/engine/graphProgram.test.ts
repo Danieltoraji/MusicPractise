@@ -177,6 +177,41 @@ describe('lintGraphProgram', () => {
     expect(errors.some((x) => x.includes('没有任何入边') && x.includes('lonely'))).toBe(true)
   })
 
+  it('孤儿链只报链头：A→B→C 均不可达时只报 A（防刷屏）', () => {
+    let prog = simple()
+    prog = addNode(prog, call('A', 'label1', 'show'))
+    prog = addNode(prog, call('B', 'label1', 'show'))
+    prog = addNode(prog, call('C', 'label1', 'show'))
+    prog = connect(prog, 'A', 'B')
+    prog = connect(prog, 'B', 'C')
+    const orphanErrors = lintGraphProgram(prog).filter((x) => x.includes('没有任何入边') || x.includes('孤岛'))
+    expect(orphanErrors).toHaveLength(1)
+    expect(orphanErrors[0]).toContain('A')
+    expect(orphanErrors[0]).not.toContain('B')
+  })
+
+  it('互连成环的孤岛合并为一条，自环单节点同样合并', () => {
+    let prog = simple()
+    prog = addNode(prog, call('X', 'label1', 'show'))
+    prog = addNode(prog, call('Y', 'label1', 'show'))
+    prog = connect(prog, 'X', 'Y')
+    prog = connect(prog, 'Y', 'X') // X↔Y：都有入边但不可达 → 一个孤岛
+    prog = addNode(prog, { id: 'S', kind: 'branch', cond: 'true' })
+    prog = connect(prog, 'S', 'S', 'true') // 自环 → 另一个孤岛
+    const islandErrors = lintGraphProgram(prog).filter((x) => x.includes('孤岛'))
+    expect(islandErrors).toHaveLength(2)
+    expect(islandErrors[0]).toContain('X')
+    expect(islandErrors[0]).toContain('Y')
+    expect(islandErrors[1]).toContain('S')
+  })
+
+  it('从 on 可达的链不报孤儿', () => {
+    let prog = simple()
+    prog = addNode(prog, { id: 'w', kind: 'wait', ms: '100' })
+    prog = connect(prog, 'a2', 'w')
+    expect(lintGraphProgram(prog, { componentIds: ['sound1'] })).toEqual([])
+  })
+
   it('表达式语法错误 / 未声明变量 / while 缺 cond', () => {
     let prog = blankGraphProgram()
     prog = setGraphVariable(prog, 'score', 0)
