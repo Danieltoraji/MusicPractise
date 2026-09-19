@@ -61,13 +61,16 @@ export function EditorPage({ id }: Props) {
   const [lintWarnings, setLintWarnings] = useState<string[]>([])
   const [savedTip, setSavedTip] = useState('')
 
-  // 装载：new = 空白模板；否则取库内文档
+  // 装载：new = 空白模板；否则取库内文档。
+  // loadedIdRef 语义：同一关卡不重复装载（保护未保存编辑）；换 id（#/edit/A → #/edit/B）强制重装
+  const loadedIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (record === 'loading' || record === undefined || record === null) return
-    if (doc) return
+    if (loadedIdRef.current === id) return
+    loadedIdRef.current = id
     if (record === 'new') setDoc(blankLevelDoc())
     else setDoc(structuredClone((record as LibraryRecord).doc) as LevelDoc)
-  }, [record, doc])
+  }, [record, id])
   const selectedComp = doc?.content.components.find((c) => c.id === selected) ?? null
 
   /** 编辑器内所有文档修改走这里：修改即清「已保存」提示 */

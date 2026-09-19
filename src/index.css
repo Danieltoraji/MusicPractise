@@ -1034,11 +1034,28 @@ a.level-row:hover {
   align-items: stretch;
   min-height: 620px;
 }
+.graph-left {
+  width: 200px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.graph-left .glib {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+.glib-item-tpl {
+  color: var(--accent);
+  font-weight: 600;
+}
 
 /* 左栏节点库 */
 .glib {
-  width: 200px;
-  flex: none;
+  flex: 1;
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
@@ -1306,4 +1323,195 @@ path.gedge-false {
 }
 .ginsp-meta {
   font-size: 11.5px;
+}
+
+/* ---------- 节点图：变量/日志/问题列表/脚本覆盖层（3-2b） ---------- */
+
+.gvars {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.gvar-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.gvar-row input {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ink);
+}
+.gvar-name {
+  flex: 1.2;
+  font-weight: 600;
+}
+.gvar-value {
+  flex: 1;
+  font-family: Consolas, monospace;
+}
+.gvar-add {
+  display: flex;
+  gap: 6px;
+}
+.gvar-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.graph-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+  background: #fffbeb;
+  padding: 8px;
+}
+.graph-issue {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  text-align: left;
+  font-size: 12.5px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink);
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.graph-issue:hover {
+  background: #fef3c7;
+}
+.graph-issue-code {
+  flex: none;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.graph-script-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: rgb(15 23 42 / 0.92);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 8px;
+}
+.graph-script-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #e2e8f0;
+  font-size: 13px;
+}
+.graph-script-head button {
+  margin-left: auto;
+}
+
+.script-view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 14px 16px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.graph-log {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.graph-log-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.graph-log-head button {
+  margin-left: 0;
+}
+.graph-log-empty {
+  font-size: 12.5px;
+}
+.graph-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.graph-log-entry {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  text-align: left;
+  font-size: 12px;
+  border: 1px solid transparent;
+  background: none;
+  cursor: default;
+  color: var(--ink);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: Consolas, monospace;
+}
+.graph-log-entry.has-node {
+  cursor: pointer;
+}
+.graph-log-entry.has-node:hover {
+  background: #eef2ff;
+  border-color: var(--accent);
+}
+.graph-log-kind {
+  flex: none;
+  font-weight: 700;
+  width: 34px;
+}
+.graph-log-kind.error {
+  color: var(--bad);
+}
+.graph-log-kind.command {
+  color: var(--muted);
+}
+.graph-log-msg {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.graph-log-node {
+  flex: none;
+  color: var(--accent);
+  font-size: 11px;
 }

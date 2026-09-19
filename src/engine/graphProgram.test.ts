@@ -154,16 +154,27 @@ describe('graphProgram 变量操作', () => {
 
 describe('lintGraphProgram', () => {
   it('合法程序零错误', () => {
-    let prog = simple()
+    let prog = simple() // a1(on level.started) -> a2(call sound1.play)
     prog = setGraphVariable(prog, 'i', 0)
-    prog = addNode(prog, on('b1', 'app:tick'))
-    prog = addNode(prog, { id: 'b2', kind: 'branch', cond: 'v.score >= 10' })
-    prog = connect(prog, 'b1', 'b2')
     prog = addNode(prog, { id: 'w', kind: 'loop', mode: 'while', cond: 'v.i < 3' })
     prog = addNode(prog, assign('w2', 'score', 'v.score + 1'))
     prog = addNode(prog, { id: 'wt', kind: 'wait', ms: '500' })
     prog = addNode(prog, { id: 'em', kind: 'emit', event: 'app:burst', payload: { n: 'v.score' } })
+    prog = addNode(prog, { id: 'cm', kind: 'comment', text: '链上注释' })
+    prog = connect(prog, 'a2', 'cm')
+    prog = connect(prog, 'cm', 'w')
+    prog = connect(prog, 'w', 'w2', 'true')
+    prog = connect(prog, 'w2', 'w') // 循环体回边
+    prog = connect(prog, 'w', 'wt', 'false')
+    prog = connect(prog, 'wt', 'em')
     expect(lintGraphProgram(prog, { componentIds: ['sound1'] })).toEqual([])
+  })
+
+  it('孤儿节点：非 on 且无入边报 structure（拖放引导）', () => {
+    let prog = simple()
+    prog = addNode(prog, call('lonely', 'label1', 'show'))
+    const errors = lintGraphProgram(prog)
+    expect(errors.some((x) => x.includes('没有任何入边') && x.includes('lonely'))).toBe(true)
   })
 
   it('表达式语法错误 / 未声明变量 / while 缺 cond', () => {

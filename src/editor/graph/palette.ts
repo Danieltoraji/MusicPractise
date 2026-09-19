@@ -28,7 +28,80 @@ export interface PaletteGroup {
   items: PaletteItem[]
 }
 
+/** 模板内部连线的端点引用（make 产物 nodes 的数组下标） */
+export interface TemplateLink {
+  from: number
+  to: number
+  port?: 'true' | 'false'
+}
+
+/** 一键模板：一次落一组预连节点（结构示范，节点自带相对坐标） */
+export interface PaletteTemplate {
+  key: string
+  label: string
+  desc: string
+  make(pos?: { x: number; y: number }): { nodes: NodeShape[]; links: TemplateLink[] }
+}
+
 const at = (pos?: { x: number; y: number }): { x?: number; y?: number } => (pos ? { x: pos.x, y: pos.y } : {})
+
+const rel = (pos: { x: number; y: number } | undefined, dx: number, dy: number): { x: number; y: number } => ({
+  x: (pos?.x ?? 0) + dx,
+  y: (pos?.y ?? 0) + dy,
+})
+
+/** 模板候选：按文档可用组件过滤（如防卡死守卫需要 timer 组件） */
+export function buildTemplates(doc: LevelDoc): PaletteTemplate[] {
+  const hasTimer = doc.content.components.some((c) => c.type === 'timer')
+  const timerId = doc.content.components.find((c) => c.type === 'timer')?.id ?? 'timer1'
+  const templates: PaletteTemplate[] = [
+    {
+      key: 'tpl-score-gate',
+      label: '计分初始化与门槛结算',
+      desc: '关卡开始时清零 score；每题装载后若 score ≥ 10 主动结算（可改门槛与条件）',
+      make(pos) {
+        const p = pos ?? { x: 0, y: 0 }
+        return {
+          nodes: [
+            { kind: 'on', event: 'level.started', ...rel(p, 0, 0) },
+            { kind: 'assign', target: 'score', value: { expr: '0' }, ...rel(p, 280, 0) },
+            { kind: 'on', event: 'level.questionLoaded', ...rel(p, 0, 170) },
+            { kind: 'branch', cond: 'v.score >= 10', ...rel(p, 280, 170) },
+            { kind: 'call', target: 'level', method: 'finish', args: [], ...rel(p, 560, 170) },
+          ],
+          links: [
+            { from: 0, to: 1 },
+            { from: 2, to: 3 },
+            { from: 3, to: 4, port: 'true' },
+          ],
+        }
+      },
+    },
+  ]
+  if (hasTimer) {
+    templates.push({
+      key: 'tpl-timeout-guard',
+      label: '防卡死守卫',
+      desc: `关卡开始后 ${timerId} 计时 30 秒，tick 触发即强制结算——防止玩家卡在无提示的题目里`,
+      make(pos) {
+        const p = pos ?? { x: 0, y: 0 }
+        return {
+          nodes: [
+            { kind: 'on', event: 'level.started', ...rel(p, 0, 0) },
+            { kind: 'call', target: timerId, method: 'start', args: ['{ms: 30000}'], ...rel(p, 280, 0) },
+            { kind: 'on', event: `${timerId}.tick`, ...rel(p, 0, 170) },
+            { kind: 'call', target: 'level', method: 'finish', args: [], ...rel(p, 280, 170) },
+          ],
+          links: [
+            { from: 0, to: 1 },
+            { from: 2, to: 3 },
+          ],
+        }
+      },
+    })
+  }
+  return templates
+}
 
 /** 从关卡文档构造节点库（顺序：事件 → 实例动作 → level → 变量 → 控制流） */
 export function buildPalette(doc: LevelDoc): PaletteGroup[] {

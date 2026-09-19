@@ -11,6 +11,11 @@ import { migrateLogicV1toV2 } from '../engine/migrate'
 import { ComponentStore } from './store'
 import type { Effect } from './componentDef'
 
+/** 运行日志事件（节点图「运行日志」面板的数据源；nodeId 可定位到图上节点） */
+export type LogicRunEvent =
+  | { kind: 'error'; message: string; nodeId?: string; event?: string; t: number }
+  | { kind: 'command'; path: string; event?: string; t: number }
+
 export interface SessionHost {
   /** 每题装载后回调（渲染层更新进度与题面） */
   onQuestion(index: number, total: number, question: Question | null): void
@@ -19,6 +24,8 @@ export interface SessionHost {
   /** 执行组件命令产生的效果（如播放音频）；注入以便单测时只收集不播放 */
   runEffects(effects: Effect[]): void
   getNowSeconds?(): number
+  /** 可选：逻辑运行事件（错误/命令轨迹），供「运行日志」面板收集 */
+  onLogicEvent?(e: LogicRunEvent): void
 }
 
 export class LevelSession {
@@ -58,7 +65,16 @@ export class LevelSession {
       dispatchCommand: (path, args) => this.handleCommand(path, args),
       queryComponent: (target, method, args) => this.store.query(target, method, args),
       getNowSeconds: host.getNowSeconds,
-      onError: (err, where) => console.error('[logic]', where, err),
+      onError: (err, where) => {
+        console.error('[logic]', where, err)
+        this.host.onLogicEvent?.({
+          kind: 'error',
+          message: err instanceof Error ? err.message : String(err),
+          nodeId: where?.nodeId,
+          event: where?.event,
+          t: Date.now(),
+        })
+      },
     })
 
     // lint 时合并各题 logicPatch.variables 声明的变量键，避免误报"未声明"
@@ -168,6 +184,7 @@ export class LevelSession {
   }
 
   private handleCommand(path: string, args: Json): void {
+    this.host.onLogicEvent?.({ kind: 'command', path, t: Date.now() })
     const dot = path.indexOf('.')
     if (dot <= 0) return
     const cid = path.slice(0, dot)

@@ -318,6 +318,36 @@ describe('LevelSession', () => {
     }
   })
 
+  it('运行日志钩子：错误与命令轨迹进入 onLogicEvent', async () => {
+    const events: { kind: string; message?: string; path?: string; nodeId?: string }[] = []
+    const { host } = makeHost()
+    const wrapped: SessionHost = {
+      ...host,
+      onLogicEvent: (e) =>
+        events.push({
+          kind: e.kind,
+          message: e.kind === 'error' ? e.message : undefined,
+          path: e.kind === 'command' ? e.path : undefined,
+          nodeId: e.kind === 'error' ? e.nodeId : undefined,
+        }),
+    }
+    // 规则：call（命令轨迹）→ branch（cond 引用 event.x，空负载下报错且带 nodeId）
+    const rules = [
+      { id: 'cmd', on: 'staff1.noteClicked', do: [{ cmd: 'sound1.play', args: { notes: [{ midi: 60 }] } }] },
+      { id: 'judge', on: 'staff1.noteClicked', when: ['event.midi == q.data.answerMidi'], do: [{ set: 'score', expr: 'v.score + 1' }] },
+    ]
+    const session = new LevelSession(makeDoc({ rules }), wrapped)
+    session.start()
+    await flush()
+    session.dispatch('staff1.noteClicked', {})
+    await flush()
+    expect(events.some((e) => e.kind === 'command' && e.path === 'sound1.play')).toBe(true)
+    // 空 payload 下 event.midi 求值失败 → error 事件携带 nodeId（可定位节点）
+    const errEvt = events.find((e) => e.kind === 'error')
+    expect(errEvt).toBeTruthy()
+    expect(errEvt!.nodeId).toBeTruthy()
+  })
+
   it('视图直调 applyCommand 的效果也经执行通道（strike 发声回归）', async () => {
     const doc = makeDoc()
     doc.content.components.push({ id: 'keys1', type: 'fingering' })

@@ -1,5 +1,5 @@
 /**
- * 节点图编辑器（3-2a）：三栏布局 + React Flow 画布。
+ * 节点图编辑器：三栏布局 + React Flow 画布 + 体验面板（运行日志/lint 列表/变量/查看脚本）。
  * doc.content.logic（GraphProgram v2）唯一真源；一切编辑 = graphOps 纯函数 → onChange 回写 doc，
  * 非法操作（on 入边、端口缺失等）由 ops 抛错 → 错误条提示、doc 不变（受控画布自动回滚）。
  * 拖动跟手：拖动中间帧走 transient 状态（不进 doc），落点一次性 moveNode 持久化。
@@ -29,16 +29,23 @@ import {
   lintGraphProgramDetailed,
   moveNode,
   newNodeId,
+  removeGraphVariable,
   removeNode,
+  renameGraphVariable,
+  setGraphVariable,
   updateNode,
   type GraphProgram,
 } from '../../engine/graphProgram'
-import { buildPalette } from './palette'
+import { buildPalette, buildTemplates } from './palette'
 import { NODE_H, NODE_W, arrangeLayout, dagrePositions } from './layout'
 import { applyNodeChangesToProgram, portFromHandle } from './changes'
+import { applyTemplate } from './applyTemplate'
+import { generateScript } from '../../engine/script'
 import { graphCardNodeTypes, type GraphCardData } from './nodeTypes'
 import { NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
 import { NodeInspector } from './NodeInspector'
+import { VariablesPanel } from './VariablesPanel'
+import { clearRunLog, readRunLog } from '../../runtime/runLog'
 
 interface Props {
   doc: LevelDoc
@@ -53,10 +60,15 @@ function GraphEditorInner({ doc, onChange }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
-  /** 拖动中间帧位置（跟手反馈，不进 doc）；拖动结束随 moveNode 一起清空 */
   const [dragPos, setDragPos] = useState<Map<string, { x: number; y: number }>>(new Map())
+  const [showIssues, setShowIssues] = useState(false)
+  const [showScript, setShowScript] = useState(false)
+  const [showLog, setShowLog] = useState(false)
+  const [logTick, setLogTick] = useState(0) // 手动刷新日志读取
+  const [scriptError, setScriptError] = useState<string | null>(null)
 
   const palette = useMemo(() => buildPalette(doc), [doc])
+  const templates = useMemo(() => buildTemplates(doc), [doc])
   const lintIssues = useMemo(
     () =>
       lintGraphProgramDetailed(program, {
@@ -90,13 +102,9 @@ function GraphEditorInner({ doc, onChange }: Props) {
     [doc, onChange],
   )
 
-  // 无 x/y 的节点（迁移产物/新添加）用 dagre 兜底定位，仅视图层；拖动或整理布局时才写回。
-  // 全部节点都有位置时跳过计算（评审 P2-5 守卫）。
   const hasMissing = useMemo(() => program.nodes.some((n) => n.x === undefined || n.y === undefined), [program])
   const fallbackPos = useMemo(() => (hasMissing ? dagrePositions(program) : NO_POSITIONS), [program, hasMissing])
 
-  // rfNodes 按「内容签名」复用对象引用：graphOps 每次整图 clone 导致节点引用全变，
-  // 若不做身份复用，React Flow 会全量重置内部测量（边闪烁 + O(N) 强制重排，评审 P1-4）
   const nodeCacheRef = useRef<{ map: Map<string, Node<GraphCardData>>; sig: Map<string, string> }>({
     map: new Map(),
     sig: new Map(),
@@ -148,9 +156,20 @@ function GraphEditorInner({ doc, onChange }: Props) {
     [program.edges],
   )
 
+  /** 选中节点并把视口中心移到它（lint 列表/运行日志的定位入口） */
+  const focusNode = useCallback(
+    (id: string): void => {
+      setSelectedId(id)
+      const node = program.nodes.find((n) => n.id === id)
+      const base: { x: number; y: number } | undefined =
+        node?.x !== undefined && node?.y !== undefined ? { x: node.x, y: node.y } : fallbackPos.get(id)
+      if (base) rf.setCenter(base.x + NODE_W / 2, base.y + NODE_H / 2, { zoom: Math.max(rf.getZoom(), 0.9), duration: 300 })
+    },
+    [program, fallbackPos, rf],
+  )
+
   const onNodesChange = useCallback(
     (changes: NodeChange<Node<GraphCardData>>[]): void => {
-      // 拖动中间帧：只更新 transient 位置（跟手），不写 doc
       const dragging = changes.filter((c) => c.type === 'position' && c.dragging === true && c.position)
       if (dragging.length > 0) {
         setDragPos((cur) => {
@@ -165,7 +184,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
       }
       const settle = changes.filter((c) => (c.type === 'position' && c.dragging === false) || c.type === 'remove')
       if (settle.length === 0) return
-      // 单基线批量应用（评审 P1-2：避免每条 change 以过期 prog 为起点）
+      // 单基线批量应用（避免每条 change 以过期 prog 为起点）
       apply((prog) =>
         applyNodeChangesToProgram(prog, settle as { type: string; id: string; dragging?: boolean; position?: { x: number; y: number } }[], {
           moveNode,
@@ -207,17 +226,33 @@ function GraphEditorInner({ doc, onChange }: Props) {
     [apply],
   )
 
+  const addTemplate = useCallback(
+    (tpl: (typeof templates)[number], pos?: { x: number; y: number }): void => {
+      apply((prog) => applyTemplate(prog, tpl, pos))
+    },
+    [apply],
+  )
+
   const selected = selectedId ? program.nodes.find((n) => n.id === selectedId) : undefined
   const selectedIssues = selectedId ? lintIssues.filter((i) => i.nodeId === selectedId) : []
+
+  // 查看脚本：generateScript 对非结构化图抛错——错误消息本身就是教学信息
+  const scriptText = useMemo(() => {
+    if (!showScript) return null
+    try {
+      return { text: generateScript(program), error: null as string | null }
+    } catch (err) {
+      return { text: null, error: err instanceof Error ? err.message : String(err) }
+    }
+  }, [showScript, program])
+
+  const runLog = useMemo(() => (showLog ? readRunLog(doc.id).slice().reverse() : []), [showLog, doc.id, logTick])
+  const errorCount = runLog.filter((e) => e.kind === 'error').length
 
   return (
     <div className="graph-editor">
       <div className="graph-toolbar">
-        <button
-          type="button"
-          onClick={() => apply((prog) => arrangeLayout(prog, 'all'))}
-          title="按执行层级自动重排全部节点"
-        >
+        <button type="button" onClick={() => apply((prog) => arrangeLayout(prog, 'all'))} title="按执行层级自动重排全部节点">
           整理布局
         </button>
         <button
@@ -227,18 +262,61 @@ function GraphEditorInner({ doc, onChange }: Props) {
         >
           补齐新节点位置
         </button>
+        <button type="button" className={showScript ? 'active' : ''} onClick={() => setShowScript((v) => !v)} title="以伪代码只读视图查看当前逻辑">
+          查看脚本
+        </button>
+        <button type="button" className={showLog ? 'active' : ''} onClick={() => setShowLog((v) => !v)} title="查看最近一次试运行的逻辑错误与命令轨迹">
+          运行日志{runLog.length > 0 ? `（${runLog.length}）` : ''}
+        </button>
         <span className="muted graph-toolbar-hint">
           右键画布空白加节点 · 拖端口连线（真/假出口）· 双击连线断开 · Delete 删除选中节点
         </span>
-        {lintIssues.length > 0 && <span className="graph-lint-count">⚠ {lintIssues.length} 个问题</span>}
+        {lintIssues.length > 0 && (
+          <button type="button" className="graph-lint-count" onClick={() => setShowIssues((v) => !v)} title="点击查看问题列表">
+            ⚠ {lintIssues.length} 个问题
+          </button>
+        )}
       </div>
       {error && <div className="editor-errors">操作未生效：{error}</div>}
+      {showIssues && lintIssues.length > 0 && (
+        <div className="graph-issues">
+          {lintIssues.map((issue, i) => (
+            <button
+              key={i}
+              type="button"
+              className="graph-issue"
+              onClick={() => {
+                if (issue.nodeId) focusNode(issue.nodeId)
+                else if (issue.edgeId) {
+                  const edge = program.edges.find((e) => e.id === issue.edgeId)
+                  if (edge) focusNode(edge.from)
+                }
+              }}
+            >
+              <span className="graph-issue-code">{issue.code}</span>
+              <span>{issue.message}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="graph-layout">
-        <NodeLibraryPanel groups={palette} onPick={(item) => addFromPalette(item)} />
+        <div className="graph-left">
+          <NodeLibraryPanel
+            groups={palette}
+            templates={templates}
+            onPick={(item) => addFromPalette(item)}
+            onPickTemplate={(tpl) => addTemplate(tpl)}
+          />
+          <VariablesPanel
+            prog={program}
+            onSet={(name, value) => apply((prog) => setGraphVariable(prog, name, value))}
+            onRename={(oldName, newName) => apply((prog) => renameGraphVariable(prog, oldName, newName))}
+            onRemove={(name) => apply((prog) => removeGraphVariable(prog, name))}
+          />
+        </div>
         <div
           className="graph-canvas"
           onContextMenu={(e) => {
-            // 画布空白右键（React Flow onPaneContextMenu 在 pane 上触发，这里兜底容器空白）
             e.preventDefault()
           }}
         >
@@ -272,10 +350,30 @@ function GraphEditorInner({ doc, onChange }: Props) {
           {menu && (
             <NodeContextMenu
               groups={palette}
+              templates={templates}
               screen={menu.screen}
               onPick={(item) => addFromPalette(item, menu.flow)}
+              onPickTemplate={(tpl) => addTemplate(tpl, menu.flow)}
               onClose={() => setMenu(null)}
             />
+          )}
+          {showScript && (
+            <div className="graph-script-overlay">
+              <div className="graph-script-head">
+                <b>伪代码视图（LevelScript）</b>
+                <span className="muted">只读——结构与图一一对应，双向无损</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowScript(false)
+                    setScriptError(null)
+                  }}
+                >
+                  关闭
+                </button>
+              </div>
+              {scriptError ? <div className="ginsp-issues tone-error">{scriptError}</div> : <pre className="script-view">{scriptText?.text}</pre>}
+            </div>
           )}
         </div>
         <NodeInspector
@@ -289,6 +387,47 @@ function GraphEditorInner({ doc, onChange }: Props) {
           }}
         />
       </div>
+      {showLog && (
+        <div className="graph-log">
+          <div className="graph-log-head">
+            <b>运行日志</b>
+            <span className="muted">最近一次试运行（{errorCount} 个错误 / {runLog.length} 条）· 点击错误定位节点</span>
+            <button
+              type="button"
+              onClick={() => {
+                clearRunLog(doc.id)
+                setLogTick((t) => t + 1)
+              }}
+            >
+              清空
+            </button>
+            <button type="button" onClick={() => setLogTick((t) => t + 1)} title="试运行后刷新">
+              刷新
+            </button>
+          </div>
+          {runLog.length === 0 ? (
+            <div className="muted graph-log-empty">暂无记录——点击「试运行」跑一遍关卡后再来看。</div>
+          ) : (
+            <div className="graph-log-list">
+              {runLog.map((e, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={`graph-log-entry ${e.kind}${e.nodeId ? ' has-node' : ''}`}
+                  title={e.nodeId ? `定位节点 ${e.nodeId}` : undefined}
+                  onClick={() => {
+                    if (e.kind === 'error' && e.nodeId) focusNode(e.nodeId)
+                  }}
+                >
+                  <span className={`graph-log-kind ${e.kind}`}>{e.kind === 'error' ? '错误' : '命令'}</span>
+                  <span className="graph-log-msg">{e.kind === 'command' ? (e.path ?? '') : (e.message ?? '')}</span>
+                  {e.nodeId && <span className="graph-log-node">{e.nodeId}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

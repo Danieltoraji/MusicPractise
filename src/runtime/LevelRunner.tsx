@@ -6,13 +6,17 @@ import type { LevelDoc, Question } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { LevelSession } from './levelSession'
 import { getCtx, playNotes } from './audio'
+import { appendRunLog } from './runLog'
 import { ComponentView } from '../components/views'
 
 export function LevelRunner({
   doc,
+  levelId,
   onFinished,
 }: {
   doc: LevelDoc
+  /** 关卡 id：运行日志按它持久化（节点图编辑页读取展示） */
+  levelId: string
   /** 结算回调（每关完成时一次）：供宿主存进度等 */
   onFinished?: (result: { score: Json; passed: boolean }) => void
 }) {
@@ -21,6 +25,7 @@ export function LevelRunner({
     <RunnerCore
       key={runKey}
       doc={doc}
+      levelId={levelId}
       onRetry={() => setRunKey((k) => k + 1)}
       onFinished={onFinished}
     />
@@ -29,10 +34,12 @@ export function LevelRunner({
 
 function RunnerCore({
   doc,
+  levelId,
   onRetry,
   onFinished,
 }: {
   doc: LevelDoc
+  levelId: string
   onRetry: () => void
   onFinished?: (result: { score: Json; passed: boolean }) => void
 }) {
@@ -57,8 +64,9 @@ function RunnerCore({
           }
         },
         getNowSeconds: () => getCtx().currentTime,
+        onLogicEvent: (e) => appendRunLog(levelId, e),
       }),
-    [doc, onFinished],
+    [doc, onFinished, levelId],
   )
 
   useEffect(() => {

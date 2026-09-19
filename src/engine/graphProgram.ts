@@ -345,6 +345,19 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
     if (!byId.has(e.to)) issues.push({ code: 'dangling-ref', edgeId: e.id, message: `边 ${e.id}: 终点节点不存在 "${e.to}"` })
   }
 
+  // 1.5) 孤儿节点：非 on 且无任何入边 = 执行流不可达（拖放遗留/断链）
+  for (const node of program.nodes) {
+    if (node.kind === 'on') continue
+    if (node.kind === 'comment' && !program.edges.some((e) => e.to === node.id || e.from === node.id)) continue
+    if (!program.edges.some((e) => e.to === node.id)) {
+      issues.push({
+        code: 'structure',
+        nodeId: node.id,
+        message: `节点 ${node.id}(${node.kind}) 没有任何入边——执行流到不了这里（从事件节点连一条线过来）`,
+      })
+    }
+  }
+
   // 2) 端口协议：branch/loop 出边必须带 true/false 端口，其余节点不得带；(from, port) 唯一
   const portSeen = new Set<string>()
   for (const e of program.edges) {

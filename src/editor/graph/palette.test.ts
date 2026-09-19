@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildPalette } from './palette'
+import { buildPalette, buildTemplates } from './palette'
+import { applyTemplate } from './applyTemplate'
 import { arrangeLayout, dagrePositions } from './layout'
-import { blankGraphProgram, addNode, connect, isGraphProgram } from '../../engine/graphProgram'
+import { blankGraphProgram, addNode, connect, isGraphProgram, lintGraphProgram } from '../../engine/graphProgram'
 import type { LevelDoc } from '../../engine/level'
 import type { Json } from '../../engine/expr'
 
@@ -50,6 +51,46 @@ describe('buildPalette（节点库候选）', () => {
     expect(varGroup.items.map((i) => i.label)).toEqual(['v.score = …', 'v.streak = …'])
     const evtGroup = groups.find((g) => g.id === 'event')!
     expect(evtGroup.items).toHaveLength(3)
+  })
+})
+
+describe('buildTemplates + applyTemplate（一键模板）', () => {
+  it('计分模板：无 timer 组件时只有 1 个；含 timer 时出现防卡死守卫', () => {
+    const without = buildTemplates(doc([{ id: 'sound1', type: 'sound' }]))
+    expect(without.map((t) => t.key)).toEqual(['tpl-score-gate'])
+    const withTimer = buildTemplates(doc([{ id: 'timer1', type: 'timer' }]))
+    expect(withTimer.map((t) => t.key)).toEqual(['tpl-score-gate', 'tpl-timeout-guard'])
+  })
+
+  it('落图后 lint 零错且结构正确（applyTemplate 纯函数）', () => {
+    const groups = buildPalette(doc([{ id: 'timer1', type: 'timer' }]))
+    const templates = buildTemplates(doc([{ id: 'timer1', type: 'timer' }]))
+    void groups
+    let prog = blankGraphProgram()
+    for (const tpl of templates) {
+      prog = applyTemplate(prog, tpl, { x: 100, y: 100 })
+    }
+    // 5 + 4 个节点；lint 零错（默认值合法、变量 score 已声明）
+    expect(prog.nodes).toHaveLength(9)
+    expect(lintGraphProgram(prog, { componentIds: ['timer1'] })).toEqual([])
+    // 模板 2 引用了真实 timer 实例
+    expect(prog.nodes.some((n) => n.kind === 'call' && n.target === 'timer1' && n.method === 'start')).toBe(true)
+    // 相对坐标落在 pos 偏移处
+    const first = prog.nodes[0]
+    expect(first.x).toBe(100)
+  })
+
+  it('连线引用越界抛错', () => {
+    const bad = {
+      key: 'bad',
+      label: 'bad',
+      desc: '',
+      make: () => ({
+        nodes: [{ kind: 'comment', text: 'only' }],
+        links: [{ from: 0, to: 5 }],
+      }),
+    } as unknown as Parameters<typeof applyTemplate>[1]
+    expect(() => applyTemplate(blankGraphProgram(), bad, undefined)).toThrow(/越界/)
   })
 })
 

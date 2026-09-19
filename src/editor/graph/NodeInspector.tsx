@@ -8,6 +8,7 @@ import type { LevelDoc } from '../../engine/level'
 import { LEVEL_METHODS, type GNode, type LintIssue } from '../../engine/graphProgram'
 import { getDef } from '../../runtime/store'
 import { checkExprText } from '../EditorPage'
+import { exprFunctionNames } from '../../engine/expr'
 
 interface Props {
   node: GNode | undefined
@@ -103,7 +104,10 @@ export function NodeInspector({ node, doc, issues, onPatch, onRemove }: Props) {
 
       <datalist id={exprDatalistId}>
         {varNames.map((v) => (
-          <option key={v} value={`v.${v}`} />
+          <option key={`v-${v}`} value={`v.${v}`} />
+        ))}
+        {exprFunctionNames.map((fn) => (
+          <option key={fn} value={`${fn}(`} label={fn} />
         ))}
         <option value="q.data" />
         <option value="event." />

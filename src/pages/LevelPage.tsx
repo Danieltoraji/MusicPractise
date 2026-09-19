@@ -75,7 +75,7 @@ export function LevelPage({ id }: { id: string }) {
         </details>
       )}
       <ErrorBoundary>
-        <LevelRunner doc={doc} onFinished={handleFinished} />
+        <LevelRunner doc={doc} levelId={id} onFinished={handleFinished} />
       </ErrorBoundary>
       <details className="json-view">
         <summary>查看本关卡的 JSON 定义（内容即关卡）</summary>
