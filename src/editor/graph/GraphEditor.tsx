@@ -76,6 +76,11 @@ function GraphEditorInner({ doc, onChange }: Props) {
     () => doc.content.components.map((c) => ({ id: c.id, name: c.name, type: c.type })),
     [doc],
   )
+  // 组件清单版本号：改名/增删使节点卡缓存失效（评审 P2-7，当前图页不改组件、防患未然）
+  const compsSig = useMemo(
+    () => doc.content.components.map((c) => `${c.id}:${c.name ?? ''}`).join(','),
+    [doc],
+  )
   // 画布对照图焦点组件 → 图中引用它的节点（on 该组件事件 / call 它 / assign 查询它）
   const relatedIds = useMemo(() => {
     const set = new Set<string>()
@@ -140,7 +145,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
       const position = { x: base?.x ?? 0, y: base?.y ?? 0 }
       const errors = issuesByNode.get(node.id)
       const related = relatedIds.has(node.id)
-      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}`
+      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}`
       const prev = prevMap.get(node.id)
       if (prev && prevSig.get(node.id) === signature) {
         nextMap.set(node.id, prev)
@@ -161,7 +166,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
     })
     nodeCacheRef.current = { map: nextMap, sig: nextSig }
     return list
-  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, relatedIds])
+  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, compsSig, relatedIds])
 
   const rfEdges: Edge[] = useMemo(
     () =>
@@ -290,7 +295,15 @@ function GraphEditorInner({ doc, onChange }: Props) {
         <button type="button" className={showLog ? 'active' : ''} onClick={() => setShowLog((v) => !v)} title="查看最近一次试运行的逻辑错误与命令轨迹">
           运行日志{runLog.length > 0 ? `（${runLog.length}）` : ''}
         </button>
-        <button type="button" className={showMap ? 'active' : ''} onClick={() => setShowMap((v) => !v)} title="角落显示关卡画布缩略图，点击组件高亮相关节点">
+        <button
+          type="button"
+          className={showMap ? 'active' : ''}
+          onClick={() => {
+            if (showMap) setMapFocus(null) // 收起即解除高亮（评审 P2-6）
+            setShowMap(!showMap)
+          }}
+          title="角落显示关卡画布缩略图，点击组件高亮相关节点"
+        >
           画布对照
         </button>
         <span className="muted graph-toolbar-hint">

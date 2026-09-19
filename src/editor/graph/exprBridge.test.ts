@@ -43,6 +43,10 @@ describe('exprToOperand / operandToExpr', () => {
     }
     expect(operandToExpr(exprToOperand(' v.score '))).toBe('v.score')
   })
+
+  it('单引号字符串规范化为双引号（值不变，源文本改写属预期行为——评审 P2-3 记录）', () => {
+    expect(operandToExpr(exprToOperand("'你好'"))).toBe('"你好"')
+  })
 })
 
 describe('exprToCond / condToExpr', () => {
@@ -75,6 +79,17 @@ describe('exprToCond / condToExpr', () => {
   it('语法错误保留原文（高级模式兜底）', () => {
     expect(exprToCond('v.a >')).toEqual({ mode: 'advanced', source: 'v.a >' })
     expect(condToExpr({ mode: 'advanced', source: 'v.a >' })).toBe('v.a >')
+  })
+
+  it('顶层含 &&/||/?: 不拆比较（评审 P2-2：分组与真实 AST 一致）', () => {
+    const or = exprToCond('v.a == 1 || v.b == 2')
+    expect(or.mode).toBe('truthy') // 整体作为真值判断，操作数落 advanced 保原文
+    expect(condToExpr(or)).toBe('v.a == 1 || v.b == 2')
+    const ternary = exprToCond('x > 0 ? 1 : 0')
+    expect(ternary.mode).toBe('truthy')
+    expect(condToExpr(ternary)).toBe('x > 0 ? 1 : 0')
+    // 括号内的 && 不影响比较拆分
+    expect(exprToCond('(v.a && v.b) == 1')).toMatchObject({ mode: 'compare', op: '==' })
   })
 })
 

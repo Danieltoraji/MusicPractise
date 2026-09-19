@@ -74,6 +74,11 @@ function defaultOperandFor(mode: OperandMode, ctx: BridgeCtx): Operand {
   return exprToOperand(defaultExprFor(mode, ctx))
 }
 
+/** 结构化模式的默认表达式（NodeInspector 的 assign 值编辑器复用） */
+export function defaultOperandExprFor(mode: 'number' | 'string' | 'boolean' | 'ref', ctx: BridgeCtx): string {
+  return defaultExprFor(mode, ctx)
+}
+
 function defaultExprFor(mode: OperandMode, ctx: BridgeCtx): string {
   switch (mode) {
     case 'number':

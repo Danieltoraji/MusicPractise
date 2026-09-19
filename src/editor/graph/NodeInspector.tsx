@@ -4,14 +4,14 @@
  * 条件用比较构造器，call 参数按命令契约出键值对；表达式输入仅作高级兜底（原文保留）。
  * 编辑即提交（控件内部自管草稿、失焦/离散动作提交），切节点由 key 重挂载重置草稿。
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { exprFunctionNames } from '../../engine/expr'
 import type { LevelDoc } from '../../engine/level'
 import { LEVEL_METHODS, type GNode, type LintIssue } from '../../engine/graphProgram'
 import { BASE_COMMANDS, type ContractDoc } from '../../runtime/componentDef'
 import { getDef } from '../../runtime/store'
 import { parseCommandParams, exprToOperand, type BridgeCtx, type Operand } from './exprBridge'
-import { CallArgsEditor, ConditionBuilder, OperandBody, OperandPicker, QueryCallEditor } from './controls'
+import { CallArgsEditor, ConditionBuilder, OperandBody, OperandPicker, QueryCallEditor, defaultOperandExprFor } from './controls'
 
 interface Props {
   node: GNode | undefined
@@ -263,7 +263,11 @@ function CallNodeEditor(props: {
             const target = e.target.value
             const list = props.methodOptions(target)
             const method = list.some((m) => m.name === node.method) ? node.method : (list[0]?.name ?? '')
-            // 切实例连动方法与参数（新方法未知参数 → 重置为无参/空对象由方法分支处理）
+            // 评审 P1-2：方法实际未变（换绑同类实例）时保留已填参数，不重置
+            if (method === node.method) {
+              props.onPatch({ target } as unknown as Partial<GNode>)
+              return
+            }
             const doc = list.find((m) => m.name === method)?.doc
             const params = parseCommandParams(doc)
             const args = params === null ? node.args : params.length === 0 ? [] : ['{}']
@@ -370,6 +374,8 @@ function RValueEditor(props: {
   const isCall = 'call' in value
   const operand: Operand = isCall ? { mode: 'advanced', source: '0' } : exprToOperand(value.expr)
   const [mode, setMode] = useState<RvMode>(isCall ? 'query' : operand.mode)
+  // 评审 P1-1：记住进入查询模式前的表达式——查询⇄表达式往返不丢原文
+  const lastExprRef = useRef<string>(isCall ? '' : value.expr)
 
   const writeExpr = (expr: string): void => props.onPatch({ value: { expr } } as unknown as Partial<GNode>)
 
@@ -377,17 +383,18 @@ function RValueEditor(props: {
     if (next === mode) return
     setMode(next)
     if (next === 'query') {
+      if (!isCall) lastExprRef.current = value.expr
       const first = props.comps[0]?.id ?? ''
       const method = props.queriesOf(first)[0] ?? ''
       props.onPatch({ value: { call: { target: first, method, args: [] } } } as unknown as Partial<GNode>)
       return
     }
     if (next === 'advanced') {
-      // 从表达式切高级：保留原文；从查询切高级：查询不是表达式，落到默认值
-      writeExpr(isCall ? '0' : value.expr)
+      // 从表达式切高级：保留原文；从查询切高级：恢复进入查询前的表达式
+      writeExpr(isCall ? (lastExprRef.current || '0') : value.expr)
       return
     }
-    writeExpr(defaultExprFor(next, props.ctx))
+    writeExpr(defaultOperandExprFor(next, props.ctx))
   }
 
   const effective: Operand =
@@ -396,17 +403,27 @@ function RValueEditor(props: {
       : !isCall && operand.mode === mode
         ? operand
         : mode === 'advanced'
-          ? { mode: 'advanced', source: isCall ? '0' : value.expr }
-          : exprToOperand(defaultExprFor(mode, props.ctx))
+          ? { mode: 'advanced', source: isCall ? (lastExprRef.current || '0') : value.expr }
+          : exprToOperand(defaultOperandExprFor(mode, props.ctx))
 
   return (
     <div className="opv">
       <div className="ginsp-modes opv-modes">
-        {RV_MODES.map((m) => (
-          <button key={m.mode} type="button" className={m.mode === mode ? 'active' : ''} title={m.title} onClick={() => switchMode(m.mode)}>
-            {m.label}
-          </button>
-        ))}
+        {RV_MODES.map((m) => {
+          const noComp = m.mode === 'query' && props.comps.length === 0
+          return (
+            <button
+              key={m.mode}
+              type="button"
+              className={m.mode === mode ? 'active' : ''}
+              title={noComp ? '画布没有组件，没有查询目标' : m.title}
+              disabled={noComp}
+              onClick={() => switchMode(m.mode)}
+            >
+              {m.label}
+            </button>
+          )
+        })}
       </div>
       {mode === 'query' ? (
         <QueryCallEditor
@@ -420,19 +437,6 @@ function RValueEditor(props: {
       )}
     </div>
   )
-}
-
-function defaultExprFor(mode: 'number' | 'string' | 'boolean' | 'ref', ctx: BridgeCtx): string {
-  switch (mode) {
-    case 'number':
-      return '0'
-    case 'string':
-      return '""'
-    case 'boolean':
-      return 'true'
-    case 'ref':
-      return ctx.varNames.length > 0 ? `v.${ctx.varNames[0]}` : (ctx.refPaths[0] ?? 'v.score')
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -530,7 +534,8 @@ function EmitNodeEditor(props: {
               placeholder="键"
               onBlur={(e) => {
                 const key = e.currentTarget.value.trim()
-                if (key === k || key === '') {
+                // 与 CallArgsEditor 同一守卫：空名/重名不改，输入框还原（防静默覆盖兄弟键）
+                if (key === k || key === '' || key in payload) {
                   e.currentTarget.value = k
                   return
                 }

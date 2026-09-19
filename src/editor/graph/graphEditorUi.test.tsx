@@ -247,4 +247,39 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
       value: { call: { target: 'slider1', method: 'getValue', args: [] } },
     })
   })
+
+  it('assign 节点：查询⇄表达式模式往返恢复原表达式（评审 P1-1 回归）', () => {
+    const comps = [{ id: 'slider1', type: 'slider' }]
+    // 表达式用唯一值，避免与基础 doc 的 as1（v.score + 1）摘要撞名点错节点
+    let doc = docWith(
+      [{ id: 'as3', kind: 'assign', target: 'score', value: { expr: 'v.score + 7' }, x: 600, y: 0 }],
+      comps as LevelDoc['content']['components'],
+    )
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    let root!: Root
+    const rerender = (d: LevelDoc): void => {
+      doc = d
+      act(() => root.render(<GraphEditor doc={d} onChange={rerender} />))
+    }
+    act(() => {
+      root = createRoot(container)
+      root.render(<GraphEditor doc={doc} onChange={rerender} />)
+    })
+    act(() => {
+      ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('v.score = v.score + 7'))!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const clickBtn = (label: string): void => {
+      const btn = [...container.querySelectorAll('.ginsp button')].find((b) => b.textContent === label)
+      if (!btn) throw new Error(`找不到按钮 ${label}`)
+      act(() => (btn as HTMLElement).click())
+    }
+    clickBtn('查询')
+    expect((doc.content.logic.nodes.find((n) => n.id === 'as3') as { value: object }).value).toHaveProperty('call')
+    clickBtn('ƒx')
+    expect(doc.content.logic.nodes.find((n) => n.id === 'as3')).toMatchObject({ value: { expr: 'v.score + 7' } })
+    roots.push(root)
+    containers.push(container)
+  })
 })

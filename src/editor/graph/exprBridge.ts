@@ -116,6 +116,35 @@ function splitCompare(text: string): { left: string; op: CmpOp; right: string } 
   return null
 }
 
+/** 顶层（深度 0、引号外）是否含 &&/||/?:——有的话不做比较拆分（评审 P2-2：避免 `a == 1 || b == 2` 被错误分组） */
+function hasTopLevelLogical(text: string): boolean {
+  let depth = 0
+  let quote: string | null = null
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (quote) {
+      if (ch === '\\') i++
+      else if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      continue
+    }
+    if (ch === '(' || ch === '[' || ch === '{') {
+      depth++
+      continue
+    }
+    if (ch === ')' || ch === ']' || ch === '}') {
+      depth--
+      continue
+    }
+    if (depth !== 0) continue
+    if ((ch === '&' && text[i + 1] === '&') || (ch === '|' && text[i + 1] === '|') || ch === '?') return true
+  }
+  return false
+}
+
 export function exprToCond(src: string): Cond {
   const text = src.trim()
   try {
@@ -123,7 +152,7 @@ export function exprToCond(src: string): Cond {
   } catch {
     return { mode: 'advanced', source: text }
   }
-  const parts = splitCompare(text)
+  const parts = hasTopLevelLogical(text) ? null : splitCompare(text)
   if (parts) {
     return {
       mode: 'compare',
@@ -229,7 +258,7 @@ export function argsToArgView(args: unknown): ArgView {
     const entries = splitObjectLiteral(args[0])
     if (entries) return { mode: 'object', entries }
   }
-  return { mode: 'advanced', sources: args.map((a) => String(a)) }
+  return { mode: 'advanced', sources: args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))) }
 }
 
 export function argViewToArgs(v: ArgView): string[] {
