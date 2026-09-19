@@ -81,10 +81,15 @@ export function LibraryPage() {
     }
   }
 
+  // meta.featured 的内置资源置顶展示（教程/示例；其余按入库时间）
+  const isFeatured = (r: LibraryRecord): boolean =>
+    r.builtIn === 1 && (r.doc as { meta?: { featured?: boolean } })?.meta?.featured === true
   const rows = resources ?? []
   const { series, loose } = buildLibraryTree(rows)
   const visibleSeries = filterTree(series, query)
   const visibleLoose = filterTree(loose, query)
+  const featuredRows = visibleLoose.filter((r) => isFeatured(r.rec))
+  const restLoose = visibleLoose.filter((r) => !isFeatured(r.rec))
 
   return (
     <div className="page">
@@ -149,13 +154,26 @@ export function LibraryPage() {
         <p className="muted">没有匹配「{query}」的资源。</p>
       ) : (
         <div className="lib-tree">
-          {visibleSeries.map((row) => (
-            <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} />
-          ))}
-          {visibleLoose.length > 0 && (
+          {featuredRows.length > 0 && (
+            <>
+              <div className="lib-divider">🎵 教程与示例</div>
+              {featuredRows.map((row) => (
+                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} />
+              ))}
+            </>
+          )}
+          {visibleSeries.length > 0 && (
+            <>
+              <div className="lib-divider">系列</div>
+              {visibleSeries.map((row) => (
+                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} />
+              ))}
+            </>
+          )}
+          {restLoose.length > 0 && (
             <>
               <div className="lib-divider">未整理</div>
-              {visibleLoose.map((row) => (
+              {restLoose.map((row) => (
                 <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} />
               ))}
             </>

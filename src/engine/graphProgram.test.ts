@@ -303,3 +303,44 @@ describe('lintGraphProgram', () => {
     expect(errors.some((x) => x.includes('起点节点不存在'))).toBe(true)
   })
 })
+
+describe('views.goto lint（docs/24）', () => {
+  const base = (): GraphProgram => {
+    let prog = blankGraphProgram()
+    prog = addNode(prog, on('e', 'level.started'))
+    return prog
+  }
+
+  it('字符串字面量：存在性校验（dangling-ref）', () => {
+    let prog = base()
+    prog = addNode(prog, call('g1', 'views', 'goto', ['"main"']))
+    prog = connect(prog, 'e', 'g1') // 连线避免孤儿告警干扰断言
+    expect(lintGraphProgram(prog, { viewIds: ['main'] })).toEqual([])
+    const bad = addNode(prog, call('g2', 'views', 'goto', ['"ghost"']))
+    const issues = lintGraphProgramDetailed(bad, { viewIds: ['main'] })
+    expect(issues.some((i) => i.code === 'dangling-ref' && i.message.includes('ghost'))).toBe(true)
+  })
+
+  it('对象字面量 {id: "…"}：合法并同样校验存在性', () => {
+    let prog = base()
+    prog = addNode(prog, call('g1', 'views', 'goto', ["{id: 'step1'}"]))
+    prog = connect(prog, 'e', 'g1')
+    expect(lintGraphProgram(prog, { viewIds: ['step1'] })).toEqual([])
+    expect(lintGraphProgramDetailed(prog, { viewIds: ['other'] }).some((i) => i.code === 'dangling-ref')).toBe(true)
+  })
+
+  it('缺参/动态表达式：structure 提示（运行时合法性不保证，注释见实现）', () => {
+    let prog = base()
+    prog = addNode(prog, call('g1', 'views', 'goto', ['v.target']))
+    prog = addNode(prog, call('g2', 'views', 'goto', []))
+    const issues = lintGraphProgramDetailed(prog, { viewIds: ['main'] })
+    expect(issues.filter((i) => i.code === 'structure').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('views 伪实例方法白名单：goto 之外拒绝', () => {
+    let prog = base()
+    prog = addNode(prog, call('g1', 'views', 'back', []))
+    const issues = lintGraphProgramDetailed(prog, { viewIds: ['main'] })
+    expect(issues.some((i) => i.code === 'dangling-ref' && i.message.includes('views 没有 "back"'))).toBe(true)
+  })
+})

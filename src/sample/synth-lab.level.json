@@ -6,76 +6,491 @@
   "meta": {
     "title": "音色实验室 · 合成器示例",
     "description": "一张逻辑图 × 一张数据表（6 行）驱动全部内容：每种音色一行数据，「下一音色」推进行并自动刷新显示。演示数据表驱动 + 合成器 + 模版视图换行刷新。",
-    "author": { "name": "POC 内置示例" },
-    "tags": ["示例", "合成器", "数据表"],
+    "author": {
+      "name": "POC 内置示例"
+    },
+    "tags": [
+      "示例",
+      "合成器",
+      "数据表"
+    ],
     "locale": "zh-CN",
     "license": "CC0-1.0",
-    "difficulty": 1
+    "difficulty": 1,
+    "featured": true
   },
   "refs": [],
   "content": {
-    "views": [{ "id": "lab", "name": "音色实验室", "template": true }],
+    "views": [
+      {
+        "id": "lab",
+        "name": "音色实验室",
+        "template": true
+      }
+    ],
     "components": [
-      { "id": "head", "type": "label", "name": "实验室标题", "visible": true, "view": "lab", "layout": { "x": 40, "y": 24, "w": 560, "h": 46 }, "props": { "text": "🎹 音色实验室", "tone": "info" } },
-      { "id": "wave_label", "type": "label", "name": "音色名", "visible": true, "view": "lab", "layout": { "x": 40, "y": 84, "w": 420, "h": 42 }, "props": { "text": "", "tone": "success" } },
-      { "id": "progress_label", "type": "label", "name": "进度", "visible": true, "view": "lab", "layout": { "x": 480, "y": 90, "w": 260, "h": 32 }, "props": { "text": "", "tone": "info" } },
-      { "id": "desc_label", "type": "label", "name": "音色说明", "visible": true, "view": "lab", "layout": { "x": 40, "y": 136, "w": 640, "h": 60 }, "props": { "text": "", "tone": "info" } },
-      { "id": "play_btn", "type": "button", "name": "播放按钮", "visible": true, "view": "lab", "layout": { "x": 40, "y": 208, "w": 150, "h": 44 }, "props": { "text": "▶ 播放示例", "enabled": true } },
-      { "id": "next_btn", "type": "button", "name": "下一音色", "visible": true, "view": "lab", "layout": { "x": 210, "y": 208, "w": 150, "h": 44 }, "props": { "text": "下一音色 ▶", "enabled": true } },
-      { "id": "again_btn", "type": "button", "name": "重听按钮", "visible": true, "view": "lab", "layout": { "x": 380, "y": 208, "w": 130, "h": 44 }, "props": { "text": "从头再来", "enabled": true } },
-      { "id": "synth1", "type": "synth", "name": "合成器", "visible": true, "view": "lab", "layout": { "x": 40, "y": 270, "w": 300, "h": 96 }, "props": { "wave": "sine", "gain": 0.35 } }
+      {
+        "id": "head",
+        "type": "label",
+        "name": "实验室标题",
+        "visible": true,
+        "view": "lab",
+        "layout": {
+          "x": 40,
+          "y": 24,
+          "w": 560,
+          "h": 46
+        },
+        "props": {
+          "text": "🎹 音色实验室",
+          "tone": "info"
+        }
+      },
+      {
+        "id": "wave_label",
+        "type": "label",
+        "name": "音色名",
+        "visible": true,
+        "view": "lab",
+        "layout": {
+          "x": 40,
+          "y": 84,
+          "w": 420,
+          "h": 42
+        },
+        "props": {
+          "text": "",
+          "tone": "success"
+        }
+      },
+      {
+        "id": "progress_label",
+        "type": "label",
+        "name": "进度",
+        "visible": true,
+        "view": "lab",
+        "layout": {
+          "x": 480,
+          "y": 90,
+          "w": 260,
+          "h": 32
+        },
+        "props": {
+          "text": "",
+          "tone": "info"
+        }
+      },
+      {
+        "id": "desc_label",
+        "type": "label",
+        "name": "音色说明",
+        "visible": true,
+        "view": "lab",
+        "layout": {
+          "x": 40,
+          "y": 136,
+          "w": 640,
+          "h": 60
+        },
+        "props": {
+          "text": "",
+          "tone": "info"
+        }
+      },
+      {
+        "id": "play_btn",
+        "type": "button",
+        "name": "播放按钮",
+        "visible": true,
+        "view": "lab",
+        "layout": {
+          "x": 40,
+          "y": 208,
+          "w": 150,
+          "h": 44
+        },
+        "props": {
+          "text": "▶ 播放示例",
+          "enabled": true
+        }
+      },
+      {
+        "id": "next_btn",
+        "type": "button",
+        "name": "下一音色",
+        "visible": true,
+        "view": "lab",
+        "layout": {
+          "x": 210,
+          "y": 208,
+          "w": 150,
+          "h": 44
+        },
+        "props": {
+          "text": "下一音色 ▶",
+          "enabled": true
+        }
+      },
+      {
+        "id": "again_btn",
+        "type": "button",
+        "name": "重听按钮",
+        "visible": true,
+        "view": "lab",
+        "layout": {
+          "x": 380,
+          "y": 208,
+          "w": 130,
+          "h": 44
+        },
+        "props": {
+          "text": "从头再来",
+          "enabled": true
+        }
+      },
+      {
+        "id": "synth1",
+        "type": "synth",
+        "name": "合成器",
+        "visible": true,
+        "view": "lab",
+        "layout": {
+          "x": 40,
+          "y": 270,
+          "w": 300,
+          "h": 96
+        },
+        "props": {
+          "wave": "sine",
+          "gain": 0.35
+        }
+      }
     ],
     "logic": {
       "logicVersion": 2,
       "variables": {},
       "nodes": [
-        { "id": "on_q", "kind": "on", "event": "level.questionLoaded", "x": 0, "y": 0 },
-        { "id": "wshow", "kind": "call", "target": "wave_label", "method": "show", "args": ["{text: q.title}"], "x": 260, "y": 0 },
-        { "id": "dshow", "kind": "call", "target": "desc_label", "method": "show", "args": ["{text: q.desc}"], "x": 520, "y": 0 },
-        { "id": "pshow", "kind": "call", "target": "progress_label", "method": "show", "args": ["{text: '第 ' + (event.index + 1) + ' / 6 个音色 · wave: ' + q.wave}"], "x": 780, "y": 0 },
-
-        { "id": "on_playbtn", "kind": "on", "event": "play_btn.clicked", "x": 0, "y": 150 },
-        { "id": "synthplay", "kind": "call", "target": "synth1", "method": "play", "args": ["{notes: q.notes, wave: q.wave, tempo: 96, mode: 'seq'}"], "x": 260, "y": 150 },
-
-        { "id": "on_next", "kind": "on", "event": "next_btn.clicked", "x": 0, "y": 300 },
-        { "id": "nextrow", "kind": "call", "target": "level", "method": "next", "args": [], "x": 260, "y": 300 },
-
-        { "id": "on_finished", "kind": "on", "event": "level.finished", "x": 0, "y": 450 },
-        { "id": "wfin", "kind": "call", "target": "wave_label", "method": "show", "args": ["{text: '🎉 演示完毕'}"], "x": 260, "y": 450 },
-        { "id": "dfin", "kind": "call", "target": "desc_label", "method": "show", "args": ["{text: '点「从头再来」再听一遍；打开编辑器的「数据表」看看这 6 行数据——内容全部由表格驱动'}"], "x": 520, "y": 450 },
-        { "id": "chord", "kind": "call", "target": "synth1", "method": "play", "args": ["{notes: [{midi: 60}, {midi: 64}, {midi: 67}, {midi: 72}], wave: 'bell', tempo: 90}"], "x": 780, "y": 450 },
-
-        { "id": "on_again", "kind": "on", "event": "again_btn.clicked", "x": 0, "y": 600 },
-        { "id": "restart", "kind": "call", "target": "level", "method": "restart", "args": [], "x": 260, "y": 600 }
+        {
+          "id": "on_q",
+          "kind": "on",
+          "event": "level.questionLoaded",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "wshow",
+          "kind": "call",
+          "target": "wave_label",
+          "method": "show",
+          "args": [
+            "{text: q.title}"
+          ],
+          "x": 260,
+          "y": 0
+        },
+        {
+          "id": "dshow",
+          "kind": "call",
+          "target": "desc_label",
+          "method": "show",
+          "args": [
+            "{text: q.desc}"
+          ],
+          "x": 520,
+          "y": 0
+        },
+        {
+          "id": "pshow",
+          "kind": "call",
+          "target": "progress_label",
+          "method": "show",
+          "args": [
+            "{text: '第 ' + (event.index + 1) + ' / ' + event.total + ' 个音色 · wave: ' + q.wave}"
+          ],
+          "x": 780,
+          "y": 0
+        },
+        {
+          "id": "on_playbtn",
+          "kind": "on",
+          "event": "play_btn.clicked",
+          "x": 0,
+          "y": 150
+        },
+        {
+          "id": "synthplay",
+          "kind": "call",
+          "target": "synth1",
+          "method": "play",
+          "args": [
+            "{notes: q.notes, wave: q.wave, tempo: 96, mode: 'seq'}"
+          ],
+          "x": 260,
+          "y": 150
+        },
+        {
+          "id": "on_next",
+          "kind": "on",
+          "event": "next_btn.clicked",
+          "x": 0,
+          "y": 300
+        },
+        {
+          "id": "nextrow",
+          "kind": "call",
+          "target": "level",
+          "method": "next",
+          "args": [],
+          "x": 260,
+          "y": 300
+        },
+        {
+          "id": "on_finished",
+          "kind": "on",
+          "event": "level.finished",
+          "x": 0,
+          "y": 450
+        },
+        {
+          "id": "wfin",
+          "kind": "call",
+          "target": "wave_label",
+          "method": "show",
+          "args": [
+            "{text: '🎉 演示完毕'}"
+          ],
+          "x": 260,
+          "y": 450
+        },
+        {
+          "id": "dfin",
+          "kind": "call",
+          "target": "desc_label",
+          "method": "show",
+          "args": [
+            "{text: '点「从头再来」再听一遍；打开编辑器的「数据表」看看这 6 行数据——内容全部由表格驱动'}"
+          ],
+          "x": 520,
+          "y": 450
+        },
+        {
+          "id": "chord",
+          "kind": "call",
+          "target": "synth1",
+          "method": "play",
+          "args": [
+            "{notes: [{midi: 60}, {midi: 64}, {midi: 67}, {midi: 72}], wave: 'bell', tempo: 90}"
+          ],
+          "x": 780,
+          "y": 450
+        },
+        {
+          "id": "on_again",
+          "kind": "on",
+          "event": "again_btn.clicked",
+          "x": 0,
+          "y": 600
+        },
+        {
+          "id": "restart",
+          "kind": "call",
+          "target": "level",
+          "method": "restart",
+          "args": [],
+          "x": 260,
+          "y": 600
+        }
       ],
       "edges": [
-        { "id": "e1", "from": "on_q", "to": "wshow" },
-        { "id": "e2", "from": "wshow", "to": "dshow" },
-        { "id": "e3", "from": "dshow", "to": "pshow" },
-        { "id": "e4", "from": "on_playbtn", "to": "synthplay" },
-        { "id": "e5", "from": "on_next", "to": "nextrow" },
-        { "id": "e6", "from": "on_finished", "to": "wfin" },
-        { "id": "e7", "from": "wfin", "to": "dfin" },
-        { "id": "e8", "from": "dfin", "to": "chord" },
-        { "id": "e9", "from": "on_again", "to": "restart" }
+        {
+          "id": "e1",
+          "from": "on_q",
+          "to": "wshow"
+        },
+        {
+          "id": "e2",
+          "from": "wshow",
+          "to": "dshow"
+        },
+        {
+          "id": "e3",
+          "from": "dshow",
+          "to": "pshow"
+        },
+        {
+          "id": "e4",
+          "from": "on_playbtn",
+          "to": "synthplay"
+        },
+        {
+          "id": "e5",
+          "from": "on_next",
+          "to": "nextrow"
+        },
+        {
+          "id": "e6",
+          "from": "on_finished",
+          "to": "wfin"
+        },
+        {
+          "id": "e7",
+          "from": "wfin",
+          "to": "dfin"
+        },
+        {
+          "id": "e8",
+          "from": "dfin",
+          "to": "chord"
+        },
+        {
+          "id": "e9",
+          "from": "on_again",
+          "to": "restart"
+        }
       ]
     },
     "table": {
       "columns": [
-        { "key": "wave", "label": "音色" },
-        { "key": "title", "label": "名称" },
-        { "key": "desc", "label": "说明" },
-        { "key": "notes", "label": "示例音符" }
+        {
+          "key": "wave",
+          "label": "音色"
+        },
+        {
+          "key": "title",
+          "label": "名称"
+        },
+        {
+          "key": "desc",
+          "label": "说明"
+        },
+        {
+          "key": "notes",
+          "label": "示例音符"
+        }
       ],
       "rows": [
-        { "wave": "sine", "title": "正弦 · 柔和", "desc": "最纯净的波形，没有泛音——适合做提示音和温柔的背景", "notes": [{ "midi": 60, "dur": "4n" }, { "midi": 64, "dur": "4n" }, { "midi": 67, "dur": "2n" }] },
-        { "wave": "triangle", "title": "三角 · 木琴", "desc": "略带空心感的圆润音色，接近木琴或八音盒", "notes": [{ "midi": 67, "dur": "8n" }, { "midi": 64, "dur": "8n" }, { "midi": 60, "dur": "2n" }] },
-        { "wave": "square", "title": "方波 · 芯片", "desc": "只有通断两态的波形，是 8-bit 游戏机的经典音色", "notes": [{ "midi": 64, "dur": "8n" }, { "midi": 64, "dur": "8n" }, { "midi": 71, "dur": "2n" }] },
-        { "wave": "sawtooth", "title": "锯齿 · 明亮", "desc": "包含全部泛音的明亮波形，经典合成器主音（配了低通滤波会温暖很多）", "notes": [{ "midi": 60, "dur": "8n" }, { "midi": 62, "dur": "8n" }, { "midi": 64, "dur": "8n" }, { "midi": 67, "dur": "2n" }] },
-        { "wave": "fm", "title": "FM · 电钢", "desc": "频率调制合成：调制波让音色起音明亮、随后变纯，像电钢琴", "notes": [{ "midi": 65, "dur": "4n" }, { "midi": 69, "dur": "4n" }, { "midi": 72, "dur": "2n" }] },
-        { "wave": "bell", "title": "钟琴 · 空灵", "desc": "更高调制比的 FM，带自然衰减的长尾音，像风铃或编钟", "notes": [{ "midi": 72, "dur": "4n" }, { "midi": 76, "dur": "4n" }, { "midi": 79, "dur": "2n" }] }
+        {
+          "wave": "sine",
+          "title": "正弦 · 柔和",
+          "desc": "最纯净的波形，没有泛音——适合做提示音和温柔的背景",
+          "notes": [
+            {
+              "midi": 60,
+              "dur": "4n"
+            },
+            {
+              "midi": 64,
+              "dur": "4n"
+            },
+            {
+              "midi": 67,
+              "dur": "2n"
+            }
+          ]
+        },
+        {
+          "wave": "triangle",
+          "title": "三角 · 木琴",
+          "desc": "略带空心感的圆润音色，接近木琴或八音盒",
+          "notes": [
+            {
+              "midi": 67,
+              "dur": "8n"
+            },
+            {
+              "midi": 64,
+              "dur": "8n"
+            },
+            {
+              "midi": 60,
+              "dur": "2n"
+            }
+          ]
+        },
+        {
+          "wave": "square",
+          "title": "方波 · 芯片",
+          "desc": "只有通断两态的波形，是 8-bit 游戏机的经典音色",
+          "notes": [
+            {
+              "midi": 64,
+              "dur": "8n"
+            },
+            {
+              "midi": 64,
+              "dur": "8n"
+            },
+            {
+              "midi": 71,
+              "dur": "2n"
+            }
+          ]
+        },
+        {
+          "wave": "sawtooth",
+          "title": "锯齿 · 明亮",
+          "desc": "包含全部泛音的明亮波形，经典合成器主音（配了低通滤波会温暖很多）",
+          "notes": [
+            {
+              "midi": 60,
+              "dur": "8n"
+            },
+            {
+              "midi": 62,
+              "dur": "8n"
+            },
+            {
+              "midi": 64,
+              "dur": "8n"
+            },
+            {
+              "midi": 67,
+              "dur": "2n"
+            }
+          ]
+        },
+        {
+          "wave": "fm",
+          "title": "FM · 电钢",
+          "desc": "频率调制合成：调制波让音色起音明亮、随后变纯，像电钢琴",
+          "notes": [
+            {
+              "midi": 65,
+              "dur": "4n"
+            },
+            {
+              "midi": 69,
+              "dur": "4n"
+            },
+            {
+              "midi": 72,
+              "dur": "2n"
+            }
+          ]
+        },
+        {
+          "wave": "bell",
+          "title": "钟琴 · 空灵",
+          "desc": "更高调制比的 FM，带自然衰减的长尾音，像风铃或编钟",
+          "notes": [
+            {
+              "midi": 72,
+              "dur": "4n"
+            },
+            {
+              "midi": 76,
+              "dur": "4n"
+            },
+            {
+              "midi": 79,
+              "dur": "2n"
+            }
+          ]
+        }
       ]
     },
-    "flow": { "order": "sequential" }
+    "flow": {
+      "order": "sequential"
+    }
   }
 }

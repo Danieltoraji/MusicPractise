@@ -518,7 +518,7 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
               code: 'structure',
               nodeId: node.id,
               field: 'args',
-              message: `${where}: views.goto 需要视图 id（字符串字面量，如 "main"）`,
+              message: `${where}: views.goto 需要视图 id（字符串或 {id: '…'} 字面量；动态表达式仅运行时校验）`,
             })
           } else if (viewIdSet && !viewIdSet.has(id)) {
             issues.push({

@@ -12,7 +12,7 @@ import { strToU8, unzipSync, zipSync } from 'fflate'
 
 beforeEach(async () => {
   await db.resources.clear()
-  await ensureSeeded() // 5 个内置关卡入库
+  await ensureSeeded() // 10 个内置关卡入库
 })
 
 describe('打包 / 解包', () => {
@@ -48,7 +48,7 @@ describe('importDocuments', () => {
     expect(report.aborted).toBe(false)
     expect(report.added).toEqual([copy.id])
     expect(report.rejected).toHaveLength(0)
-    expect((await db.resources.count())).toBe(14) // 11 内置 + 1 新增
+    expect((await db.resources.count())).toBe(14) // 13 内置 + 1 新增
   })
 
   it('重复导入：同 id 同 version 跳过', async () => {

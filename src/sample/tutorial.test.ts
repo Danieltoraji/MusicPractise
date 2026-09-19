@@ -8,7 +8,6 @@ import type { Json } from '../engine/expr'
 import { loadLevelDoc } from '../library/validate'
 import { LevelSession, type SessionHost } from '../runtime/levelSession'
 import type { Effect } from '../runtime/componentDef'
-import type { LibraryRecord } from '../library/db'
 
 import tutorialDoc from './tutorial-hello.level.json'
 import synthLabDoc from './synth-lab.level.json'
@@ -80,14 +79,23 @@ describe('新手引导 · 交互教程（全流程可玩）', () => {
     expect(session.currentView).toBe('step3')
 
     // 第 3 步：播放（合成器效果）→ 答错 → 答对计分
+    // options 绑定断言：choice 选项来自数据表 $q.data.options（绑定断了测试即红）
+    expect(session.store.snapshot('choice1').state).toMatchObject({ options: ['Do', 'Re', 'Mi'] })
     session.dispatch('play_btn.clicked')
     await flush()
     const synth = effects.find((e) => e.type === 'audio.synth') as Extract<Effect, { type: 'audio.synth' }> | undefined
-    expect(synth).toMatchObject({ wave: 'triangle', mode: 'seq', notes: [{ midi: 64, dur: '2n' }] })
+    expect(synth).toMatchObject({ wave: 'triangle', mode: 'seq' })
+    // 音阶参考 + 目标音：Do → Re → Mi（最后的音就是题目）
+    expect((synth!.notes as unknown[]).length).toBe(3)
+    expect((synth!.notes as unknown[]).at(-1)).toMatchObject({ midi: 64, dur: '2n' })
     session.dispatch('choice1.chosen', { index: 0, value: 'Do' })
     await flush()
     expect((session.store.snapshot('s3_fb').state as { text: string }).text).toContain('不是这个')
     expect((session.store.snapshot('s3_next').state as { enabled?: boolean }).enabled).toBe(false)
+    session.dispatch('choice1.chosen', { index: 2, value: 'Mi' })
+    await flush()
+    expect(session.engine.vars.score).toBe(10)
+    // answered 锁：答对后重复派发同一选择不再计分（评审 P1-1 回归）
     session.dispatch('choice1.chosen', { index: 2, value: 'Mi' })
     await flush()
     expect(session.engine.vars.score).toBe(10)
@@ -125,15 +133,13 @@ describe('新手引导 · 交互教程（全流程可玩）', () => {
 
 describe('音色实验室 · 合成器示例（数据表驱动）', () => {
   it('行推进刷新音色标签；播放按当前行数据发声；末行结算；重开复位', async () => {
-    const rec = loaded(synthLabDoc) as unknown as LibraryRecord
-    const doc = (await import('../library/validate')).loadLevelDoc(synthLabDoc)
-    expect(doc.ok).toBe(true)
-    void rec
     const { session, effects, finished } = makeSession(loaded(synthLabDoc))
     session.start()
+    await flush()
 
     expect(session.currentView).toBe('lab')
     expect((session.store.snapshot('wave_label').state as { text: string }).text).toBe('正弦 · 柔和')
+    expect((session.store.snapshot('progress_label').state as { text: string }).text).toBe('第 1 / 6 个音色 · wave: sine')
 
     // 播放：按当前行的 wave/notes 发声
     session.dispatch('play_btn.clicked')

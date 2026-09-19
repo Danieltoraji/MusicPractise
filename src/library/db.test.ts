@@ -10,7 +10,7 @@ beforeEach(async () => {
 })
 
 describe('资源库（Dexie，简化单态）', () => {
-  it('ensureSeeded 把内置内容入库：5 关卡 + 入门系列 1 系列 2 专题', async () => {
+  it('ensureSeeded 把内置内容入库：10 关卡（含教程/示例）+ 入门系列 1 系列 2 专题', async () => {
     const levels = await listResources('level')
     expect(levels).toHaveLength(10)
     expect(levels.every((r) => r.builtIn === 1)).toBe(true)
