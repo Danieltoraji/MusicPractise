@@ -45,8 +45,22 @@ const KNOWN_COLUMN_LABELS: Record<string, string> = {
 /** Json → 表达式字面量源文本（对象键为标识符，与表达式引擎的对象字面量语法一致） */
 export function jsonToExprSource(v: Json): string {
   if (v === null) return 'null'
-  if (typeof v === 'string') return JSON.stringify(v)
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  if (typeof v === 'string') {
+    // 表达式词法只认 \n \t \r 与引号/反斜杠转义——控制字符/孤立代理对无法表达，诚实拒绝（评审 P2-2）
+    if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v) || /[\ud800-\udfff]/.test(v)) {
+      throw new Error('数据含无法用表达式字面量表示的控制字符或孤立代理对')
+    }
+    return JSON.stringify(v)
+  }
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) throw new Error(`数字无法用表达式字面量表示: ${v}`)
+    // 表达式数字词法不支持科学计数法（评审 P2-1）：整数走 BigInt 精确展开（toFixed 对 ≥1e21 仍返回指数串），
+    // 小数用 toFixed(20) 展开
+    const s = String(v)
+    if (!/e/i.test(s)) return s
+    return Number.isInteger(v) ? BigInt(v).toString() : v.toFixed(20).replace(/\.?0+$/, '')
+  }
+  if (typeof v === 'boolean') return String(v)
   if (Array.isArray(v)) return `[${v.map(jsonToExprSource).join(', ')}]`
   const parts = Object.entries(v).map(([k, val]) => `${k}: ${jsonToExprSource(val)}`)
   return `{ ${parts.join(', ')} }`
@@ -137,6 +151,12 @@ function compileLogicPatches(logic: GraphProgram, questions: LegacyQuestion[]): 
 
   const prefixNodes: GNode[] = []
   const prefixEdges: GEdge[] = []
+  // 前缀 id 与基础图撞车会让引擎索引互相覆盖（评审 P2-3）：编译期检测，诚实抛错
+  const baseIds = new Set(logic.nodes.map((n) => n.id))
+  const reserve = (id: string): string => {
+    if (baseIds.has(id)) throw new Error(`逻辑节点 id "${id}" 与迁移编译产物冲突——请重命名基础图中的同名节点`)
+    return id
+  }
   // 补丁里出现过的变量键：缺省补进 variables（初值 null），避免 lint「未声明变量」误报；
   // __row = 运行时当前行号（系统变量，loadRow 时写入，行门控据此判行）
   const patchVarKeys = new Set<string>(['__row'])
@@ -154,14 +174,14 @@ function compileLogicPatches(logic: GraphProgram, questions: LegacyQuestion[]): 
     // on level.questionLoaded → gate(v.__row == i) → …
     const onId = `q${i}_load`
     const gateId = `q${i}_gate`
-    prefixNodes.push({ id: onId, kind: 'on', event: 'level.questionLoaded' })
-    prefixNodes.push({ id: gateId, kind: 'branch', cond: `v.__row == ${i}` })
+    prefixNodes.push({ id: reserve(onId), kind: 'on', event: 'level.questionLoaded' })
+    prefixNodes.push({ id: reserve(gateId), kind: 'branch', cond: `v.__row == ${i}` })
     prefixEdges.push({ id: nextEdgeId(), from: onId, to: gateId })
 
     let chainTail = gateId
     for (const k of varKeys) {
       const assignId = `q${i}_var_${k}`
-      prefixNodes.push({ id: assignId, kind: 'assign', target: k, value: { expr: jsonToExprSource(vars[k] as Json) } })
+      prefixNodes.push({ id: reserve(assignId), kind: 'assign', target: k, value: { expr: jsonToExprSource(vars[k] as Json) } })
       prefixEdges.push({ id: nextEdgeId(), from: chainTail, to: assignId, ...(chainTail === gateId ? { port: 'true' as const } : {}) })
       chainTail = assignId
     }
@@ -171,7 +191,7 @@ function compileLogicPatches(logic: GraphProgram, questions: LegacyQuestion[]): 
       const frag = migrateLogicV1toV2({ variables: {}, rules: rules as never })
       const renamed = new Map<string, string>()
       const fragNodes = frag.nodes.map((n) => {
-        const id = `q${i}_${n.id}`
+        const id = reserve(`q${i}_${n.id}`)
         renamed.set(n.id, id)
         return { ...n, id }
       })

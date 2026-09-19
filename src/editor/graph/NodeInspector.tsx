@@ -53,8 +53,8 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
     }
   }
 
-  // 变量候选：关卡 variables（v3 起题目补丁变量已由迁移器并入声明）
-  const varNames = [...new Set(Object.keys(program.variables ?? {}))]
+  // 变量候选：关卡 variables（v3 起题目补丁变量已由迁移器并入声明）；__ 前缀为系统变量，对作者隐藏
+  const varNames = [...new Set(Object.keys(program.variables ?? {}).filter((n) => !n.startsWith('__')))]
 
   // 路径候选：程序里 on 事件的负载字段（如 staff1.noteClicked → event.midi）
   const refPaths: string[] = []

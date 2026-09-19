@@ -17,6 +17,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { ComponentInstance, LevelDoc } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { parseExpr, ExprError } from '../engine/expr'
+import { migrateDocToV3 } from '../engine/migrateDoc'
 import {
   addComponent,
   addTableColumn,
@@ -112,15 +113,25 @@ export function EditorPage({ id }: Props) {
     }
   }, [onHashChangeCapture])
 
-  // 装载：new = 空白模板；否则取库内文档。
+  // 装载：new = 空白模板；否则取库内文档（可能是 v1/v2 旧记录——装载即迁移出 v3，评审 P1-1）。
   // loadedIdRef 语义：同一关卡不重复装载（保护未保存编辑）；换 id（#/edit/A → #/edit/B）强制重装
   const loadedIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (record === 'loading' || record === undefined || record === null) return
     if (loadedIdRef.current === id) return
     loadedIdRef.current = id
-    if (record === 'new') setDoc(blankLevelDoc())
-    else setDoc(structuredClone((record as LibraryRecord).doc) as LevelDoc)
+    if (record === 'new') {
+      setDoc(blankLevelDoc())
+      return
+    }
+    try {
+      const migrated = migrateDocToV3((record as LibraryRecord).doc)
+      setDoc(migrated)
+    } catch (err) {
+      setSaveErrors([`文档迁移失败: ${err instanceof Error ? err.message : String(err)}`])
+      setDoc(null)
+      loadedIdRef.current = null
+    }
   }, [record, id])
   const selectedComp = doc?.content.components.find((c) => c.id === selected) ?? null
 
@@ -735,17 +746,12 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
               <label key={c.key} className="inspector-prop">
                 {c.label || c.key}
                 <input
-                  defaultValue={cellText(row[c.key])}
-                  onBlur={(e) => {
+                  value={cellText(row[c.key])}
+                  onChange={(e) => {
+                    // 受控：删行/插行后不会残留旧行文本（评审 P1-2——非受控 defaultValue 会串值写坏行）
                     const { value, error } = parseCell(e.currentTarget.value)
-                    if (error) {
-                      setColErr(`${c.key}: ${error}`)
-                      e.currentTarget.value = cellText(row[c.key])
-                      return
-                    }
-                    if (JSON.stringify(value) !== JSON.stringify(row[c.key] ?? null)) {
-                      onChange(updateTableCell(doc, i, { [c.key]: value }))
-                    }
+                    if (error) return // 非法 JSON 不提交，输入框保持作者文本
+                    onChange(updateTableCell(doc, i, { [c.key]: value }))
                   }}
                 />
               </label>
@@ -782,9 +788,10 @@ function JsonTab({ doc, onApply }: { doc: LevelDoc; onApply: (doc: LevelDoc) => 
               setErr('kind 必须是 level')
               return
             }
-            // 保留当前关卡 id：应用 JSON 改 id 会让保存落为新记录、URL 与库脱节
+            // 保留当前关卡 id：应用 JSON 改 id 会让保存落为新记录、URL 与库脱节；
+            // 迁移器统一出 v3（评审 P1-1：防止 JSON 页注入 v1 形态致画布崩溃）
             parsed.id = doc.id
-            onApply(parsed as LevelDoc)
+            onApply(migrateDocToV3(parsed))
             setErr('')
           } catch (e) {
             setErr(String(e instanceof Error ? e.message : e))

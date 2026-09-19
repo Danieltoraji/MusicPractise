@@ -17,7 +17,8 @@ interface Props {
 
 export function VariablesPanel({ prog, onSet, onRename, onRemove }: Props) {
   const vars = prog.variables ?? {}
-  const entries = Object.entries(vars)
+  // __ 前缀 = 系统变量（如行门控用的 __row）：运行时存在但不向作者开放改名/删除（评审 P2-6）
+  const entries = Object.entries(vars).filter(([name]) => !name.startsWith('__'))
   const [newName, setNewName] = useState('')
 
   const add = (): void => {

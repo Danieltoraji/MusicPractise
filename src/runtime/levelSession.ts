@@ -148,6 +148,7 @@ export class LevelSession {
   dispose(): void {
     this.stopAllTimers()
     this.engine.reset()
+    this.view = '' // 防御：dispose 后复用实例再 start 时，初始视图必须重新派发 view.entered（评审 P2-8）
   }
 
   /**
@@ -156,7 +157,7 @@ export class LevelSession {
    */
   private setView(id: string): void {
     if (!this.views.some((v) => v.id === id)) {
-      this.host.onLogicEvent?.({ kind: 'error', message: `views.goto 指向不存在的视图 "${id}"`, event: 'view.entered', t: Date.now() })
+      this.host.onLogicEvent?.({ kind: 'error', message: `views.goto 指向不存在的视图 "${id}"`, event: 'views.goto', t: Date.now() })
       return
     }
     if (this.view === id) return
@@ -176,6 +177,12 @@ export class LevelSession {
           this.store.applyBinding(comp.id, key, this.engine.resolve(raw))
         } catch (err) {
           console.error(`[session] 绑定解析失败 ${comp.id}.${key}:`, raw, err)
+          this.host.onLogicEvent?.({
+            kind: 'error',
+            message: `绑定解析失败 ${comp.id}.${key}: ${err instanceof Error ? err.message : String(err)}`,
+            event: 'binding',
+            t: Date.now(),
+          })
         }
       }
     }

@@ -102,6 +102,57 @@ describe('migrateDocToV3', () => {
     expect(() => migrateDocToV3({ ...v1Doc(), kind: 'series' })).toThrow(/kind/)
     expect(() => migrateDocToV3({ ...v1Doc(), schemaVersion: 2 })).toThrow(/schemaVersion/)
   })
+
+  it('logicPatch.appendRules 编译为行门控片段：on 入口插 v.__row 门控（评审 P2-15 固化）', () => {
+    const doc = migrateDocToV3(
+      v1Doc({
+        questions: [
+          { id: 'q1', data: {}, scoring: { max: 10 } },
+          {
+            id: 'q2',
+            data: {},
+            scoring: { max: 10 },
+            logicPatch: {
+              appendRules: [
+                {
+                  id: 'p1',
+                  on: 'x.ping',
+                  when: ['v.score >= 0'],
+                  do: [{ set: 'score', expr: 'v.score + 1' }],
+                  else: [{ set: 'score', expr: 'v.score - 1' }],
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    )
+    const nodes = doc.content.logic.nodes
+    const edges = doc.content.logic.edges
+    // 片段节点已前缀；on 入口原样保留（事件不变）
+    expect(nodes.find((n) => n.id === 'q1_p1_on')).toMatchObject({ kind: 'on', event: 'x.ping' })
+    // on 的唯一出边改为指向行门控（无端口），门控 true 出口接原 when 条件分支——when/else 端口边不受影响
+    expect(nodes.find((n) => n.id === 'q1_p1_on_rowgate')).toMatchObject({ kind: 'branch', cond: 'v.__row == 1' })
+    expect(edges.find((e) => e.from === 'q1_p1_on')).toMatchObject({ to: 'q1_p1_on_rowgate' })
+    const gateTrue = edges.find((e) => e.from === 'q1_p1_on_rowgate')
+    expect(gateTrue).toMatchObject({ port: 'true' })
+    expect(gateTrue!.to).not.toBe('q1_p1_on_rowgate')
+    // lint 零误报
+    expect(lintGraphProgram(doc.content.logic, { componentIds: ['label1', 'btn1'], viewIds: ['main'] })).toEqual([])
+  })
+
+  it('patch 前缀 id 与基础图节点撞车时诚实抛错（评审 P2-3）', () => {
+    const raw = v1Doc({
+      questions: [{ id: 'q1', data: {}, scoring: { max: 10 }, logicPatch: { variables: { answered: false } } }],
+    })
+    ;(raw.content as Record<string, unknown>).logic = {
+      logicVersion: 2,
+      variables: { score: 0 },
+      nodes: [{ id: 'q0_load', kind: 'on', event: 'level.questionLoaded' }],
+      edges: [],
+    }
+    expect(() => migrateDocToV3(raw)).toThrow(/冲突/)
+  })
 })
 
 describe('jsonToExprSource（Json → 表达式字面量）', () => {
@@ -113,5 +164,16 @@ describe('jsonToExprSource（Json → 表达式字面量）', () => {
     expect(jsonToExprSource([1, 'a'])).toBe('[1, "a"]')
     expect(jsonToExprSource({ ms: 30, repeat: false })).toBe('{ ms: 30, repeat: false }')
     expect(jsonToExprSource({ deep: { x: [1] } })).toBe('{ deep: { x: [1] } }')
+  })
+
+  it('科学计数法展开为普通十进制（表达式数字词法不支持 e 记法，评审 P2-1）', () => {
+    expect(jsonToExprSource(1e21)).toBe('1000000000000000000000')
+    expect(jsonToExprSource(1e-7)).toBe('0.0000001')
+  })
+
+  it('控制字符/孤立代理对/非有限数诚实拒绝（评审 P2-2）', () => {
+    expect(() => jsonToExprSource('a\u0001b')).toThrow(/控制字符/)
+    expect(() => jsonToExprSource('\ud800')).toThrow(/代理对/)
+    expect(() => jsonToExprSource(Infinity)).toThrow(/无法用表达式字面量表示/)
   })
 })

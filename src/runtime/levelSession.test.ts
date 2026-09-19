@@ -417,9 +417,8 @@ describe('LevelSession', () => {
     await flush()
     session.dispatch('staff1.noteClicked', {})
     await flush()
-    const errEvt = events.find((e) => e.kind === 'error')
+    const errEvt = events.find((e) => e.kind === 'error' && e.message?.includes('ghost.clear'))
     expect(errEvt).toBeTruthy()
-    expect(errEvt!.message).toContain('ghost.clear')
     expect(errEvt!.nodeId).toBeTruthy()
   })
 
@@ -448,9 +447,9 @@ describe('LevelSession', () => {
     await flush()
     expect(events.some((e) => e.kind === 'command' && e.path === 'sound1.play')).toBe(true)
     // 空 payload 下 event.midi 求值失败 → error 事件携带 nodeId（可定位节点）
-    const errEvt = events.find((e) => e.kind === 'error')
+    //（绑定解析失败的 error 无 nodeId，这里必须按 nodeId 过滤定位）
+    const errEvt = events.find((e) => e.kind === 'error' && e.nodeId)
     expect(errEvt).toBeTruthy()
-    expect(errEvt!.nodeId).toBeTruthy()
   })
 
   it('视图直调 applyCommand 的效果也经执行通道（strike 发声回归）', async () => {
