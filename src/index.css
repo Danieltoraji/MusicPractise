@@ -1515,3 +1515,58 @@ path.gedge-false {
   color: var(--accent);
   font-size: 11px;
 }
+
+/* ---------- 脚本页（3-3） ---------- */
+
+.script-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.script-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.script-toolbar-hint {
+  font-size: 12px;
+}
+.script-error {
+  font-weight: 600;
+}
+.script-stale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.script-stale button {
+  border: 1px solid var(--warn);
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink);
+}
+.script-stale button:hover {
+  background: #fef3c7;
+}
+.script-editor {
+  width: 100%;
+  min-height: 620px;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  resize: vertical;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+}

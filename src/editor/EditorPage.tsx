@@ -23,10 +23,12 @@ import {
   updateQuestion,
 } from './docState'
 
-type Tab = 'canvas' | 'graph' | 'questions' | 'json'
+type Tab = 'canvas' | 'graph' | 'script' | 'questions' | 'json'
 
 /** 节点图编辑器懒加载：@xyflow/react 体量较大，不进主包 */
 const GraphEditor = lazy(() => import('./graph/GraphEditor'))
+/** 脚本页与节点图同包域（依赖 script 引擎，体量小；保持同目录一致管理） */
+const ScriptTab = lazy(() => import('./graph/ScriptTab'))
 
 /** 表达式实时校验：语法错误返回消息，合法返回 null */
 export function checkExprText(text: string): string | null {
@@ -144,6 +146,7 @@ export function EditorPage({ id }: Props) {
         {([
           ['canvas', '画布'],
           ['graph', '节点图'],
+          ['script', '脚本'],
           ['questions', '题目'],
           ['json', 'JSON'],
         ] as [Tab, string][]).map(([t, label]) => (
@@ -175,6 +178,12 @@ export function EditorPage({ id }: Props) {
       {tab === 'graph' && (
         <Suspense fallback={<p className="muted">节点图加载中…</p>}>
           <GraphEditor doc={doc} onChange={update} />
+        </Suspense>
+      )}
+
+      {tab === 'script' && (
+        <Suspense fallback={<p className="muted">脚本加载中…</p>}>
+          <ScriptTab doc={doc} onChange={update} />
         </Suspense>
       )}
 
