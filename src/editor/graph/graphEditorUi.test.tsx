@@ -64,13 +64,15 @@ const baseDoc = (): LevelDoc =>
   }) as unknown as LevelDoc
 
 describe('GraphEditor（jsdom 冒烟）', () => {
-  it('渲染节点信息卡（参数摘要印卡）与节点库分组', () => {
+  it('渲染节点信息卡（中文摘要印卡）与节点库分组、画布对照图', () => {
     const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} />)
     expect(container.textContent).toContain('事件')
     expect(container.textContent).toContain('v.score = v.score + 1')
-    expect(container.textContent).toContain('level.started')
+    expect(container.textContent).toContain('当 关卡开始')
     expect(container.textContent).toContain('节点库')
     expect(container.textContent).toContain('实例动作')
+    expect(container.textContent).toContain('画布对照')
+    expect(container.textContent).toContain('点击组件：高亮图中引用它的节点')
   })
 
   it('点击节点库项添加节点（受控回写）', () => {
@@ -106,7 +108,7 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     }
     const container = renderEl(<GraphEditor doc={doc} onChange={() => {}} />)
     // 先点 call 节点（其草稿无 value 字段）
-    const callCard = [...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('sound1.play'))
+    const callCard = [...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('sound1·play'))
     act(() => callCard!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     // 立即切 assign 节点（渲染帧 1 就要安全）
     const assignCard = [...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('v.score = 0'))
@@ -115,7 +117,7 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     expect(container.textContent).toContain('v.score = 0')
   })
 
-  it('Inspector 编辑 branch 条件并回写', () => {
+  it('Inspector 编辑 branch 条件并回写（比较构造器：右操作数失焦提交）', () => {
     let doc = baseDoc()
     const onChange = vi.fn((next: LevelDoc) => {
       doc = next
@@ -127,29 +129,122 @@ describe('GraphEditor（jsdom 冒烟）', () => {
         ...doc.content,
         logic: {
           ...doc.content.logic,
-          nodes: [...doc.content.logic.nodes, { id: 'br1', kind: 'branch', cond: 'true', x: 600, y: 0 }],
+          nodes: [...doc.content.logic.nodes, { id: 'br1', kind: 'branch', cond: 'v.score >= 10', x: 600, y: 0 }],
         },
       },
     }
     const container = renderEl(<GraphEditor doc={doc} onChange={onChange} />)
-    // 模拟选中：直接操作 Inspector 需要选中态——通过渲染时 doc 已含 br1，点击节点卡
-    const card = [...container.querySelectorAll('.gnode')].find((el) => el.textContent?.includes('if (true)'))
+    const card = [...container.querySelectorAll('.gnode')].find((el) => el.textContent?.includes('如果 v.score >= 10'))
     expect(card).toBeTruthy()
     act(() => card!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
-    // Inspector 显示条件输入框
-    const input = [...container.querySelectorAll('.ginsp input')].find((el) => (el as HTMLInputElement).value === 'true')
-    expect(input).toBeTruthy()
+    // 比较构造器：右侧数字输入框（初值 10），改为 20 后失焦提交
+    const numInput = [...container.querySelectorAll('.ginsp input[type=number]')].find(
+      (el) => (el as HTMLInputElement).value === '10',
+    )
+    expect(numInput).toBeTruthy()
     act(() => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
-      setter.call(input, 'v.score >= 10')
-      input!.dispatchEvent(new Event('input', { bubbles: true }))
+      setter.call(numInput, '20')
+      numInput!.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    // 失焦即提交（评审 P1-3 修复：不再需要「应用」按钮）
     act(() => {
-      // React 的 onBlur 委托到可冒泡的 focusout；jsdom 中未聚焦元素 .blur() 是 no-op
-      input!.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+      numInput!.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
     })
     const patched = doc.content.logic.nodes.find((n) => n.id === 'br1')
-    expect(patched).toMatchObject({ kind: 'branch', cond: 'v.score >= 10' })
+    expect(patched).toMatchObject({ kind: 'branch', cond: 'v.score >= 20' })
+  })
+})
+
+/** 触发受控 select 的 change（select 的 change/input 双发，覆盖 React 的事件归一化） */
+function changeSelect(select: HTMLSelectElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!
+  setter.call(select, value)
+  select.dispatchEvent(new Event('input', { bubbles: true }))
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+describe('Inspector 结构化编辑（3-5 友好化）', () => {
+  function docWith(extraNodes: unknown[], comps?: LevelDoc['content']['components']): LevelDoc {
+    const doc = baseDoc()
+    return {
+      ...doc,
+      content: {
+        ...doc.content,
+        components: comps ?? doc.content.components,
+        logic: { ...doc.content.logic, nodes: [...doc.content.logic.nodes, ...(extraNodes as never[])] },
+      },
+    }
+  }
+
+  it('on 节点：事件下拉选择即提交（不手打事件名）', () => {
+    // 用「题目载入」起头避免与基础 doc 的 on1（关卡开始）摘要重名
+    let doc = docWith([{ id: 'on2', kind: 'on', event: 'level.questionLoaded', x: 0, y: 200 }])
+    const onChange = vi.fn((next: LevelDoc) => {
+      doc = next
+    })
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} />)
+    act(() => {
+      ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('当 题目载入'))!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const eventSelect = [...container.querySelectorAll('.ginsp select')].find(
+      (s) => (s as HTMLSelectElement).value === 'level.questionLoaded',
+    )
+    expect(eventSelect).toBeTruthy()
+    act(() => changeSelect(eventSelect as HTMLSelectElement, 'level.finished'))
+    expect(doc.content.logic.nodes.find((n) => n.id === 'on2')).toMatchObject({ event: 'level.finished' })
+  })
+
+  it('call 节点：切方法重置参数形态，「按契约补全」生成键值对', () => {
+    // onChange 即用新 doc 重渲染：后续 DOM 交互（补全按钮）建立在最新 Inspector 上
+    let current = docWith([{ id: 'c1', kind: 'call', target: 'sound1', method: 'stop', args: [], x: 600, y: 0 }])
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    let root!: Root
+    const rerender = (d: LevelDoc): void => {
+      current = d
+      act(() => root.render(<GraphEditor doc={d} onChange={rerender} />))
+    }
+    act(() => {
+      root = createRoot(container)
+      root.render(<GraphEditor doc={current} onChange={rerender} />)
+    })
+    act(() => {
+      ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('sound1·stop'))!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    // 动作下拉：stop（无参）→ play（有参）
+    const methodSelect = [...container.querySelectorAll('.ginsp select')].find((s) => (s as HTMLSelectElement).value === 'stop')
+    expect(methodSelect).toBeTruthy()
+    act(() => changeSelect(methodSelect as HTMLSelectElement, 'play'))
+    expect(current.content.logic.nodes.find((n) => n.id === 'c1')).toMatchObject({ method: 'play', args: ['{}'] })
+    // 按契约补全：sound.play 的 notes/tempo/mode 键值对
+    const fillBtn = [...container.querySelectorAll('.call-args-actions button')].find((b) => b.textContent?.includes('按契约补全'))
+    expect(fillBtn).toBeTruthy()
+    act(() => (fillBtn as HTMLElement).click())
+    const args = (current.content.logic.nodes.find((n) => n.id === 'c1') as { args: string[] }).args
+    expect(args[0]).toContain('notes:')
+    expect(args[0]).toContain('tempo:')
+    roots.push(root)
+    containers.push(container)
+  })
+
+  it('assign 节点：值模式切「查询」生成 RValue.call 并可选查询方法', () => {
+    const comps = [{ id: 'slider1', type: 'slider' }]
+    let doc = docWith([{ id: 'as2', kind: 'assign', target: 'score', value: { expr: '0' }, x: 600, y: 0 }], comps as LevelDoc['content']['components'])
+    const onChange = vi.fn((next: LevelDoc) => {
+      doc = next
+    })
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} />)
+    act(() => {
+      ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('v.score = 0'))!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const queryBtn = [...container.querySelectorAll('.ginsp button')].find((b) => b.textContent === '查询')
+    expect(queryBtn).toBeTruthy()
+    act(() => (queryBtn as HTMLElement).click())
+    expect(doc.content.logic.nodes.find((n) => n.id === 'as2')).toMatchObject({
+      value: { call: { target: 'slider1', method: 'getValue', args: [] } },
+    })
   })
 })

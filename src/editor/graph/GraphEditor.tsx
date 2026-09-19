@@ -45,6 +45,7 @@ import { graphCardNodeTypes, type GraphCardData } from './nodeTypes'
 import { NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
 import { NodeInspector } from './NodeInspector'
 import { VariablesPanel } from './VariablesPanel'
+import { CanvasMap } from './CanvasMap'
 import { clearRunLog, readRunLog } from '../../runtime/runLog'
 
 interface Props {
@@ -64,11 +65,28 @@ function GraphEditorInner({ doc, onChange }: Props) {
   const [showIssues, setShowIssues] = useState(false)
   const [showScript, setShowScript] = useState(false)
   const [showLog, setShowLog] = useState(false)
+  const [showMap, setShowMap] = useState(true)
+  const [mapFocus, setMapFocus] = useState<string | null>(null)
   const [logTick, setLogTick] = useState(0) // 手动刷新日志读取
   const [scriptError, setScriptError] = useState<string | null>(null)
 
   const palette = useMemo(() => buildPalette(doc), [doc])
   const templates = useMemo(() => buildTemplates(doc), [doc])
+  const compsInfo = useMemo(
+    () => doc.content.components.map((c) => ({ id: c.id, name: c.name, type: c.type })),
+    [doc],
+  )
+  // 画布对照图焦点组件 → 图中引用它的节点（on 该组件事件 / call 它 / assign 查询它）
+  const relatedIds = useMemo(() => {
+    const set = new Set<string>()
+    if (!mapFocus) return set
+    for (const n of program.nodes) {
+      if (n.kind === 'call' && n.target === mapFocus) set.add(n.id)
+      else if (n.kind === 'assign' && 'call' in n.value && n.value.call.target === mapFocus) set.add(n.id)
+      else if (n.kind === 'on' && (n.event.startsWith(`${mapFocus}.`) || n.event.startsWith(`${mapFocus}:`))) set.add(n.id)
+    }
+    return set
+  }, [mapFocus, program])
   const lintIssues = useMemo(
     () =>
       lintGraphProgramDetailed(program, {
@@ -121,7 +139,8 @@ function GraphEditorInner({ doc, onChange }: Props) {
         drag ?? (node.x !== undefined && node.y !== undefined ? { x: node.x, y: node.y } : fallbackPos.get(node.id))
       const position = { x: base?.x ?? 0, y: base?.y ?? 0 }
       const errors = issuesByNode.get(node.id)
-      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}`
+      const related = relatedIds.has(node.id)
+      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}`
       const prev = prevMap.get(node.id)
       if (prev && prevSig.get(node.id) === signature) {
         nextMap.set(node.id, prev)
@@ -132,7 +151,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
         id: node.id,
         type: 'graphCard',
         position,
-        data: { node, errors },
+        data: { node, errors, comps: compsInfo, related },
         width: NODE_W,
         height: NODE_H,
       }
@@ -142,7 +161,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
     })
     nodeCacheRef.current = { map: nextMap, sig: nextSig }
     return list
-  }, [program, fallbackPos, issuesByNode, dragPos])
+  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, relatedIds])
 
   const rfEdges: Edge[] = useMemo(
     () =>
@@ -271,6 +290,9 @@ function GraphEditorInner({ doc, onChange }: Props) {
         <button type="button" className={showLog ? 'active' : ''} onClick={() => setShowLog((v) => !v)} title="查看最近一次试运行的逻辑错误与命令轨迹">
           运行日志{runLog.length > 0 ? `（${runLog.length}）` : ''}
         </button>
+        <button type="button" className={showMap ? 'active' : ''} onClick={() => setShowMap((v) => !v)} title="角落显示关卡画布缩略图，点击组件高亮相关节点">
+          画布对照
+        </button>
         <span className="muted graph-toolbar-hint">
           右键画布空白加节点 · 拖端口连线（真/假出口）· 双击连线断开 · Delete 删除选中节点
         </span>
@@ -348,9 +370,20 @@ function GraphEditorInner({ doc, onChange }: Props) {
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={16} />
-            <MiniMap pannable zoomable />
-            <Controls showInteractive={false} />
+          <MiniMap pannable zoomable />
+          <Controls showInteractive={false} />
           </ReactFlow>
+          {showMap && (
+            <CanvasMap
+              comps={doc.content.components}
+              focusId={mapFocus}
+              onToggleFocus={(id) => setMapFocus((cur) => (cur === id ? null : id))}
+              onClose={() => {
+                setShowMap(false)
+                setMapFocus(null)
+              }}
+            />
+          )}
           {menu && (
             <NodeContextMenu
               groups={palette}

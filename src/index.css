@@ -1325,6 +1325,168 @@ path.gedge-false {
   font-size: 11.5px;
 }
 
+/* ---------- 节点结构化控件（3-5 友好化） ---------- */
+
+.opv {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.opv input,
+.opv select {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  min-width: 0;
+}
+.opv-modes {
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.opv-modes button {
+  flex: 1;
+  padding: 2px 4px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.opv-bool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.cond-b {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cond-b-op {
+  align-self: flex-start;
+  min-width: 70px;
+}
+.cond-b-hint {
+  font-size: 11.5px;
+}
+.call-args {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.call-args-doc {
+  font-size: 11px;
+  font-family: Consolas, monospace;
+}
+.call-args-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.call-args-actions button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.query-call {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.query-call select {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+/* ---------- 画布对照小图（3-5） ---------- */
+
+.canvas-map {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 12;
+  width: 240px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.canvas-map-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.canvas-map-head button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1;
+}
+.canvas-map-body {
+  position: relative;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+.canvas-map-box {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  border: 1.5px solid #94a3b8;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  overflow: hidden;
+}
+.canvas-map-box span {
+  font-size: 10px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.canvas-map-box.is-ghost {
+  border-style: dashed;
+  opacity: 0.6;
+}
+.canvas-map-box.is-focus {
+  outline: 2px solid var(--accent);
+  background: #e0f2fe;
+}
+.canvas-map-empty {
+  padding: 12px 6px;
+  text-align: center;
+  font-size: 11.5px;
+}
+.canvas-map-tip {
+  font-size: 10.5px;
+}
+
+/* 画布对照点击后的相关节点高亮 */
+.gnode.is-related {
+  outline: 2px dashed #0ea5e9;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.18);
+}
+
 /* ---------- 节点图：变量/日志/问题列表/脚本覆盖层（3-2b） ---------- */
 
 .gvars {
