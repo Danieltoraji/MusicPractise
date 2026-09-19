@@ -9,6 +9,7 @@ import { db } from '../library/db'
 import type { LibraryRecord } from '../library/db'
 import { loadLevelDoc } from '../library/validate'
 import { putResource } from '../library/db'
+import { ErrorBoundary } from '../library/ErrorBoundary'
 import { allContracts, getDef } from '../runtime/store'
 import type { ComponentInstance, LevelDoc, Question } from '../engine/level'
 import type { Json } from '../engine/expr'
@@ -156,14 +157,27 @@ export function EditorPage({ id }: Props) {
         ))}
       </div>
 
-      {tab === 'canvas' && (
-        <EditorCanvas
-          doc={doc}
-          selected={selected}
-          onSelect={setSelected}
-          onChange={update}
-        />
-      )}
+      <ErrorBoundary>
+        {tab === 'canvas' && (
+          <EditorCanvas doc={doc} selected={selected} onSelect={setSelected} onChange={update} />
+        )}
+
+        {tab === 'graph' && (
+          <Suspense fallback={<p className="muted">节点图加载中…</p>}>
+            <GraphEditor doc={doc} onChange={update} />
+          </Suspense>
+        )}
+
+        {tab === 'script' && (
+          <Suspense fallback={<p className="muted">脚本加载中…</p>}>
+            <ScriptTab doc={doc} onChange={update} />
+          </Suspense>
+        )}
+
+        {tab === 'questions' && <QuestionsEditor doc={doc} onChange={update} />}
+
+        {tab === 'json' && <JsonTab doc={doc} onApply={update} />}
+      </ErrorBoundary>
       {tab === 'canvas' && selectedComp && (
         <Inspector
           comp={selectedComp}
@@ -175,25 +189,7 @@ export function EditorPage({ id }: Props) {
         />
       )}
 
-      {tab === 'graph' && (
-        <Suspense fallback={<p className="muted">节点图加载中…</p>}>
-          <GraphEditor doc={doc} onChange={update} />
-        </Suspense>
-      )}
 
-      {tab === 'script' && (
-        <Suspense fallback={<p className="muted">脚本加载中…</p>}>
-          <ScriptTab doc={doc} onChange={update} />
-        </Suspense>
-      )}
-
-      {tab === 'questions' && (
-        <QuestionsEditor doc={doc} onChange={update} />
-      )}
-
-      {tab === 'json' && (
-        <JsonTab doc={doc} onApply={update} />
-      )}
     </div>
   )
 }

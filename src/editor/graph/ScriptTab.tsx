@@ -4,7 +4,7 @@
  * 编辑后「应用」→ parseScript → IR 回写（变量保留、节点图重建）；解析失败显示行:列错误且 doc 不变。
  * 文本与 IR 的双向漂移用「基线签名 + 黄条」提示（重新生成 / 强制应用），不做弹窗阻断。
  */
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LevelDoc } from '../../engine/level'
 import type { GraphProgram } from '../../engine/graphProgram'
 import { generateScript, parseScript, ScriptError } from '../../engine/script'
@@ -27,51 +27,72 @@ interface ScriptDraft {
   text: string
   baseline: string
   baselineSig: string
+  /** generateScript 失败（图超出伪代码结构化子集）时的错误消息；null = 正常 */
+  genError: string | null
 }
 const drafts = new Map<string, ScriptDraft>()
+
+function genDraft(prog: GraphProgram): ScriptDraft {
+  try {
+    const baseline = generateScript(prog)
+    return { text: baseline, baseline, baselineSig: signatureOf(prog), genError: null }
+  } catch (err) {
+    // 图超出伪代码结构化子集（多路径汇入/循环体不回头等）：可读降级，不白屏
+    return {
+      text: '',
+      baseline: '',
+      baselineSig: '',
+      genError: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
 
 export function ScriptTab({ doc, onChange }: Props) {
   const program = doc.content.logic
 
-  const [text, setText] = useState(() => drafts.get(doc.id)?.text ?? generateScript(program))
-  const [baseline, setBaseline] = useState(() => drafts.get(doc.id)?.baseline ?? text)
-  const [baselineSig, setBaselineSig] = useState(() => drafts.get(doc.id)?.baselineSig ?? signatureOf(program))
-  // 挂载时判定：缓存基线 ≠ 当前 IR → 其它视图改过逻辑
-  const [irStale] = useState(() => {
+  const [draft, setDraft] = useState<ScriptDraft>(() => {
+    const cached = drafts.get(doc.id)
+    if (cached) return cached
+    return genDraft(program)
+  })
+  // 挂载时判定：缓存基线 ≠ 当前 IR → 其它视图（节点图/JSON）改过逻辑，文本已过期
+  const [irStale, setIrStale] = useState<boolean>(() => {
     const cached = drafts.get(doc.id)
     return cached ? cached.baselineSig !== signatureOf(program) : false
   })
   const [parseError, setParseError] = useState<ScriptError | null>(null)
   const [appliedTip, setAppliedTip] = useState<string | null>(null)
 
-  // 草稿持久缓存（卸载/切 Tab 不丢）
-  drafts.set(doc.id, { text, baseline, baselineSig })
+  // 草稿持久缓存（卸载/切 Tab 不丢）；经 effect 同步，避免渲染期副作用
+  useEffect(() => {
+    drafts.set(doc.id, draft)
+  }, [doc.id, draft])
 
-  const textDirty = text !== baseline
+  const { text, genError } = draft
+  const textDirty = text !== draft.baseline
 
   const regenerate = (): void => {
-    const fresh = generateScript(program)
-    setBaseline(fresh)
-    setBaselineSig(signatureOf(program))
-    setText(fresh)
+    const fresh = genDraft(program)
+    setDraft(fresh)
+    setIrStale(false)
     setParseError(null)
     setAppliedTip(null)
-    drafts.set(doc.id, { text: fresh, baseline: fresh, baselineSig: signatureOf(program) })
+    void fresh
   }
 
   const apply = (): void => {
+    if (genError) return
     try {
       const next = parseScript(text, { variables: program.variables, idPrefix: ID_PREFIX })
       const nextSig = signatureOf(next)
-      setBaselineSig(nextSig)
-      setBaseline(text)
+      setDraft({ text, baseline: text, baselineSig: nextSig, genError: null })
+      setIrStale(false)
       setParseError(null)
       setAppliedTip(`已应用（${next.nodes.length} 节点 / ${next.edges.length} 连线；节点图已按脚本重建）`)
-      drafts.set(doc.id, { text, baseline: text, baselineSig: nextSig })
       onChange({ ...doc, content: { ...doc.content, logic: next } })
     } catch (e) {
       if (e instanceof ScriptError) setParseError(e)
-      else setParseError(new ScriptError(e instanceof Error ? e.message : String(e), 0, 0))
+      else setParseError(null)
     }
   }
 
@@ -82,7 +103,7 @@ export function ScriptTab({ doc, onChange }: Props) {
       const el = e.currentTarget
       const { selectionStart, selectionEnd, value } = el
       const next = `${value.slice(0, selectionStart)}  ${value.slice(selectionEnd)}`
-      setText(next)
+      setDraft((d) => ({ ...d, text: next }))
       requestAnimationFrame(() => {
         el.selectionStart = el.selectionEnd = selectionStart + 2
       })
@@ -95,13 +116,16 @@ export function ScriptTab({ doc, onChange }: Props) {
     return { handlers, lines: text.split('\n').length }
   }, [text])
 
+  // 陈旧且文本干净：无可应用的旧文本（应用=静默覆盖新 IR），禁用；须先编辑或重新生成
+  const applyDisabled = !!genError || (irStale && !textDirty)
+
   return (
     <div className="script-tab">
       <div className="script-toolbar">
-        <button type="button" className="primary" onClick={apply} disabled={!textDirty && !irStale && !parseError}>
+        <button type="button" className="primary" onClick={apply} disabled={applyDisabled}>
           应用到节点图
         </button>
-        <button type="button" onClick={regenerate} title="丢弃当前文本，从节点图重新生成脚本">
+        <button type="button" onClick={regenerate} disabled={!!genError} title="丢弃当前文本，从节点图重新生成脚本">
           从节点图重新生成
         </button>
         <span className="muted script-toolbar-hint">
@@ -113,15 +137,22 @@ export function ScriptTab({ doc, onChange }: Props) {
           解析失败：第 {parseError.line} 行第 {parseError.col} 列——{parseError.message.replace(/^第 \d+ 行第 \d+ 列: /, '')}
         </div>
       )}
-      {irStale && textDirty && (
+      {irStale && !genError && (
         <div className="editor-lint script-stale">
-          节点图/JSON 中的逻辑已被修改，当前文本基于旧版本。
+          {textDirty
+            ? '节点图/JSON 中的逻辑已被修改，当前文本基于旧版本。'
+            : '节点图/JSON 中的逻辑已被修改（当前文本无未应用修改）。'}
           <button type="button" onClick={regenerate}>
-            重新生成（丢弃文本）
+            重新生成（对齐节点图）
           </button>
           <button type="button" onClick={apply}>
             仍要应用当前文本（覆盖节点图）
           </button>
+        </div>
+      )}
+      {genError && (
+        <div className="editor-errors script-error">
+          当前逻辑图超出伪代码能表达的结构（{genError}）——请在节点图中简化该结构，或查看 JSON。
         </div>
       )}
       {appliedTip && <div className="editor-saved">{appliedTip}</div>}
@@ -129,7 +160,11 @@ export function ScriptTab({ doc, onChange }: Props) {
         className="script-editor"
         spellCheck={false}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        disabled={!!genError}
+        onChange={(e) => {
+          setDraft((d) => ({ ...d, text: e.target.value }))
+          setParseError(null) // 编辑即清除旧错误定位（P2-1）
+        }}
         onKeyDown={onTextareaKeyDown}
       />
     </div>
