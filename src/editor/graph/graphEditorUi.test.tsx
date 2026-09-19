@@ -41,14 +41,15 @@ afterEach(() => {
 
 const baseDoc = (): LevelDoc =>
   ({
-    schemaVersion: 1,
+    schemaVersion: 3,
     kind: 'level',
     id: 'res_x',
     version: '0.1.0',
     meta: { title: '节点图测试' },
     refs: [],
     content: {
-      components: [{ id: 'sound1', type: 'sound', visible: false }],
+      views: [{ id: 'main', name: '主视图', template: true }],
+      components: [{ id: 'sound1', type: 'sound', visible: false, view: 'main' }],
       logic: {
         logicVersion: 2,
         variables: { score: 0 },
@@ -58,7 +59,8 @@ const baseDoc = (): LevelDoc =>
         ],
         edges: [{ id: 'e1', from: 'on1', to: 'as1' }],
       },
-      questions: [{ id: 'q1', data: {}, scoring: { max: 10 } }],
+      table: { columns: [], rows: [] },
+      questions: [],
       flow: {},
     },
   }) as unknown as LevelDoc

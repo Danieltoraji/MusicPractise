@@ -8,7 +8,7 @@ import type { Json } from '../../engine/expr'
 import type { GNode } from '../../engine/graphProgram'
 import { allContracts } from '../../runtime/store'
 
-export type PaletteGroupId = 'event' | 'action' | 'level' | 'variable' | 'flow'
+export type PaletteGroupId = 'event' | 'action' | 'level' | 'view' | 'variable' | 'flow'
 
 /** 分布式 Omit：保留 union 各成员的特定字段（普通 Omit 会塌缩成交集） */
 type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never
@@ -166,10 +166,19 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
 
   // level 伪实例动作
   const levelItems: PaletteItem[] = [
-    { key: 'lvl-next', label: '进入下一题', desc: 'level.next——末题则自动结算', make: (pos) => ({ kind: 'call', target: 'level', method: 'next', args: [], ...at(pos) }) },
+    { key: 'lvl-next', label: '进入下一题', desc: 'level.next——推进数据表到下一行；有模版视图则自动切换过去，末行则结算', make: (pos) => ({ kind: 'call', target: 'level', method: 'next', args: [], ...at(pos) }) },
     { key: 'lvl-restart', label: '重开本关', desc: 'level.restart——变量/组件状态重置并重新开始', make: (pos) => ({ kind: 'call', target: 'level', method: 'restart', args: [], ...at(pos) }) },
     { key: 'lvl-finish', label: '结算关卡', desc: 'level.finish——主动结算，可传 { passed: false } 强制未通过', make: (pos) => ({ kind: 'call', target: 'level', method: 'finish', args: [], ...at(pos) }) },
   ]
+
+  // 视图组（v3）：每个视图一个「前往视图」；进入视图会派发 view.entered
+  const views = doc.content.views?.length ? doc.content.views : [{ id: 'main', name: '主视图' }]
+  const viewItems: PaletteItem[] = views.map((v) => ({
+    key: `view-goto-${v.id}`,
+    label: `前往 ${v.name || v.id}`,
+    desc: `views.goto("${v.id}")——切换到视图后派发 view.entered（payload: view）`,
+    make: (pos) => ({ kind: 'call', target: 'views', method: 'goto', args: [`"${v.id}"`], ...at(pos) }),
+  }))
 
   // 变量赋值组：按已声明变量
   const variableItems: PaletteItem[] = Object.keys(doc.content.logic.variables ?? {}).map((name) => ({
@@ -193,6 +202,7 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
     { id: 'event', label: '事件', hint: '执行流的唯一起点', items: eventItems },
     { id: 'action', label: '实例动作', hint: '调用组件命令', items: actionItems },
     { id: 'level', label: '关卡', hint: 'level 伪实例的方法', items: levelItems },
+    { id: 'view', label: '视图', hint: 'views 伪实例的方法（互斥视图切换）', items: viewItems },
     { id: 'variable', label: '变量赋值', hint: '给已声明变量赋值', items: variableItems },
     { id: 'flow', label: '控制流', hint: '分支 / 循环 / 等待 / 触发', items: flowItems },
   ]

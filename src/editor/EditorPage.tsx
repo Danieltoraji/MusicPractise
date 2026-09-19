@@ -1,5 +1,6 @@
 /**
- * 关卡编辑器：组件面板 / 画布拖放 / 属性检查器 / 节点图（逻辑）/ 题目编辑 / JSON 视图 / 保存与试运行。
+ * 关卡编辑器：视图管理 / 组件面板 / 画布拖放 / 属性检查器（含数据映射） / 节点图（逻辑）/ 数据表 / JSON / 保存与试运行。
+ * v3：关卡 = 互斥视图（视图管理条 + 只渲染当前视图组件）+ 数据表（取代 questions，q.* 指向当前行）。
  * 组件类型与事件/命令枚举全部来自组件注册表契约（单一来源）。
  * 节点图编辑器为懒加载（@xyflow/react 不进主包）；代码页随 3-3 回归。
  */
@@ -13,20 +14,29 @@ import { allContracts, ComponentStore, getDef } from '../runtime/store'
 import { ComponentView } from '../components/views'
 import { makeDirtyHashHandler } from './graph/dirtyGuard'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ComponentInstance, LevelDoc, Question } from '../engine/level'
+import type { ComponentInstance, LevelDoc } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { parseExpr, ExprError } from '../engine/expr'
 import {
   addComponent,
+  addTableColumn,
+  addTableRow,
+  addView,
   blankLevelDoc,
   parseJsonText,
   removeComponent,
+  removeTableColumn,
+  removeTableRow,
+  removeView,
+  renameTableColumn,
   setMeta,
   updateComponent,
-  updateQuestion,
+  updateTableCell,
+  updateTableColumnLabel,
+  updateView,
 } from './docState'
 
-type Tab = 'canvas' | 'graph' | 'script' | 'questions' | 'json'
+type Tab = 'canvas' | 'graph' | 'script' | 'table' | 'json'
 
 /** 节点图编辑器懒加载：@xyflow/react 体量较大，不进主包 */
 const GraphEditor = lazy(() => import('./graph/GraphEditor'))
@@ -188,7 +198,7 @@ export function EditorPage({ id }: Props) {
           ['canvas', '画布'],
           ['graph', '节点图'],
           ['script', '脚本'],
-          ['questions', '题目'],
+          ['table', '数据表'],
           ['json', 'JSON'],
         ] as [Tab, string][]).map(([t, label]) => (
           <button key={t} type="button" className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
@@ -214,12 +224,13 @@ export function EditorPage({ id }: Props) {
           </Suspense>
         )}
 
-        {tab === 'questions' && <QuestionsEditor doc={doc} onChange={update} />}
+        {tab === 'table' && <TableEditor doc={doc} onChange={update} />}
 
         {tab === 'json' && <JsonTab doc={doc} onApply={update} />}
       </ErrorBoundary>
       {tab === 'canvas' && selectedComp && (
         <Inspector
+          doc={doc}
           comp={selectedComp}
           onChange={(patch) => update(updateComponent(doc, selectedComp.id, patch))}
           onRemove={() => {
@@ -228,14 +239,12 @@ export function EditorPage({ id }: Props) {
           }}
         />
       )}
-
-
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// 画布 + 组件面板
+// 画布 + 视图管理 + 组件面板
 // ---------------------------------------------------------------------------
 
 function EditorCanvas({
@@ -251,6 +260,9 @@ function EditorCanvas({
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: string; grabX: number; grabY: number; rect: DOMRect } | null>(null)
+  // 当前编辑的视图（组件互斥渲染的编辑侧对应物；不随 doc 变化重置）
+  const [view, setView] = useState(doc.content.views[0]?.id ?? 'main')
+  const currentView = doc.content.views.some((v) => v.id === view) ? view : (doc.content.views[0]?.id ?? 'main')
 
   function onBoxPointerDown(e: React.PointerEvent, comp: ComponentInstance): void {
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -287,6 +299,8 @@ function EditorCanvas({
     return s
   }, [doc.content.components])
 
+  const viewComps = doc.content.components.filter((c) => (c.view ?? doc.content.views[0]?.id) === currentView)
+
   return (
     <div className="editor-canvas-layout">
       <div className="palette">
@@ -297,7 +311,7 @@ function EditorCanvas({
             {palette
               .filter((c) => c.category === cat)
               .map((c) => (
-                <button key={c.type} type="button" onClick={() => onChange(addComponent(doc, c.type))}>
+                <button key={c.type} type="button" onClick={() => onChange(addComponent(doc, c.type, currentView))}>
                   + {c.displayName}
                 </button>
               ))}
@@ -305,37 +319,80 @@ function EditorCanvas({
         ))}
       </div>
 
-      <div
-        ref={canvasRef}
-        className="editor-canvas"
-        onPointerDown={() => onSelect(null)}
-      >
-        {doc.content.components.map((comp) => (
-          <div
-            key={comp.id}
-            className={`editor-box ${selected === comp.id ? 'is-selected' : ''} ${comp.visible === false ? 'is-ghost' : ''}`}
-            style={comp.layout ? { left: comp.layout.x, top: comp.layout.y, width: comp.layout.w, height: comp.layout.h } : undefined}
-            data-comp-type={comp.type}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              onBoxPointerDown(e, comp)
-            }}
-            onPointerMove={(e) => onBoxPointerMove(e, comp)}
-            onPointerUp={onBoxPointerUp}
-            onPointerCancel={onBoxPointerUp}
-            title={`${comp.type} · ${comp.name ?? comp.id}`}
-          >
-            <div className="editor-box-preview" inert={true as unknown as boolean}>
-              <ComponentView spec={{ ...comp, visible: true }} store={previewStore} emit={noopEmit} />
+      <div className="canvas-main">
+        <div className="views-bar">
+          {doc.content.views.map((v) => (
+            <span key={v.id} className={`views-chip${v.id === currentView ? ' is-current' : ''}`} title={v.id}>
+              <button type="button" className="views-open" onClick={() => setView(v.id)}>
+                {v.id === currentView ? '▸ ' : ''}
+                {v.name || v.id}
+                {v.template ? ' 📋' : ''}
+              </button>
+              <button
+                type="button"
+                className={v.template ? 'views-tpl on' : 'views-tpl'}
+                title={v.template ? '模版视图：换行后自动切换到这里并重放数据绑定（点击取消）' : '设为模版视图（换行后自动切换到这里）'}
+                onClick={() => onChange(updateView(doc, v.id, { template: !v.template }))}
+              >
+                ⭐
+              </button>
+              <button
+                type="button"
+                className="views-del"
+                title={doc.content.views.length <= 1 ? '至少保留一个视图' : `删除视图 ${v.name || v.id}（其组件一并删除）`}
+                onClick={() => {
+                  if (doc.content.views.length <= 1) return
+                  const comps = doc.content.components.filter((c) => (c.view ?? doc.content.views[0].id) === v.id)
+                  if (comps.length > 0 && !window.confirm(`视图「${v.name || v.id}」还有 ${comps.length} 个组件，删除将一并移除。确定？`)) return
+                  onChange(removeView(doc, v.id))
+                  if (v.id === currentView) setView(doc.content.views.find((x) => x.id !== v.id)?.id ?? 'main')
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <button type="button" onClick={() => {
+            const { doc: next, id } = addView(doc)
+            onChange(next)
+            setView(id)
+          }}>
+            + 视图
+          </button>
+          <span className="muted views-hint">互斥视图：运行时只渲染当前视图 · 📋/⭐ = 模版视图（换行自动切换+重放绑定）</span>
+        </div>
+        <div
+          ref={canvasRef}
+          className="editor-canvas"
+          onPointerDown={() => onSelect(null)}
+        >
+          {viewComps.map((comp) => (
+            <div
+              key={comp.id}
+              className={`editor-box ${selected === comp.id ? 'is-selected' : ''} ${comp.visible === false ? 'is-ghost' : ''}`}
+              style={comp.layout ? { left: comp.layout.x, top: comp.layout.y, width: comp.layout.w, height: comp.layout.h } : undefined}
+              data-comp-type={comp.type}
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                onBoxPointerDown(e, comp)
+              }}
+              onPointerMove={(e) => onBoxPointerMove(e, comp)}
+              onPointerUp={onBoxPointerUp}
+              onPointerCancel={onBoxPointerUp}
+              title={`${comp.type} · ${comp.name ?? comp.id}`}
+            >
+              <div className="editor-box-preview" inert={true as unknown as boolean}>
+                <ComponentView spec={{ ...comp, visible: true }} store={previewStore} emit={noopEmit} />
+              </div>
+              <span className="box-label">{comp.name ?? comp.id}</span>
             </div>
-            <span className="box-label">{comp.name ?? comp.id}</span>
-          </div>
-        ))}
-        {doc.content.components.length === 0 && (
-          <p className="muted" style={{ padding: 24 }}>
-            从左侧组件面板添加组件
-          </p>
-        )}
+          ))}
+          {viewComps.length === 0 && (
+            <p className="muted" style={{ padding: 24 }}>
+              当前视图没有组件——从左侧组件面板添加
+            </p>
+          )}
+        </div>
       </div>
 
       <InspectorHint />
@@ -352,14 +409,16 @@ function InspectorHint() {
 }
 
 // ---------------------------------------------------------------------------
-// 属性检查器
+// 属性检查器（含数据映射：模版视图的「字段 → 显示值」绑定）
 // ---------------------------------------------------------------------------
 
 function Inspector({
+  doc,
   comp,
   onChange,
   onRemove,
 }: {
+  doc: LevelDoc
   comp: ComponentInstance
   onChange: (patch: Partial<ComponentInstance>) => void
   onRemove: () => void
@@ -413,6 +472,9 @@ function Inspector({
     </label>
   )
 
+  const bindingSlots = Object.keys(contract.bindings ?? {})
+  const columnKeys = doc.content.table.columns.map((c) => c.key)
+
   return (
     <div className="inspector">
       <b>属性 · {comp.type}</b>
@@ -421,6 +483,14 @@ function Inspector({
       </label>
       <label>
         <input type="checkbox" checked={comp.visible !== false} onChange={(e) => onChange({ visible: e.target.checked })} /> 可见
+      </label>
+      <label>
+        所属视图
+        <select value={comp.view ?? doc.content.views[0]?.id ?? 'main'} onChange={(e) => onChange({ view: e.target.value })}>
+          {doc.content.views.map((v) => (
+            <option key={v.id} value={v.id}>{v.name || v.id}</option>
+          ))}
+        </select>
       </label>
       <div className="inspector-layout">
         {num('X', 'x')}
@@ -476,6 +546,32 @@ function Inspector({
           })}
         </div>
       )}
+      {bindingSlots.length > 0 && (
+        <div className="inspector-bindings">
+          <b>数据映射（字段 → 显示值）</b>
+          <p className="muted">选一列后，组件进入视图/换行时自动显示该行的值（$q.列名）</p>
+          {bindingSlots.map((slot) => {
+            const raw = (comp.bindings ?? {}) as Record<string, Json>
+            const cur = typeof raw[slot] === 'string' ? (raw[slot] as string) : ''
+            return (
+              <label key={slot} className="inspector-prop">
+                {slot}
+                <input
+                  value={cur}
+                  list="inspector-column-options"
+                  placeholder="（未绑定）"
+                  onChange={(e) => onChange({ bindings: { ...raw, [slot]: e.target.value } })}
+                />
+              </label>
+            )
+          })}
+          <datalist id="inspector-column-options">
+            {columnKeys.map((k) => (
+              <option key={k} value={`$q.${k}`} />
+            ))}
+          </datalist>
+        </div>
+      )}
       <details
         onToggle={(e) => {
           if ((e.target as HTMLDetailsElement).open) setPropsText(JSON.stringify(comp.props ?? {}, null, 2))
@@ -488,12 +584,19 @@ function Inspector({
           {propsErr && <span className="tone-error">{propsErr}</span>}
         </label>
       </details>
-      {comp.bindings && (
-        <label>
-          bindings JSON
-          <textarea rows={4} value={bindText} onChange={(e) => applyBindings(e.target.value)} />
-          {bindErr && <span className="tone-error">{bindErr}</span>}
-        </label>
+      {(comp.bindings || bindingSlots.length > 0) && (
+        <details
+          onToggle={(e) => {
+            if ((e.target as HTMLDetailsElement).open) setBindText(JSON.stringify(comp.bindings ?? {}, null, 2))
+          }}
+        >
+          <summary className="muted">bindings JSON（高级）</summary>
+          <label>
+            bindings JSON
+            <textarea rows={4} value={bindText} onChange={(e) => applyBindings(e.target.value)} />
+            {bindErr && <span className="tone-error">{bindErr}</span>}
+          </label>
+        </details>
       )}
       <button type="button" className="danger" onClick={onRemove}>
         删除组件
@@ -512,89 +615,144 @@ function safeContract(type: string) {
 }
 
 // ---------------------------------------------------------------------------
-// 题目编辑器
+// 数据表编辑器（v3：取代题目编辑器）
 // ---------------------------------------------------------------------------
 
-export function QuestionsEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
-  const questions = doc.content.questions
-  const patchQ = (index: number, patch: Partial<Question>): void => {
-    onChange(updateQuestion(doc, index, patch))
+/** 单元格显示文本：对象/数组 → JSON，其余 → String */
+function cellText(v: Json | undefined): string {
+  if (v === undefined || v === null) return ''
+  if (typeof v === 'object') return JSON.stringify(v)
+  return String(v)
+}
+
+/** 单元格解析：'' → null；[/{ 开头按 JSON；true/false → 布尔；数字 → number；其余字符串 */
+function parseCell(text: string): { value: Json; error?: string } {
+  const t = text.trim()
+  if (t === '') return { value: null }
+  if (t.startsWith('[') || t.startsWith('{')) {
+    const v = parseJsonText(t)
+    if (v === null) return { value: text, error: '不是合法 JSON' }
+    return { value: v }
   }
-  // 草稿文本按题目 id 键控（id 在编辑中变化时以新 id 重新草稿化）
-  const [dataTexts, setDataTexts] = useState<Record<string, string>>({})
-  const [dataErrs, setDataErrs] = useState<Record<string, string>>({})
+  if (t === 'true') return { value: true }
+  if (t === 'false') return { value: false }
+  if (!Number.isNaN(Number(t))) return { value: Number(t) }
+  return { value: text }
+}
+
+export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
+  const table = doc.content.table
+  const [newCol, setNewCol] = useState('')
+  const [colErr, setColErr] = useState('')
+
+  const addColumn = (): void => {
+    const key = newCol.trim()
+    try {
+      onChange(addTableColumn(doc, key))
+      setNewCol('')
+      setColErr('')
+    } catch (err) {
+      setColErr(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   return (
-    <div className="questions-editor">
+    <div className="questions-editor table-editor">
       <div className="rules-toolbar">
-        <button
-          type="button"
-          onClick={() => {
-            const next = structuredClone(doc)
-            let n = next.content.questions.length + 1
-            const used = new Set(next.content.questions.map((q) => q.id))
-            while (used.has(`q${n}`)) n++
-            next.content.questions.push({ id: `q${n}`, data: {}, scoring: { max: 10 } })
-            onChange(next)
-          }}
-        >
-          + 添加题目
+        <b>题目数据表</b>
+        <span className="muted">
+          每行一条题目数据；q.&lt;列名&gt; 指向当前行（如 q.data、q.scoring.max）。运行顺序（顺序/乱序、题数、通过线）在 JSON 页配置。
+        </span>
+        <button type="button" onClick={() => onChange(addTableRow(doc))}>
+          + 添加行
         </button>
       </div>
-      {questions.map((q, i) => {
-        const dataText = dataTexts[q.id] ?? JSON.stringify(q.data ?? {}, null, 2)
-        return (
-          <div key={i} className="rule-card">
-            <div className="rule-head">
-              <b>{q.id}</b>
-              <button
-                type="button"
-                className="link danger"
-                onClick={() => {
-                  const next = structuredClone(doc)
-                  next.content.questions = next.content.questions.filter((_, x) => x !== i)
-                  onChange(next)
-                }}
-              >
-                删除题目
-              </button>
-            </div>
-            <label>
-              题目 id
-              <input value={q.id} onChange={(e) => patchQ(i, { id: e.target.value })} />
-            </label>
-            <label>
-              题面文字
-              <input value={q.prompt?.text ?? ''} onChange={(e) => patchQ(i, { prompt: { ...q.prompt, text: e.target.value } })} />
-            </label>
-            <label>
-              本题分值
-              <input
-                type="number"
-                value={q.scoring?.max ?? 10}
-                onChange={(e) => patchQ(i, { scoring: { max: Number(e.target.value) || 0 } })}
-              />
-            </label>
-            <label>
-              data JSON（$q.data 供绑定与表达式读取）
-              <textarea
-                rows={6}
-                value={dataText}
-                onChange={(e) => {
-                  setDataTexts((s) => ({ ...s, [q.id]: e.target.value }))
-                  const v = parseJsonText(e.target.value)
-                  if (v === null || typeof v !== 'object' || Array.isArray(v)) setDataErrs((s) => ({ ...s, [q.id]: '需为 JSON 对象' }))
-                  else {
-                    setDataErrs((s) => ({ ...s, [q.id]: '' }))
-                    patchQ(i, { data: v })
-                  }
-                }}
-              />
-              {dataErrs[q.id] && <span className="tone-error">{dataErrs[q.id]}</span>}
-            </label>
+
+      <div className="table-cols">
+        {table.columns.map((c) => (
+          <span key={c.key} className="table-col">
+            <input
+              className="table-col-key"
+              defaultValue={c.key}
+              title={`列名（表达式 q.${c.key}）`}
+              onBlur={(e) => {
+                const key = e.currentTarget.value.trim()
+                if (key === c.key) return
+                try {
+                  onChange(renameTableColumn(doc, c.key, key))
+                } catch (err) {
+                  e.currentTarget.value = c.key
+                  setColErr(err instanceof Error ? err.message : String(err))
+                }
+              }}
+            />
+            <input
+              className="table-col-label"
+              defaultValue={c.label ?? ''}
+              placeholder="显示名"
+              onBlur={(e) => {
+                if (e.currentTarget.value !== (c.label ?? '')) onChange(updateTableColumnLabel(doc, c.key, e.currentTarget.value))
+              }}
+            />
+            <button
+              type="button"
+              className="ginsp-argdel"
+              title={`删除列 ${c.key}`}
+              onClick={() => onChange(removeTableColumn(doc, c.key))}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <span className="table-col">
+          <input
+            className="table-col-key"
+            value={newCol}
+            placeholder="新列名…"
+            onChange={(e) => setNewCol(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') addColumn()
+            }}
+          />
+          <button type="button" onClick={addColumn}>
+            + 添加列
+          </button>
+        </span>
+      </div>
+      {colErr && <div className="tone-error">{colErr}</div>}
+
+      {table.rows.length === 0 && <p className="muted">还没有数据行——点「+ 添加行」创建第一题的数据。</p>}
+      {table.rows.map((row, i) => (
+        <div key={i} className="rule-card">
+          <div className="rule-head">
+            <b>第 {i + 1} 行</b>
+            <button type="button" className="link danger" onClick={() => onChange(removeTableRow(doc, i))}>
+              删除行
+            </button>
           </div>
-        )
-      })}
+          <div className="table-row-cells">
+            {table.columns.map((c) => (
+              <label key={c.key} className="inspector-prop">
+                {c.label || c.key}
+                <input
+                  defaultValue={cellText(row[c.key])}
+                  onBlur={(e) => {
+                    const { value, error } = parseCell(e.currentTarget.value)
+                    if (error) {
+                      setColErr(`${c.key}: ${error}`)
+                      e.currentTarget.value = cellText(row[c.key])
+                      return
+                    }
+                    if (JSON.stringify(value) !== JSON.stringify(row[c.key] ?? null)) {
+                      onChange(updateTableCell(doc, i, { [c.key]: value }))
+                    }
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

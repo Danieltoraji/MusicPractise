@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { LevelDoc, Question } from '../engine/level'
+import type { LevelDoc, TableRow, ViewDef } from '../engine/level'
 import type { Json } from '../engine/expr'
+import { migrateDocToV3 } from '../engine/migrateDoc'
 import { LevelSession, type SessionHost } from './levelSession'
 
 /** GraphEngine 的 dispatch 是 fire-and-forget async：排空微任务等待 drain 完成（fake timers 下也安全） */
@@ -8,18 +9,34 @@ const flush = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve()
 }
 
+/** 行身份：测试用 data.tag 标识行（v3 无 question.id，表格行即题目） */
+const rowTag = (row: TableRow | null): string | null => {
+  const tag = row?.data && typeof row.data === 'object' ? (row.data as Record<string, Json>).tag : undefined
+  return typeof tag === 'string' ? tag : null
+}
+
+/**
+ * 测试文档构造：有意以 v1 形态（ECA 规则/questions/logicPatch）书写，
+ * 经 migrateDocToV3（与真实装载管线一致）出 v3 —— 同时覆盖「旧文档透明升级」路径。
+ */
 function makeDoc(overrides?: {
-  questions?: Question[]
-  /** v1 ECA 规则（本测试有意用 v1 形态构造，验证 LevelSession 的透明迁移） */
+  questions?: {
+    id: string
+    data: Json
+    scoring?: { max: number }
+    logicPatch?: { variables?: Record<string, Json>; appendRules?: unknown[] }
+  }[]
+  /** v1 ECA 规则（验证 LevelSession 的透明迁移） */
   rules?: { id: string; on: string; when?: string[]; do: { set?: string; expr?: string; cmd?: string; args?: Json }[]; else?: { set?: string; expr?: string; cmd?: string; args?: Json }[] }[]
   pass?: string
   variables?: Record<string, Json>
+  views?: ViewDef[]
 }): LevelDoc {
-  const questions: Question[] = overrides?.questions ?? [
-    { id: 'q1', data: { answerMidi: 64, reward: [{ midi: 60 }] }, scoring: { max: 10 } },
-    { id: 'q2', data: { answerMidi: 71 }, scoring: { max: 10 } },
+  const questions = overrides?.questions ?? [
+    { id: 'q1', data: { tag: 'r1', answerMidi: 64, reward: [{ midi: 60 }] }, scoring: { max: 10 } },
+    { id: 'q2', data: { tag: 'r2', answerMidi: 71 }, scoring: { max: 10 } },
   ]
-  return {
+  const legacy = {
     schemaVersion: 1,
     kind: 'level',
     id: 'res_01J9A0A0A0A0A0A0A0A0A0A0A1',
@@ -45,23 +62,27 @@ function makeDoc(overrides?: {
             },
             { id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'level.next' }] },
           ],
-      } as unknown as LevelDoc['content']['logic'],
+      },
       questions,
+      ...(overrides?.views ? { views: overrides.views } : {}),
       flow: { order: 'sequential', pass: overrides?.pass ? { expr: overrides.pass } : undefined },
     },
   }
+  return migrateDocToV3(legacy)
 }
 
 interface Recording {
-  questions: { index: number; total: number; id: string | null }[]
+  rows: { index: number; total: number; tag: string | null }[]
+  views: string[]
   finished: { score: Json; passed: boolean }[]
   effects: unknown[]
 }
 
 function makeHost(): { host: SessionHost; rec: Recording } {
-  const rec: Recording = { questions: [], finished: [], effects: [] }
+  const rec: Recording = { rows: [], views: [], finished: [], effects: [] }
   const host: SessionHost = {
-    onQuestion: (index, total, q) => rec.questions.push({ index, total, id: q?.id ?? null }),
+    onRow: (index, total, row) => rec.rows.push({ index, total, tag: rowTag(row) }),
+    onView: (id) => rec.views.push(id),
     onFinished: (result) => rec.finished.push(result),
     runEffects: (effects) => rec.effects.push(...effects),
   }
@@ -69,16 +90,17 @@ function makeHost(): { host: SessionHost; rec: Recording } {
 }
 
 describe('LevelSession', () => {
-  it('start 触发 started→装载第 1 题→questionLoaded，绑定解析到组件', async () => {
+  it('start 触发 started→初始视图→装载第 1 行→questionLoaded，绑定解析到组件', async () => {
     const doc = makeDoc()
-    const q1data = doc.content.questions[0].data as Record<string, Json>
-    q1data.music = { notes: [{ midi: 60 }] }
-    q1data.options = ['A', 'B']
+    const r1 = doc.content.table.rows[0].data as Record<string, Json>
+    r1.music = { notes: [{ midi: 60 }] }
+    r1.options = ['A', 'B']
     const { host, rec } = makeHost()
     const session = new LevelSession(doc, host)
     session.start()
 
-    expect(rec.questions[0]).toEqual({ index: 0, total: 2, id: 'q1' })
+    expect(rec.views).toEqual(['main'])
+    expect(rec.rows[0]).toEqual({ index: 0, total: 2, tag: 'r1' })
     expect(session.store.snapshot('staff1').state).toMatchObject({ music: { notes: [{ midi: 60 }] } })
     expect(session.store.snapshot('choice1').state).toMatchObject({ options: ['A', 'B'] })
   })
@@ -97,10 +119,10 @@ describe('LevelSession', () => {
 
     session.dispatch('nextBtn.clicked')
     await flush()
-    expect(rec.questions.at(-1)).toMatchObject({ index: 1, id: 'q2' })
+    expect(rec.rows.at(-1)).toMatchObject({ index: 1, tag: 'r2' })
   })
 
-  it('最后一题 next → 结算（flow.pass 求值）', async () => {
+  it('最后一行 next → 结算（flow.pass 求值）', async () => {
     const { host, rec } = makeHost()
     const session = new LevelSession(makeDoc({ pass: 'v.score >= 20' }), host)
     session.start()
@@ -146,45 +168,45 @@ describe('LevelSession', () => {
     expect(rec.finished[0].passed).toBe(false)
   })
 
-  it('logicPatch：variables 覆盖 + appendRules 仅本题生效', async () => {
-    const questions: Question[] = [
-      { id: 'q1', data: {}, scoring: { max: 10 } },
+  it('logicPatch（经 v3 迁移器编译为行门控子图）：variables 覆盖 + appendRules 仅本行生效', async () => {
+    const questions = [
+      { id: 'q1', data: { tag: 'r1' }, scoring: { max: 10 } },
       {
         id: 'q2',
-        data: {},
+        data: { tag: 'r2' },
         scoring: { max: 10 },
         logicPatch: {
           variables: { score: 50 },
           appendRules: [{ id: 'p1', on: 'x.ping', do: [{ set: 'score', expr: 'v.score + 1' }] }],
         },
       },
-      { id: 'q3', data: {}, scoring: { max: 10 } },
+      { id: 'q3', data: { tag: 'r3' }, scoring: { max: 10 } },
     ]
     const { host } = makeHost()
     const session = new LevelSession(makeDoc({ questions }), host)
     session.start()
 
-    session.dispatch('x.ping') // q1：无此规则
+    session.dispatch('x.ping') // r1：门控 event.row == 1 不通过
     await flush()
     expect(session.engine.vars.score).toBe(0)
 
     session.dispatch('nextBtn.clicked')
     await flush()
-    expect(session.currentQuestion?.id).toBe('q2')
-    expect(session.engine.vars.score).toBe(50) // variables 已覆盖
+    expect(rowTag(session.currentRow)).toBe('r2')
+    expect(session.engine.vars.score).toBe(50) // 行装载子图已覆盖变量
     session.dispatch('x.ping')
     await flush()
-    expect(session.engine.vars.score).toBe(51) // appendRules 生效
+    expect(session.engine.vars.score).toBe(51) // 本行追加规则生效
 
     session.dispatch('nextBtn.clicked')
     await flush()
-    expect(session.currentQuestion?.id).toBe('q3')
+    expect(rowTag(session.currentRow)).toBe('r3')
     session.dispatch('x.ping')
     await flush()
-    expect(session.engine.vars.score).toBe(51) // 换题后追加规则已移除
+    expect(session.engine.vars.score).toBe(51) // 换行后门控不再放行
   })
 
-  it('restart 重置变量与组件状态并重新装载', async () => {
+  it('restart 重置变量与组件状态并重新装载（视图复位到首视图）', async () => {
     const { host, rec } = makeHost()
     const session = new LevelSession(makeDoc(), host)
     session.start()
@@ -195,14 +217,15 @@ describe('LevelSession', () => {
     session.restart()
 
     expect(session.engine.vars.score).toBe(0)
-    expect(session.currentQuestion?.id).toBe('q1')
-    expect(rec.questions.at(-1)).toMatchObject({ index: 0, id: 'q1' })
+    expect(rowTag(session.currentRow)).toBe('r1')
+    expect(rec.views.at(-1)).toBe('main')
+    expect(rec.rows.at(-1)).toMatchObject({ index: 0, tag: 'r1' })
   })
 
-  it('shuffle + count 抽题', async () => {
-    const questions: Question[] = [1, 2, 3, 4, 5].map((i) => ({
+  it('shuffle + count 抽行', async () => {
+    const questions = [1, 2, 3, 4, 5].map((i) => ({
       id: `q${i}`,
-      data: { n: i },
+      data: { tag: `r${i}`, n: i },
       scoring: { max: 1 },
     }))
     const doc = makeDoc({ questions })
@@ -213,8 +236,9 @@ describe('LevelSession', () => {
     expect(session.total).toBe(3)
     const seen = new Set<string>()
     for (let i = 0; i < 3; i++) {
-      expect(session.currentQuestion?.id).toMatch(/^q[1-5]$/)
-      seen.add(session.currentQuestion!.id)
+      const tag = rowTag(session.currentRow)
+      expect(tag).toMatch(/^r[1-5]$/)
+      seen.add(tag!)
       session.dispatch('nextBtn.clicked')
       await flush()
     }
@@ -279,13 +303,13 @@ describe('LevelSession', () => {
     }
   })
 
-  it('换题清理计时器：logicPatch arm 的重复计时器在换题后不再触发（P1 回归）', async () => {
+  it('换行清理计时器：logicPatch arm 的重复计时器在换行后不再触发（P1 回归，经行门控编译）', async () => {
     vi.useFakeTimers()
     try {
-      const questions: Question[] = [
+      const questions = [
         {
           id: 'q1',
-          data: {},
+          data: { tag: 'r1' },
           scoring: { max: 10 },
           logicPatch: {
             appendRules: [
@@ -294,7 +318,7 @@ describe('LevelSession', () => {
             ],
           },
         },
-        { id: 'q2', data: {}, scoring: { max: 10 } },
+        { id: 'q2', data: { tag: 'r2' }, scoring: { max: 10 } },
       ]
       const doc = makeDoc({
         questions,
@@ -309,13 +333,69 @@ describe('LevelSession', () => {
       const before = session.engine.vars.ticks as number
       expect(before).toBeGreaterThanOrEqual(2)
 
-      session.dispatch('nextBtn.clicked') // → q2：追加规则已移除，且换题强制清理计时器
+      session.dispatch('nextBtn.clicked') // → r2：行门控关闭 + 换行强制清理计时器
       await flush()
       await vi.advanceTimersByTimeAsync(200)
       expect(session.engine.vars.ticks).toBe(before)
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('views.goto：切换视图并派发 view.entered；同视图重复 goto 是 no-op', async () => {
+    const rules = [
+      { id: 'go', on: 'goBtn.clicked', do: [{ cmd: 'views.goto', args: { id: 'quiz' } }] },
+      { id: 'mark', on: 'view.entered', do: [{ set: 'entered', expr: 'v.entered + 1' }] },
+    ]
+    const views = [{ id: 'main' }, { id: 'quiz', name: '答题' }]
+    const { host, rec } = makeHost()
+    const session = new LevelSession(makeDoc({ rules, views, variables: { score: 0, done: false, entered: 0 } }), host)
+    session.start()
+    expect(session.currentView).toBe('main')
+    expect(rec.views).toEqual(['main']) // 初始进入
+    expect(session.engine.vars.entered).toBe(1)
+
+    session.dispatch('goBtn.clicked')
+    await flush()
+    expect(session.currentView).toBe('quiz')
+    expect(rec.views).toEqual(['main', 'quiz'])
+    expect(session.engine.vars.entered).toBe(2)
+
+    session.dispatch('goBtn.clicked') // 同视图：no-op（防事件环）
+    await flush()
+    expect(session.currentView).toBe('quiz')
+    expect(rec.views).toEqual(['main', 'quiz'])
+    expect(session.engine.vars.entered).toBe(2)
+  })
+
+  it('views.goto 指向不存在的视图：报 error 事件、视图不变', async () => {
+    const rules = [{ id: 'go', on: 'goBtn.clicked', do: [{ cmd: 'views.goto', args: { id: 'ghost' } }] }]
+    const events: { kind: string; message?: string }[] = []
+    const { host } = makeHost()
+    const wrapped: SessionHost = {
+      ...host,
+      onLogicEvent: (e) => events.push({ kind: e.kind, message: e.kind === 'error' ? e.message : undefined }),
+    }
+    const session = new LevelSession(makeDoc({ rules, views: [{ id: 'main' }] }), wrapped)
+    session.start()
+    session.dispatch('goBtn.clicked')
+    await flush()
+    expect(session.currentView).toBe('main')
+    expect(events.some((e) => e.kind === 'error' && e.message?.includes('ghost'))).toBe(true)
+  })
+
+  it('level.next：换行后自动切换到模版视图', async () => {
+    const views = [{ id: 'main' }, { id: 'quiz', name: '答题', template: true }]
+    const rules = [{ id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'level.next' }] }]
+    const { host, rec } = makeHost()
+    const session = new LevelSession(makeDoc({ rules, views }), host)
+    session.start()
+    expect(session.currentView).toBe('main') // 初始视图 = 首视图（模版是 quiz 也不抢初始）
+    session.dispatch('nextBtn.clicked')
+    await flush()
+    expect(rowTag(session.currentRow)).toBe('r2')
+    expect(session.currentView).toBe('quiz') // 「显示题目」抽象：换行自动进模版视图
+    expect(rec.views).toEqual(['main', 'quiz'])
   })
 
   it('P1 回归：命令执行失败（未知实例）产生 error 事件', async () => {

@@ -28,10 +28,17 @@ function catColor(type: string): string {
 
 export function CanvasMap(props: {
   comps: ComponentInstance[]
+  /** 视图清单（v3）：组件已按视图划分，框标题带视图名便于对照 */
+  views?: { id: string; name?: string }[]
   focusId: string | null
   onToggleFocus: (id: string) => void
   onClose: () => void
 }): React.ReactElement {
+  const firstView = props.views?.[0]?.id ?? 'main'
+  const viewName = (id: string | undefined): string => {
+    const v = props.views?.find((x) => x.id === (id ?? firstView))
+    return v ? (v.name || v.id) : (id ?? firstView)
+  }
   const layout = useMemo(() => {
     const items = props.comps.map((c) => ({ c, l: c.layout ?? { x: 0, y: 0, w: 120, h: 40 } }))
     if (items.length === 0) return null
@@ -75,7 +82,7 @@ export function CanvasMap(props: {
               type="button"
               className={`canvas-map-box${props.focusId === comp.id ? ' is-focus' : ''}${comp.visible === false ? ' is-ghost' : ''}`}
               style={{ ...box, borderColor: catColor(comp.type) }}
-              title={`${comp.type} · ${comp.id}\n点击高亮节点图中引用它的节点`}
+              title={`${viewName(comp.view)} · ${comp.type} · ${comp.id}\n点击高亮节点图中引用它的节点`}
               onClick={() => props.onToggleFocus(comp.id)}
             >
               <span>{comp.name || comp.id}</span>

@@ -84,7 +84,7 @@ export function HomePage() {
                   </h3>
                   <p>{String(doc.meta.description ?? '')}</p>
                   <div className="card-meta">
-                    {doc.content.components.length} 个组件 · {doc.content.questions.length} 道题
+                    {doc.content.components.length} 个组件 · {doc.content.table.rows.length} 道题
                   </div>
                 </a>
               )

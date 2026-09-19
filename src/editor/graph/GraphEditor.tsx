@@ -96,7 +96,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
     () =>
       lintGraphProgramDetailed(program, {
         componentIds: doc.content.components.map((c) => c.id),
-        extraVariableKeys: doc.content.questions.flatMap((q) => Object.keys(q.logicPatch?.variables ?? {})),
+        viewIds: doc.content.views.map((v) => v.id),
       }),
     [program, doc],
   )
@@ -389,6 +389,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
           {showMap && (
             <CanvasMap
               comps={doc.content.components}
+              views={doc.content.views}
               focusId={mapFocus}
               onToggleFocus={(id) => setMapFocus((cur) => (cur === id ? null : id))}
               onClose={() => {

@@ -3,19 +3,20 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { describe, expect, it } from 'vitest'
 import type { LevelDoc } from '../engine/level'
-import { checkExprText, QuestionsEditor } from './EditorPage'
+import { checkExprText, TableEditor } from './EditorPage'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const baseDoc = (): LevelDoc => ({
-  schemaVersion: 1,
+  schemaVersion: 3,
   kind: 'level',
   id: 'res_01J9A0A0A0A0A0A0A0A0A0A0A1',
   version: '0.1.0',
   meta: { title: '编辑器测试' },
   refs: [],
   content: {
-    components: [{ id: 'staff1', type: 'staff', visible: true }],
+    views: [{ id: 'main', name: '主视图', template: true }],
+    components: [{ id: 'staff1', type: 'staff', visible: true, view: 'main' }],
     logic: {
       logicVersion: 2,
       variables: { score: 0 },
@@ -25,25 +26,30 @@ const baseDoc = (): LevelDoc => ({
       ],
       edges: [{ id: 'e1', from: 'on_click', to: 'add' }],
     },
-    questions: [
-      { id: 'q1', data: { a: 1 }, scoring: { max: 10 } },
-    ],
+    table: {
+      columns: [
+        { key: 'data', label: '数据' },
+        { key: 'scoring', label: '分值' },
+      ],
+      rows: [{ data: { a: 1 }, scoring: { max: 10 } }],
+    },
     flow: {},
   },
 })
 
-describe('QuestionsEditor（jsdom 渲染）', () => {
-  it('渲染题目卡片与 data JSON 输入', () => {
+describe('TableEditor（jsdom 渲染）', () => {
+  it('渲染数据表的列头与行卡片', () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     let root!: Root
     act(() => {
       root = createRoot(container)
-      root.render(<QuestionsEditor doc={baseDoc()} onChange={() => {}} />)
+      root.render(<TableEditor doc={baseDoc()} onChange={() => {}} />)
     })
     try {
-      expect(container.textContent).toContain('q1')
-      expect(container.querySelectorAll('textarea').length).toBeGreaterThanOrEqual(1)
+      expect(container.textContent).toContain('题目数据表')
+      expect(container.textContent).toContain('第 1 行')
+      expect(container.querySelectorAll('input').length).toBeGreaterThanOrEqual(3)
     } finally {
       act(() => root.unmount())
       container.remove()

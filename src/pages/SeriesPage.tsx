@@ -96,7 +96,7 @@ export function SeriesPage({ id }: { id: string }) {
                       <span className="level-side">
                         {p && p.passed === 1 && <span className="badge pass">✅ 通过</span>}
                         {p && p.passed !== 1 && <span className="badge">最佳 {p.bestScore}</span>}
-                        <span className="muted">{ldoc.content.questions.length} 道题</span>
+                        <span className="muted">{ldoc.content.table.rows.length} 道题</span>
                       </span>
                     </a>
                   )

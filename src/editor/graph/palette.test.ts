@@ -8,16 +8,17 @@ import type { Json } from '../../engine/expr'
 
 const doc = (components: { id: string; type: string; name?: string }[], variables: Record<string, Json> = { score: 0 }): LevelDoc =>
   ({
-    schemaVersion: 1,
+    schemaVersion: 3,
     kind: 'level',
     id: 'x',
     version: '0.1.0',
     meta: { title: 't' },
     refs: [],
     content: {
-      components: components.map((c) => ({ ...c, visible: true })),
+      views: [{ id: 'main', name: '主视图', template: true }],
+      components: components.map((c) => ({ ...c, visible: true, view: 'main' })),
       logic: { ...blankGraphProgram(), variables },
-      questions: [{ id: 'q1', data: {}, scoring: { max: 10 } }],
+      table: { columns: [], rows: [] },
     },
   }) as unknown as LevelDoc
 

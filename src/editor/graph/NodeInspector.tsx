@@ -53,13 +53,8 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
     }
   }
 
-  // 变量候选：关卡 variables + 题目 logicPatch.variables（与 lint 声明集合一致）
-  const varNames = [
-    ...new Set([
-      ...Object.keys(program.variables ?? {}),
-      ...doc.content.questions.flatMap((q) => Object.keys(q.logicPatch?.variables ?? {})),
-    ]),
-  ]
+  // 变量候选：关卡 variables（v3 起题目补丁变量已由迁移器并入声明）
+  const varNames = [...new Set(Object.keys(program.variables ?? {}))]
 
   // 路径候选：程序里 on 事件的负载字段（如 staff1.noteClicked → event.midi）
   const refPaths: string[] = []
@@ -114,6 +109,7 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
   // call 方法候选（契约命令 + 基座命令；level 用 facade 方法）
   const methodOptions = (target: string): { name: string; doc?: string }[] => {
     if (target === 'level') return LEVEL_METHODS.map((m) => ({ name: m, doc: '无参数' }))
+    if (target === 'views') return [{ name: 'goto', doc: '{ id: 视图id }' }]
     const ct = contractOf(comps.find((c) => c.id === target)?.type ?? '')
     const own = Object.entries(ct?.commands ?? {})
       .filter(([m]) => !m.startsWith('__'))
@@ -159,7 +155,15 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
       {node.kind === 'on' && <OnEventEditor node={node} groups={eventGroups} onPatch={onPatch} />}
 
       {node.kind === 'call' && (
-        <CallNodeEditor node={node} comps={comps} methodOptions={methodOptions} queriesOf={queriesOf} ctx={ctx} onPatch={onPatch} />
+        <CallNodeEditor
+          node={node}
+          comps={comps}
+          views={doc.content.views}
+          methodOptions={methodOptions}
+          queriesOf={queriesOf}
+          ctx={ctx}
+          onPatch={onPatch}
+        />
       )}
 
       {node.kind === 'assign' && (
@@ -242,6 +246,7 @@ function OnEventEditor(props: {
 function CallNodeEditor(props: {
   node: Extract<GNode, { kind: 'call' }>
   comps: LevelDoc['content']['components']
+  views: LevelDoc['content']['views']
   methodOptions: (target: string) => { name: string; doc?: string }[]
   queriesOf: (target: string) => string[]
   ctx: BridgeCtx
@@ -252,6 +257,9 @@ function CallNodeEditor(props: {
   const methods = props.methodOptions(node.target)
   const methodKnown = methods.some((m) => m.name === node.method)
   const currentDoc = methods.find((m) => m.name === node.method)?.doc
+  // views.goto 特化：参数不是通用键值对，而是视图下拉（低代码：不手写 id）
+  const isViewsGoto = node.target === 'views' && node.method === 'goto'
+  const gotoId = isViewsGoto ? /^["'](.+)["']$/.exec((node.args[0] ?? '').trim())?.[1] ?? '' : ''
 
   return (
     <>
@@ -274,10 +282,11 @@ function CallNodeEditor(props: {
             props.onPatch({ target, method, args } as unknown as Partial<GNode>)
           }}
         >
-          {!comps.some((c) => c.id === node.target) && node.target !== 'level' && (
+          {!comps.some((c) => c.id === node.target) && node.target !== 'level' && node.target !== 'views' && (
             <option value={node.target}>{`${node.target}（当前，实例不存在）`}</option>
           )}
           <option value="level">关卡（level）</option>
+          <option value="views">视图（views）</option>
           {comps.map((c) => (
             <option key={c.id} value={c.id}>{`${compLabel(c.id)}（${c.id}）`}</option>
           ))}
@@ -305,14 +314,33 @@ function CallNodeEditor(props: {
       </label>
       <div className="ginsp-row">
         参数
-        {currentDoc && currentDoc !== '无参数' && <div className="muted call-args-doc">{currentDoc}</div>}
-        <CallArgsEditor
-          args={node.args}
-          params={parseCommandParams(currentDoc)}
-          ctx={props.ctx}
-          onChange={(args) => props.onPatch({ args } as unknown as Partial<GNode>)}
-          datalistId={exprDatalistId}
-        />
+        {isViewsGoto ? (
+          <label className="ginsp-row">
+            目标视图
+            <select
+              value={gotoId}
+              onChange={(e) => props.onPatch({ args: [`"${e.target.value}"`] } as unknown as Partial<GNode>)}
+            >
+              {props.views.map((v) => (
+                <option key={v.id} value={v.id}>{`${v.name || v.id}（${v.id}）`}</option>
+              ))}
+              {!props.views.some((v) => v.id === gotoId) && gotoId && (
+                <option value={gotoId}>{`${gotoId}（当前，视图不存在）`}</option>
+              )}
+            </select>
+          </label>
+        ) : (
+          <>
+            {currentDoc && currentDoc !== '无参数' && <div className="muted call-args-doc">{currentDoc}</div>}
+            <CallArgsEditor
+              args={node.args}
+              params={parseCommandParams(currentDoc)}
+              ctx={props.ctx}
+              onChange={(args) => props.onPatch({ args } as unknown as Partial<GNode>)}
+              datalistId={exprDatalistId}
+            />
+          </>
+        )}
       </div>
     </>
   )

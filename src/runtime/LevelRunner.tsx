@@ -1,8 +1,9 @@
 /**
  * 关卡运行器（React 薄壳）：所有流程逻辑在 LevelSession 里，本组件只做渲染与挂载。
+ * v3：只渲染当前视图的组件（互斥视图）；题面 = 表格当前行的 prompt 列。
  */
 import { useEffect, useMemo, useState } from 'react'
-import type { LevelDoc, Question } from '../engine/level'
+import type { LevelDoc, TableRow } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { LevelSession } from './levelSession'
 import { getCtx, playNotes } from './audio'
@@ -32,6 +33,17 @@ export function LevelRunner({
   )
 }
 
+/** 题面文本：prompt 列支持对象 {text} 或纯字符串两种形态 */
+function promptText(row: TableRow | null): string {
+  const p = row?.prompt
+  if (typeof p === 'string') return p
+  if (p !== null && typeof p === 'object' && !Array.isArray(p)) {
+    const t = (p as Record<string, Json>).text
+    if (typeof t === 'string') return t
+  }
+  return ''
+}
+
 function RunnerCore({
   doc,
   levelId,
@@ -43,17 +55,20 @@ function RunnerCore({
   onRetry: () => void
   onFinished?: (result: { score: Json; passed: boolean }) => void
 }) {
-  const [progress, setProgress] = useState({ index: 0, total: doc.content.questions.length })
+  const firstView = doc.content.views[0]?.id ?? 'main'
+  const [progress, setProgress] = useState({ index: 0, total: doc.content.table.rows.length })
   const [finished, setFinished] = useState<{ score: Json; passed: boolean } | null>(null)
-  const [question, setQuestion] = useState<Question | null>(null)
+  const [row, setRow] = useState<TableRow | null>(null)
+  const [view, setView] = useState(firstView)
 
   const session = useMemo(
     () =>
       new LevelSession(doc, {
-        onQuestion: (index, total, q) => {
+        onRow: (index, total, r) => {
           setProgress({ index, total })
-          setQuestion(q)
+          setRow(r)
         },
+        onView: (id) => setView(id),
         onFinished: (result) => {
           setFinished(result)
           onFinished?.(result)
@@ -75,18 +90,20 @@ function RunnerCore({
     return () => session.dispose()
   }, [session])
 
+  const visibleComps = doc.content.components.filter((c) => (c.view ?? firstView) === view)
+
   return (
     <div className="level-runner">
       <div className="level-head">
         <span className="level-title">{String(doc.meta.title ?? '未命名关卡')}</span>
-        {question?.prompt?.text && <span className="level-prompt">{question.prompt.text}</span>}
+        {promptText(row) && <span className="level-prompt">{promptText(row)}</span>}
         <span className="level-progress">
           第 {Math.min(progress.index + 1, progress.total)} / {progress.total} 题
         </span>
       </div>
       <div className="level-canvas-wrap">
         <div className="level-canvas">
-          {doc.content.components.map((c) => (
+          {visibleComps.map((c) => (
             <ComponentView key={c.id} spec={c} store={session.store} emit={session.emitFor(c.id)} />
           ))}
         </div>

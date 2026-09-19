@@ -1,9 +1,11 @@
 /**
- * 关卡会话：与 React 无关的流程核心（装载题目/下一题/结算/重开 + logicPatch）。
- * 抽出为纯类是为了可单测（评审 P1：流程逻辑零测试）；LevelRunner 只是其薄壳。
- * 逻辑执行 = GraphEngine（图 IR v2；v1 ECA 程序构造时透明迁移，题目 logicPatch.appendRules 运行时迁移）。
+ * 关卡会话：与 React 无关的流程核心（v3：视图切换 + 数据表行推进）。
+ * - 视图 = 互斥渲染边界：当前视图的组件才渲染；切换派发 view.entered {view}
+ * - 数据表行 = 旧"题目"：q.* 指向当前行；level.next 推进行并在有模版视图时自动 goto 过去
+ * - 逻辑执行 = GraphEngine（图 IR v2）；v3 文档已无 logicPatch（迁移器编译为图上的行门控子图）
+ * 抽出为纯类是为了可单测；LevelRunner 只是其薄壳。
  */
-import type { LevelDoc, Question } from '../engine/level'
+import type { LevelDoc, TableRow, ViewDef } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { GraphEngine } from '../engine/graphEngine'
 import { isGraphProgram, lintGraphProgram, type GraphProgram } from '../engine/graphProgram'
@@ -17,8 +19,10 @@ export type LogicRunEvent =
   | { kind: 'command'; path: string; event?: string; t: number }
 
 export interface SessionHost {
-  /** 每题装载后回调（渲染层更新进度与题面） */
-  onQuestion(index: number, total: number, question: Question | null): void
+  /** 每行装载后回调（渲染层更新进度与题面） */
+  onRow(index: number, total: number, row: TableRow | null): void
+  /** 视图切换回调（含初始进入与 restart 复位；渲染层据此切换渲染的组件集合） */
+  onView(id: string): void
   /** 结算回调 */
   onFinished(result: { score: Json; passed: boolean }): void
   /** 执行组件命令产生的效果（如播放音频）；注入以便单测时只收集不播放 */
@@ -33,12 +37,13 @@ export class LevelSession {
   readonly engine: GraphEngine
   private readonly doc: LevelDoc
   private readonly host: SessionHost
-  /** v2 基础程序（logicPatch 追加以外的部分） */
   private readonly baseProgram: GraphProgram
+  private readonly views: ViewDef[]
   private readonly order: number[] = []
   private pos = 0
   private finishedFlag = false
-  private question: Question | null = null
+  private row: TableRow | null = null
+  private view = ''
   private emitFns = new Map<string, (event: string, payload?: Json) => void>()
   private timers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -46,11 +51,13 @@ export class LevelSession {
     this.doc = doc
     this.host = host
     const content = doc.content
+    // 视图清单防御：缺失/为空时回退默认主视图（正常路径由装载管线保证）
+    this.views = content.views.length > 0 ? content.views : [{ id: 'main', name: '主视图' }]
     this.store.init(content.components)
     // 视图直调 applyCommand 产生的效果（点击发音等）与规则链路共用同一执行通道
     this.store.setEffectSink((cid, effects) => this.runEffects(cid, effects))
 
-    this.order = content.questions.map((_, i) => i)
+    this.order = content.table.rows.map((_, i) => i)
     if (content.flow?.order === 'shuffle') {
       for (let i = this.order.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
@@ -61,7 +68,7 @@ export class LevelSession {
 
     this.baseProgram = isGraphProgram(content.logic) ? content.logic : migrateLogicV1toV2(content.logic)
     this.engine = new GraphEngine(this.baseProgram, {
-      getQuestion: () => this.question as unknown as Json,
+      getQuestion: () => this.row as unknown as Json,
       dispatchCommand: (path, args, context) => this.handleCommand(path, args, context),
       queryComponent: (target, method, args) => this.store.query(target, method, args),
       getNowSeconds: host.getNowSeconds,
@@ -77,14 +84,9 @@ export class LevelSession {
       },
     })
 
-    // lint 时合并各题 logicPatch.variables 声明的变量键，避免误报"未声明"
-    const patchVarKeys = new Set<string>()
-    for (const q of content.questions) {
-      for (const key of Object.keys(q.logicPatch?.variables ?? {})) patchVarKeys.add(key)
-    }
     const problems = lintGraphProgram(this.baseProgram, {
       componentIds: content.components.map((c) => c.id),
-      extraVariableKeys: patchVarKeys,
+      viewIds: this.views.map((v) => v.id),
     })
     if (problems.length > 0) console.warn('[session] 逻辑 lint:', problems)
     this.warnOrphanBindings()
@@ -98,8 +100,17 @@ export class LevelSession {
     return this.pos
   }
 
-  get currentQuestion(): Question | null {
-    return this.question
+  get currentRow(): TableRow | null {
+    return this.row
+  }
+
+  get currentView(): string {
+    return this.view
+  }
+
+  /** 模版视图 id（至多一个；level.next 推进行后自动切换过去） */
+  get templateView(): string | null {
+    return this.views.find((v) => v.template)?.id ?? null
   }
 
   /** 组件视图发事件的总入口（稳定引用，见 emitFor） */
@@ -119,7 +130,9 @@ export class LevelSession {
 
   start(): void {
     this.engine.dispatch('level.started', { title: String(this.doc.meta.title ?? '') })
-    this.loadQuestion(0)
+    // 初始视图进入（restart 时 view 已清空 → 必然重新派发 view.entered）
+    this.setView(this.views[0].id)
+    this.loadRow(0)
   }
 
   restart(): void {
@@ -127,6 +140,7 @@ export class LevelSession {
     this.engine.reset()
     this.store.resetAll()
     this.finishedFlag = false
+    this.view = '' // 强制重新进入初始视图（派发 view.entered）
     this.start()
   }
 
@@ -136,17 +150,28 @@ export class LevelSession {
     this.engine.reset()
   }
 
-  private loadQuestion(p: number): void {
-    // 换题即停掉上一题的计时器：logicPatch 的 arm 规则已随题移除，
-    // 但已运行的句柄不会自动消失，不清会跨题泄漏触发 tick
-    this.stopAllTimers()
-    this.pos = p
-    const q = this.doc.content.questions[this.order[p]] ?? null
-    this.question = q
-    this.applyLogicPatch(q)
+  /**
+   * 切换视图：应用该视图组件的数据绑定（指向当前行）→ 派发 view.entered。
+   * 同视图重复 goto = no-op（防 handler 里 goto 自己造成事件环）。
+   */
+  private setView(id: string): void {
+    if (!this.views.some((v) => v.id === id)) {
+      this.host.onLogicEvent?.({ kind: 'error', message: `views.goto 指向不存在的视图 "${id}"`, event: 'view.entered', t: Date.now() })
+      return
+    }
+    if (this.view === id) return
+    this.view = id
+    this.host.onView(id)
+    this.applyBindings(id)
+    this.engine.dispatch('view.entered', { view: id })
+  }
+
+  /** 应用某视图组件的绑定（$q.<列>… 解析为当前行；视图切换与换行两个时机都会调用） */
+  private applyBindings(viewId: string): void {
+    if (this.row === null) return // 初始视图进入时还没有行；loadRow 会立即按当前行应用绑定
     for (const comp of this.doc.content.components) {
-      if (!comp.bindings) continue
-      for (const [key, raw] of Object.entries(comp.bindings)) {
+      if ((comp.view ?? this.views[0].id) !== viewId) continue
+      for (const [key, raw] of Object.entries(comp.bindings ?? {})) {
         try {
           this.store.applyBinding(comp.id, key, this.engine.resolve(raw))
         } catch (err) {
@@ -154,33 +179,21 @@ export class LevelSession {
         }
       }
     }
-    this.host.onQuestion(p, this.order.length, q)
-    this.engine.dispatch('level.questionLoaded', { index: p, total: this.order.length })
   }
 
-  /**
-   * logicPatch 语义：variables 在题目装载时 merge 覆盖引擎变量；
-   * appendRules（v1 形态，运行时迁移为图片段）仅在本题期间生效——
-   * 每次装载用"基础程序 + 本题追加片段"重建索引。
-   */
-  private applyLogicPatch(q: Question | null): void {
-    const patch = q?.logicPatch
-    let dyn = this.baseProgram
-    if (patch?.appendRules?.length) {
-      const frag = migrateLogicV1toV2({ variables: {}, rules: patch.appendRules })
-      // patch 节点 id 加题目命名空间：避免与基础规则 id 撞名导致处理器重复注册/链路劫持
-      const prefix = `q${this.pos}_`
-      const renamed = new Map<string, string>()
-      const fragNodes = frag.nodes.map((n) => {
-        const id = prefix + n.id
-        renamed.set(n.id, id)
-        return { ...n, id }
-      })
-      const fragEdges = frag.edges.map((e) => ({ ...e, id: prefix + e.id, from: renamed.get(e.from) ?? e.from, to: renamed.get(e.to) ?? e.to }))
-      dyn = { ...this.baseProgram, nodes: [...this.baseProgram.nodes, ...fragNodes], edges: [...this.baseProgram.edges, ...fragEdges] }
-    }
-    this.engine.setDynamicProgram(dyn)
-    if (patch?.variables) Object.assign(this.engine.vars, structuredClone(patch.variables))
+  /** 推进到第 p 行（按 flow 顺序）；绑定重放 + onRow 回调 + level.questionLoaded */
+  private loadRow(p: number): void {
+    // 换行即停掉上一行的计时器：编译进图的行门控逻辑不会跨行触发，但已运行的句柄不会自动消失
+    this.stopAllTimers()
+    this.pos = p
+    this.row = this.doc.content.table.rows[this.order[p]] ?? null
+    // 系统变量 __row = 原始行号：迁移器编译的行门控子图（logicPatch）据此判行——
+    // 它可能在任意事件（x.ping/timer.tick…）上触发，那些事件的负载里没有行号
+    this.engine.vars.__row = this.order[p]
+    this.applyBindings(this.view)
+    this.host.onRow(p, this.order.length, this.row)
+    // payload.row = 原始行号（shuffle 下与 index 不同）——迁移器编译的行门控子图据此判行
+    this.engine.dispatch('level.questionLoaded', { index: p, total: this.order.length, row: this.order[p] })
   }
 
   private handleCommand(path: string, args: Json, context?: { nodeId?: string; event?: string }): void {
@@ -191,8 +204,14 @@ export class LevelSession {
     const cmd = path.slice(dot + 1)
     if (cid === 'level') {
       if (cmd === 'next') {
-        if (!this.finishedFlag && this.pos + 1 < this.order.length) this.loadQuestion(this.pos + 1)
-        else this.finish()
+        if (!this.finishedFlag && this.pos + 1 < this.order.length) {
+          this.loadRow(this.pos + 1)
+          // 模版视图 = 「显示题目」抽象：换行后自动切过去（同视图则 no-op）
+          const tpl = this.templateView
+          if (tpl) this.setView(tpl)
+        } else {
+          this.finish()
+        }
       } else if (cmd === 'restart') {
         this.restart()
       } else if (cmd === 'finish') {
@@ -200,6 +219,23 @@ export class LevelSession {
         const passedArg = args !== null && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, Json>).passed : undefined
         this.finish(passedArg === false ? false : undefined)
       }
+      return
+    }
+    if (cid === 'views') {
+      // views.goto：argv = 视图 id 字符串（或 {id}）
+      const target =
+        typeof args === 'string' ? args : args !== null && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, Json>).id : undefined
+      if (typeof target !== 'string' || target === '') {
+        this.host.onLogicEvent?.({
+          kind: 'error',
+          message: 'views.goto 缺少视图 id（字符串字面量）',
+          nodeId: context?.nodeId,
+          event: context?.event,
+          t: Date.now(),
+        })
+        return
+      }
+      this.setView(target)
       return
     }
     try {
@@ -258,7 +294,7 @@ export class LevelSession {
   }
 
   private finish(passedArg?: boolean): void {
-    // 幂等守卫：已结算后再触发（如 UGC 规则 on finished → level.next）直接忽略，
+    // 幂等守卫：已结算后再触发（如 on finished → level.next）直接忽略，
     // 否则会形成 finish → level.finished → level.next → finish 的无界同步递归
     if (this.finishedFlag) return
     this.finishedFlag = true
@@ -281,7 +317,7 @@ export class LevelSession {
     this.engine.dispatch('level.finished', { score, passed })
   }
 
-  /** 绑定路径存在性检查（警告级）：$q.path 至少要在一个题目里能解析 */
+  /** 绑定路径存在性检查（警告级）：$q.path 至少要在一行里能解析 */
   private warnOrphanBindings(): void {
     const hasPath = (obj: unknown, parts: string[]): boolean => {
       let cur: unknown = obj
@@ -295,8 +331,8 @@ export class LevelSession {
       for (const [key, raw] of Object.entries(comp.bindings ?? {})) {
         if (typeof raw !== 'string' || !raw.startsWith('$q.')) continue
         const parts = raw.slice(3).split('.')
-        const found = this.doc.content.questions.some((q) => hasPath(q, parts))
-        if (!found) console.warn(`[session] 绑定 ${comp.id}.${key} = "${raw}" 在任何题目中都不存在`)
+        const found = this.doc.content.table.rows.some((row) => hasPath(row, parts))
+        if (!found) console.warn(`[session] 绑定 ${comp.id}.${key} = "${raw}" 在任何数据行中都不存在`)
       }
     }
   }
