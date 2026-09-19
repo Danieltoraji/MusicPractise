@@ -17,18 +17,37 @@ interface Props {
 /** 应用解析产物的节点 id 前缀（脚本重建的图与节点图手搭的 n1、迁移的 rule_on 可区分来源） */
 const ID_PREFIX = 's'
 
+/**
+ * 草稿缓存（按 doc.id）：编辑器各 Tab 是条件渲染，切走即卸载——
+ * 草稿必须跨 Tab 存活（否则打到一半的字在切节点图时全丢）。
+ * baselineSig 记录文本基线对应的 IR 版本：重挂时若当前 IR 签名不同，
+ * 说明其它视图改过逻辑 → 黄条提示（文本保留，由用户选择重新生成或覆盖）。
+ */
+interface ScriptDraft {
+  text: string
+  baseline: string
+  baselineSig: string
+}
+const drafts = new Map<string, ScriptDraft>()
+
 export function ScriptTab({ doc, onChange }: Props) {
   const program = doc.content.logic
-  // 基线：IR 的生成稿。外部（节点图/JSON）改动 IR 时基线随之变化 → 与文本不一致 → 黄条
-  const [baseline, setBaseline] = useState(() => generateScript(program))
-  const [baselineSig, setBaselineSig] = useState(() => signatureOf(program))
-  const [text, setText] = useState(baseline)
+
+  const [text, setText] = useState(() => drafts.get(doc.id)?.text ?? generateScript(program))
+  const [baseline, setBaseline] = useState(() => drafts.get(doc.id)?.baseline ?? text)
+  const [baselineSig, setBaselineSig] = useState(() => drafts.get(doc.id)?.baselineSig ?? signatureOf(program))
+  // 挂载时判定：缓存基线 ≠ 当前 IR → 其它视图改过逻辑
+  const [irStale] = useState(() => {
+    const cached = drafts.get(doc.id)
+    return cached ? cached.baselineSig !== signatureOf(program) : false
+  })
   const [parseError, setParseError] = useState<ScriptError | null>(null)
   const [appliedTip, setAppliedTip] = useState<string | null>(null)
 
-  const irSig = signatureOf(program)
+  // 草稿持久缓存（卸载/切 Tab 不丢）
+  drafts.set(doc.id, { text, baseline, baselineSig })
+
   const textDirty = text !== baseline
-  const irStale = irSig !== baselineSig // IR 在其它视图被改动，文本已过期
 
   const regenerate = (): void => {
     const fresh = generateScript(program)
@@ -37,15 +56,18 @@ export function ScriptTab({ doc, onChange }: Props) {
     setText(fresh)
     setParseError(null)
     setAppliedTip(null)
+    drafts.set(doc.id, { text: fresh, baseline: fresh, baselineSig: signatureOf(program) })
   }
 
   const apply = (): void => {
     try {
       const next = parseScript(text, { variables: program.variables, idPrefix: ID_PREFIX })
-      setBaselineSig(signatureOf(next))
+      const nextSig = signatureOf(next)
+      setBaselineSig(nextSig)
       setBaseline(text)
       setParseError(null)
       setAppliedTip(`已应用（${next.nodes.length} 节点 / ${next.edges.length} 连线；节点图已按脚本重建）`)
+      drafts.set(doc.id, { text, baseline: text, baselineSig: nextSig })
       onChange({ ...doc, content: { ...doc.content, logic: next } })
     } catch (e) {
       if (e instanceof ScriptError) setParseError(e)
