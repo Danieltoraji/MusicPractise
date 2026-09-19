@@ -21,7 +21,7 @@ export type GraphCardNode = Node<GraphCardData, 'graphCard'>
 
 // 深色工作台主题下的高亮度分类色（色带 + 类型名共用；docs/22 千星风格）
 const KIND_META: Record<GNode['kind'], { color: string; label: string }> = {
-  on: { color: '#a78bfa', label: '事件' },
+  on: { color: '#c4b5fd', label: '事件' },
   call: { color: '#60a5fa', label: '动作' },
   assign: { color: '#34d399', label: '赋值' },
   emit: { color: '#fbbf24', label: '触发' },

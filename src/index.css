@@ -1944,6 +1944,10 @@ path.gedge-false {
 
   height: calc(100vh - 158px);
   min-height: 620px;
+  color: var(--ge-ink); /* 子树默认文字色：未显式设色的面板标题/菜单分组全部可读 */
+  background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0)); /* 工作台深底（P0：问题列表等根级元素不可透出浅色 body） */
+  border-radius: 12px;
+  padding: 8px;
 }
 
 /* 画布区扩容：工作台占满视口剩余高度，画布随行自适应拉伸 */
@@ -2007,11 +2011,22 @@ path.gedge-false {
   color: var(--ge-accent);
   background: rgba(56, 189, 248, 0.1);
 }
+/* 特异性补齐：:not(x):not(y) 通用规则 (0,4,1) 压过模式选中态——此处在其后以同级特异性夺回（评审 P1-1） */
+.graph-editor .ginsp .ginsp-modes button.active {
+  border-color: var(--ge-accent);
+  color: var(--ge-accent);
+  background: rgba(56, 189, 248, 0.12);
+}
 .graph-editor .graph-toolbar button.danger,
 .graph-editor .ginsp button.danger {
   color: var(--ge-bad);
   border-color: rgba(248, 113, 113, 0.4);
   background: rgba(248, 113, 113, 0.06);
+}
+.graph-editor .ginsp-argdel {
+  background: var(--ge-panel-2);
+  border: 1px solid var(--ge-line);
+  color: var(--ge-bad);
 }
 .graph-editor .graph-toolbar-hint,
 .graph-editor .muted {
@@ -2019,6 +2034,11 @@ path.gedge-false {
 }
 .graph-editor .graph-lint-count {
   color: var(--ge-warn, #fbbf24);
+}
+.graph-editor .graph-toolbar button.graph-lint-count {
+  color: var(--ge-warn, #fbbf24);
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.07);
 }
 
 /* 输入控件 */
@@ -2031,7 +2051,7 @@ path.gedge-false {
 }
 .graph-editor input::placeholder,
 .graph-editor textarea::placeholder {
-  color: #5d6f96;
+  color: #7286ad;
 }
 .graph-editor label {
   color: var(--ge-muted);
@@ -2170,6 +2190,29 @@ path.gedge-false {
 .graph-editor .graph-log-entry:hover {
   background: rgba(56, 189, 248, 0.07);
 }
+.graph-editor .graph-script-head button {
+  background: var(--ge-panel-2);
+  border: 1px solid var(--ge-line);
+  color: var(--ge-ink);
+  border-radius: 7px;
+}
+.graph-editor .editor-errors {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fca5a5;
+}
+.graph-editor .graph-log-entry.has-node:hover {
+  border-color: var(--ge-accent);
+}
+.graph-editor .graph-log-kind.command {
+  color: #9fb0d0;
+}
+.graph-editor .graph-log-node {
+  color: #7cc7f7;
+}
+.graph-editor .graph-issue-code {
+  color: var(--ge-warn, #fbbf24);
+}
 .graph-editor .canvas-map {
   background: rgba(16, 26, 48, 0.94);
   border-color: var(--ge-line);
@@ -2187,4 +2230,13 @@ path.gedge-false {
 .graph-editor .canvas-map-box.is-focus {
   outline-color: var(--ge-accent);
   background: rgba(56, 189, 248, 0.22);
+}
+
+.graph-canvas .react-flow__controls-button {
+  background: #16213a;
+  border-color: var(--ge-line);
+  color: var(--ge-ink);
+}
+.graph-canvas .react-flow__controls-button:hover {
+  background: #1d2a47;
 }

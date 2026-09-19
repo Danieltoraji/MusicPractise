@@ -178,7 +178,10 @@ function GraphEditorInner({ doc, onChange }: Props) {
         sourceHandle: e.port ?? 'out',
         targetHandle: 'in',
         className: e.port ? `gedge gedge-${e.port}` : 'gedge',
-        markerEnd: { type: MarkerType.ArrowClosed },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: e.port === 'true' ? '#34d399' : e.port === 'false' ? '#f87171' : '#5b6f96',
+        },
       })),
     [program.edges],
   )
@@ -385,7 +388,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
             proOptions={{ hideAttribution: true }}
           >
             <Background variant={BackgroundVariant.Dots} gap={26} size={1.6} color="#26355a" />
-          <MiniMap pannable zoomable />
+          <MiniMap pannable zoomable nodeColor="#41598c" nodeStrokeColor="#6f86b8" />
           <Controls showInteractive={false} />
           </ReactFlow>
           {showMap && (
