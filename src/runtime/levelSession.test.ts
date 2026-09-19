@@ -318,6 +318,31 @@ describe('LevelSession', () => {
     }
   })
 
+  it('P1 回归：命令执行失败（未知实例）产生 error 事件', async () => {
+    const events: { kind: string; path?: string; nodeId?: string; message?: string }[] = []
+    const { host } = makeHost()
+    const wrapped: SessionHost = {
+      ...host,
+      onLogicEvent: (e) =>
+        events.push({
+          kind: e.kind,
+          path: e.kind === 'command' ? e.path : undefined,
+          nodeId: e.kind === 'error' ? e.nodeId : undefined,
+          message: e.kind === 'error' ? e.message : undefined,
+        }),
+    }
+    const rules = [{ id: 'bad', on: 'staff1.noteClicked', do: [{ cmd: 'ghost.clear' }] }]
+    const session = new LevelSession(makeDoc({ rules }), wrapped)
+    session.start()
+    await flush()
+    session.dispatch('staff1.noteClicked', {})
+    await flush()
+    const errEvt = events.find((e) => e.kind === 'error')
+    expect(errEvt).toBeTruthy()
+    expect(errEvt!.message).toContain('ghost.clear')
+    expect(errEvt!.nodeId).toBeTruthy()
+  })
+
   it('运行日志钩子：错误与命令轨迹进入 onLogicEvent', async () => {
     const events: { kind: string; message?: string; path?: string; nodeId?: string }[] = []
     const { host } = makeHost()

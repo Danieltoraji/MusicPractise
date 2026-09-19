@@ -6,7 +6,7 @@ import type { LevelDoc, Question } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { LevelSession } from './levelSession'
 import { getCtx, playNotes } from './audio'
-import { appendRunLog } from './runLog'
+import { appendRunLog, clearRunLog } from './runLog'
 import { ComponentView } from '../components/views'
 
 export function LevelRunner({
@@ -70,6 +70,7 @@ function RunnerCore({
   )
 
   useEffect(() => {
+    clearRunLog(levelId) // 「最近一次试运行」语义：每次进入/重开清掉上一轮日志
     session.start()
     return () => session.dispose()
   }, [session])

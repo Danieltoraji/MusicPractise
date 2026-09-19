@@ -6,6 +6,7 @@ import {
   addNode,
   connect,
   newNodeId,
+  setGraphVariable,
   type GraphProgram,
   type GNode,
 } from '../../engine/graphProgram'
@@ -14,6 +15,10 @@ import type { PaletteTemplate } from './palette'
 export function applyTemplate(prog: GraphProgram, tpl: PaletteTemplate, pos?: { x: number; y: number }): GraphProgram {
   const made = tpl.make(pos)
   let cur = prog
+  // 模板依赖的变量缺失时合并声明（已声明的保留现值）
+  for (const [name, value] of Object.entries(tpl.requiredVars ?? {})) {
+    if (!(name in (cur.variables ?? {}))) cur = setGraphVariable(cur, name, value)
+  }
   const idByIndex: string[] = []
   made.nodes.forEach((shape) => {
     const id = newNodeId(cur)

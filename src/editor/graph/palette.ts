@@ -4,6 +4,7 @@
  * make 只产节点形状（Omit id），id 由调用方用 newNodeId 补齐后走 addNode（校验集中一处）。
  */
 import type { LevelDoc } from '../../engine/level'
+import type { Json } from '../../engine/expr'
 import type { GNode } from '../../engine/graphProgram'
 import { allContracts } from '../../runtime/store'
 
@@ -40,6 +41,8 @@ export interface PaletteTemplate {
   key: string
   label: string
   desc: string
+  /** 落图时合并声明的变量（关卡已声明的跳过）——避免模板节点引用未声明变量即红卡 */
+  requiredVars?: Record<string, Json>
   make(pos?: { x: number; y: number }): { nodes: NodeShape[]; links: TemplateLink[] }
 }
 
@@ -59,6 +62,7 @@ export function buildTemplates(doc: LevelDoc): PaletteTemplate[] {
       key: 'tpl-score-gate',
       label: '计分初始化与门槛结算',
       desc: '关卡开始时清零 score；每题装载后若 score ≥ 10 主动结算（可改门槛与条件）',
+      requiredVars: { score: 0 },
       make(pos) {
         const p = pos ?? { x: 0, y: 0 }
         return {

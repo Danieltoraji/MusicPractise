@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildPalette, buildTemplates } from './palette'
 import { applyTemplate } from './applyTemplate'
 import { arrangeLayout, dagrePositions } from './layout'
-import { blankGraphProgram, addNode, connect, isGraphProgram, lintGraphProgram } from '../../engine/graphProgram'
+import { blankGraphProgram, addNode, connect, isGraphProgram, lintGraphProgram, removeGraphVariable } from '../../engine/graphProgram'
 import type { LevelDoc } from '../../engine/level'
 import type { Json } from '../../engine/expr'
 
@@ -78,6 +78,16 @@ describe('buildTemplates + applyTemplate（一键模板）', () => {
     // 相对坐标落在 pos 偏移处
     const first = prog.nodes[0]
     expect(first.x).toBe(100)
+  })
+
+  it('P1 回归：已删 score 的关卡落计分模板 → 变量自动声明、lint 零错', () => {
+    const templates = buildTemplates(doc([{ id: 'sound1', type: 'sound' }]))
+    const tpl = templates.find((t) => t.key === 'tpl-score-gate')!
+    let prog = blankGraphProgram()
+    prog = removeGraphVariable(prog, 'score') // 用户已删掉 score
+    prog = applyTemplate(prog, tpl, { x: 0, y: 0 })
+    expect(prog.variables).toMatchObject({ score: 0 })
+    expect(lintGraphProgram(prog)).toEqual([])
   })
 
   it('连线引用越界抛错', () => {

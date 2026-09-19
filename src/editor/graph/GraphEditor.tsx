@@ -88,15 +88,17 @@ function GraphEditorInner({ doc, onChange }: Props) {
     return map
   }, [lintIssues])
 
-  /** graphOps 变换 → 回写 doc；抛错转错误条（画布受控回滚） */
+  /** graphOps 变换 → 回写 doc；抛错转错误条（画布受控回滚）。返回是否成功（供表单还原输入） */
   const apply = useCallback(
-    (fn: (prog: GraphProgram) => GraphProgram): void => {
+    (fn: (prog: GraphProgram) => GraphProgram): boolean => {
       try {
         const logic = fn(doc.content.logic)
         setError(null)
         if (logic !== doc.content.logic) onChange({ ...doc, content: { ...doc.content, logic } })
+        return true
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
+        return false
       }
     },
     [doc, onChange],
@@ -246,7 +248,8 @@ function GraphEditorInner({ doc, onChange }: Props) {
     }
   }, [showScript, program])
 
-  const runLog = useMemo(() => (showLog ? readRunLog(doc.id).slice().reverse() : []), [showLog, doc.id, logTick])
+  // 无条件读取：收起时工具条「运行日志（N）」的计数才是「有错误待查看」的注意力信号
+  const runLog = useMemo(() => readRunLog(doc.id).slice().reverse(), [doc.id, logTick])
   const errorCount = runLog.filter((e) => e.kind === 'error').length
 
   return (
@@ -289,7 +292,8 @@ function GraphEditorInner({ doc, onChange }: Props) {
                 if (issue.nodeId) focusNode(issue.nodeId)
                 else if (issue.edgeId) {
                   const edge = program.edges.find((e) => e.id === issue.edgeId)
-                  if (edge) focusNode(edge.from)
+                  // 悬挂边优先定位起点；起点不存在（dangling 场景）回退终点
+                  if (edge) focusNode(program.nodes.some((n) => n.id === edge.from) ? edge.from : edge.to)
                 }
               }}
             >

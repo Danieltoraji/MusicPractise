@@ -9,10 +9,10 @@ import { parseScalarInput } from '../docState'
 
 interface Props {
   prog: GraphProgram
-  /** 全部操作以纯函数变换 prog 后回调（容器统一走 apply 错误条） */
-  onSet: (name: string, value: Json) => void
-  onRename: (oldName: string, newName: string) => void
-  onRemove: (name: string) => void
+  /** 全部操作以纯函数变换 prog 后回调；返回 false 表示失败（非法名/撞名），调用方还原输入 */
+  onSet: (name: string, value: Json) => boolean
+  onRename: (oldName: string, newName: string) => boolean
+  onRemove: (name: string) => boolean
 }
 
 export function VariablesPanel({ prog, onSet, onRename, onRemove }: Props) {
@@ -44,28 +44,41 @@ export function VariablesPanel({ prog, onSet, onRename, onRemove }: Props) {
             title="改名（失焦保存；assign 节点同步更新，表达式旧引用由 lint 提示）"
             onBlur={(e) => {
               const next = e.target.value.trim()
-              if (next && next !== name) {
-                try {
-                  onRename(name, next)
-                } catch {
-                  // 非法/撞名：还原输入框
-                  e.target.value = name
-                }
-              } else {
+              if (next === name || next === '') {
                 e.target.value = name
+                return
               }
+              if (!onRename(name, next)) e.target.value = name // 非法/撞名：还原
             }}
           />
           <input
             className="gvar-value"
             defaultValue={JSON.stringify(value)}
-            title="初值（true/false→布尔、数字→数值，其余为字符串；失焦保存）"
+            title="初值（true/false→布尔、数字→数值；[/{ 开头按 JSON 解析；失焦保存）"
             onBlur={(e) => {
-              const parsed = parseScalarInput(e.target.value)
-              onSet(name, parsed)
+              // 未变更失焦不回写（否则数组初值会被启发式解析静默毁成字符串）
+              if (e.target.value === JSON.stringify(value)) return
+              const text = e.target.value.trim()
+              if (text.startsWith('[') || text.startsWith('{')) {
+                try {
+                  onSet(name, JSON.parse(text) as Json)
+                  return
+                } catch {
+                  e.target.value = JSON.stringify(value)
+                  return
+                }
+              }
+              onSet(name, parseScalarInput(text))
             }}
           />
-          <button type="button" className="ginsp-argdel" title={`删除 ${name}`} onClick={() => onRemove(name)}>
+          <button
+            type="button"
+            className="ginsp-argdel"
+            title={`删除 ${name}`}
+            onClick={() => {
+              if (!onRemove(name)) return
+            }}
+          >
             ×
           </button>
         </div>

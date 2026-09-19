@@ -27,11 +27,18 @@ export interface GraphBudgets {
   maxNodes?: number
 }
 
+export interface CommandContext {
+  /** 发起该调用的 call 节点 id（运行日志定位用） */
+  nodeId?: string
+  /** 触发该处理器的源事件名 */
+  event?: string
+}
+
 export interface GraphHost {
   /** 当前题目对象（表达式作用域 q） */
   getQuestion(): Json | null
   /** 命令分发（实例id.方法 / level.next 等），由宿主实现 */
-  dispatchCommand(path: string, args: Json): void
+  dispatchCommand(path: string, args: Json, context?: CommandContext): void
   /** 查询方法调用（assign 右侧的 target.method(args)）；未实现时查询节点抛错 */
   queryComponent?(target: string, method: string, args: Json[]): Json
   getNowSeconds?: () => number
@@ -188,7 +195,7 @@ export class GraphEngine {
         return
       }
       try {
-        cur = await this.execNode(node, prev, scope, ectx, counters, gen)
+        cur = await this.execNode(node, prev, scope, ectx, counters, gen, event)
       } catch (err) {
         // 单节点失败：中断本处理器，其它处理器/事件不受影响
         this.fail(err, { event, nodeId: node.id })
@@ -205,6 +212,7 @@ export class GraphEngine {
     ectx: ExprContext,
     counters: Map<string, number>,
     gen: number,
+    currentEvent: string,
   ): Promise<string | null> {
     switch (node.kind) {
       case 'on':
@@ -214,7 +222,7 @@ export class GraphEngine {
       case 'call': {
         const args = (node.args ?? []).map((src) => evalExpr(src, scope, ectx))
         const argv: Json = args.length > 0 ? args[0] : {}
-        this.host.dispatchCommand(`${node.target}.${node.method}`, argv)
+        this.host.dispatchCommand(`${node.target}.${node.method}`, argv, { nodeId: node.id, event: currentEvent })
         return this.nextOf(node.id)
       }
       case 'assign': {

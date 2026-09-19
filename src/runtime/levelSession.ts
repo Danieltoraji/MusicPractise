@@ -62,7 +62,7 @@ export class LevelSession {
     this.baseProgram = isGraphProgram(content.logic) ? content.logic : migrateLogicV1toV2(content.logic)
     this.engine = new GraphEngine(this.baseProgram, {
       getQuestion: () => this.question as unknown as Json,
-      dispatchCommand: (path, args) => this.handleCommand(path, args),
+      dispatchCommand: (path, args, context) => this.handleCommand(path, args, context),
       queryComponent: (target, method, args) => this.store.query(target, method, args),
       getNowSeconds: host.getNowSeconds,
       onError: (err, where) => {
@@ -183,7 +183,7 @@ export class LevelSession {
     if (patch?.variables) Object.assign(this.engine.vars, structuredClone(patch.variables))
   }
 
-  private handleCommand(path: string, args: Json): void {
+  private handleCommand(path: string, args: Json, context?: { nodeId?: string; event?: string }): void {
     this.host.onLogicEvent?.({ kind: 'command', path, t: Date.now() })
     const dot = path.indexOf('.')
     if (dot <= 0) return
@@ -207,6 +207,14 @@ export class LevelSession {
       this.store.applyCommand(cid, cmd, args as Record<string, Json>)
     } catch (err) {
       console.error(`[session] 命令执行失败 ${path}:`, err)
+      // 命令执行失败（未知实例/未知命令）进运行日志：排查「点了没反应」的主要线索
+      this.host.onLogicEvent?.({
+        kind: 'error',
+        message: `命令执行失败 ${path}: ${err instanceof Error ? err.message : String(err)}`,
+        nodeId: context?.nodeId,
+        event: context?.event ?? path,
+        t: Date.now(),
+      })
     }
   }
 
