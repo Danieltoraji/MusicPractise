@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import noteClickDoc from '../sample/note-click.level.json'
+import v1NoteClickDoc from '../sample/fixtures/note-click.v1.json'
 import { loadLevelDoc, validateEnvelope } from './validate'
 
 describe('装载管线 loadLevelDoc', () => {
@@ -28,6 +29,31 @@ describe('装载管线 loadLevelDoc', () => {
     const r = loadLevelDoc(bad)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.errors.some((e) => e.includes('schemaVersion'))).toBe(true)
+  })
+
+  it('P1 回归：v1 文档装载后产出 v2 且输入对象不被变异', () => {
+    // 用 v1 夹具深拷贝作为输入
+    const raw = JSON.parse(JSON.stringify(v1NoteClickDoc))
+    const snapshot = JSON.stringify(raw)
+    const r = loadLevelDoc(raw)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect((r.doc.content.logic as { logicVersion?: number }).logicVersion).toBe(2)
+      expect(Array.isArray((r.doc.content.logic as { nodes?: unknown }).nodes)).toBe(true)
+    }
+    expect(JSON.stringify(raw)).toBe(snapshot)
+  })
+
+  it('P1 回归：迁移器拒绝的文档（规则 id 重复）转为装载错误而非抛出', () => {
+    const raw = JSON.parse(JSON.stringify(v1NoteClickDoc)) as Record<string, unknown>
+    const content = raw.content as Record<string, unknown>
+    const logic = JSON.parse(JSON.stringify(content.logic)) as Record<string, unknown>
+    const rules = logic.rules as unknown[]
+    rules.push(structuredClone(rules[0]))
+    content.logic = logic
+    const r = loadLevelDoc(raw)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors.some((e) => e.includes('迁移失败'))).toBe(true)
   })
 
   it('lint 告警收集为警告而非拒绝', () => {

@@ -270,8 +270,10 @@ describe('LevelSession', () => {
       expect(ticks).toBeGreaterThanOrEqual(2)
 
       session.dispose()
+      // dispose 会作废引擎（reset）：变量归初始值，且计时器已停、不再增长
+      expect(session.engine.vars.ticks).toBe(0)
       await vi.advanceTimersByTimeAsync(200)
-      expect(session.engine.vars.ticks).toBe(ticks) // 不再增长
+      expect(session.engine.vars.ticks).toBe(0)
     } finally {
       vi.useRealTimers()
     }

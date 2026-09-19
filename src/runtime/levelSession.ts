@@ -114,9 +114,10 @@ export class LevelSession {
     this.start()
   }
 
-  /** 卸载时清理（LevelRunner 的 effect cleanup 调用） */
+  /** 卸载时清理（LevelRunner 的 effect cleanup 调用）：作废进行中的处理器，防止僵尸命令/音频 */
   dispose(): void {
     this.stopAllTimers()
+    this.engine.reset()
   }
 
   private loadQuestion(p: number): void {
@@ -151,7 +152,16 @@ export class LevelSession {
     let dyn = this.baseProgram
     if (patch?.appendRules?.length) {
       const frag = migrateLogicV1toV2({ variables: {}, rules: patch.appendRules })
-      dyn = { ...this.baseProgram, nodes: [...this.baseProgram.nodes, ...frag.nodes], edges: [...this.baseProgram.edges, ...frag.edges] }
+      // patch 节点 id 加题目命名空间：避免与基础规则 id 撞名导致处理器重复注册/链路劫持
+      const prefix = `q${this.pos}_`
+      const renamed = new Map<string, string>()
+      const fragNodes = frag.nodes.map((n) => {
+        const id = prefix + n.id
+        renamed.set(n.id, id)
+        return { ...n, id }
+      })
+      const fragEdges = frag.edges.map((e) => ({ ...e, id: prefix + e.id, from: renamed.get(e.from) ?? e.from, to: renamed.get(e.to) ?? e.to }))
+      dyn = { ...this.baseProgram, nodes: [...this.baseProgram.nodes, ...fragNodes], edges: [...this.baseProgram.edges, ...fragEdges] }
     }
     this.engine.setDynamicProgram(dyn)
     if (patch?.variables) Object.assign(this.engine.vars, structuredClone(patch.variables))
@@ -239,6 +249,8 @@ export class LevelSession {
     }
     // level.finish(false) 显式强制未通过
     if (passedArg === false) passed = false
+    // 结算即终态：停掉计时器，防止 repeat tick 在结算后继续驱动规则改状态/文案
+    this.stopAllTimers()
     const score = this.engine.vars.score ?? 0
     this.host.onFinished({ score, passed })
     this.engine.dispatch('level.finished', { score, passed })

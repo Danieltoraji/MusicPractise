@@ -190,8 +190,12 @@ export function ChoiceView({ spec, store, emit }: ViewProps) {
 export function ComponentView(props: ViewProps): React.ReactNode {
   const { spec } = props
   if (spec.visible === false) return null
-  // 基座 setVisible 命令的状态位（undefined = 可见）
-  if ((props.store.snapshot(spec.id).state as { __visible?: boolean } | null)?.__visible === false) return null
+  // 基座 setVisible 命令的状态位（undefined = 可见）；必须订阅 store，
+  // 否则 applyCommand 后本组件不重渲染、门永不复评
+  const baseState = useSyncExternalStore(props.store.subscribe, () => props.store.snapshot(spec.id)).state as
+    | { __visible?: boolean }
+    | null
+  if (baseState?.__visible === false) return null
   switch (spec.type) {
     case 'staff':
       return <StaffView {...props} />

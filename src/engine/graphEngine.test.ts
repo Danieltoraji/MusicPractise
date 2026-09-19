@@ -273,6 +273,34 @@ describe('GraphEngine 级联与查询', () => {
     expect(engine.evaluate('v.score >= 1')).toBe(true)
   })
 
+  it('P0 回归：处理器内 restart（reset+新事件入队）后，新代事件由同一 drain 立即消费', async () => {
+    let p = blankVars()
+    p = addNode(p, { id: 'e', kind: 'on', event: 'app:hit' })
+    p = addNode(p, call('r', 'level', 'restart'))
+    p = connect(p, 'e', 'r')
+    // 追加新一代事件处理器：app:restarted → assign
+    p = addNode(p, { id: 'e2', kind: 'on', event: 'app:restarted' })
+    p = addNode(p, assign('a2', 'done', 'true'))
+    p = connect(p, 'e2', 'a2')
+    const { host } = makeHost()
+    const engine = new GraphEngine(p, host)
+    // 模拟 LevelSession.restart：命令回调里 reset + dispatch 新生命周期事件（此刻旧 drain 挂起中）
+    host.dispatchCommand = (path) => {
+      if (path === 'level.restart') {
+        engine.reset()
+        engine.dispatch('app:restarted', {})
+        return
+      }
+    }
+    // 重建 host 引用（dispatchCommand 换了实现）
+    const engine2 = engine
+    void engine2
+    engine.dispatch('app:hit', {})
+    await vi.advanceTimersByTimeAsync(0)
+    // 新代事件已消费（不再需要等下一次无关 dispatch 补发）
+    expect(engine.vars.done).toBe(true)
+  })
+
   it('reset 清空未处理队列', async () => {
     let p = blankVars()
     p = addNode(p, { id: 'e', kind: 'on', event: 'app:x' })

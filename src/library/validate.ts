@@ -70,18 +70,22 @@ export function loadLevelDoc(raw: unknown): LoadResult {
   const env = validateEnvelope('level', raw)
   if (!env.ok) errors.push(...env.errors)
 
-  const doc = raw as LevelDoc
-  if (doc.schemaVersion !== 1) {
-    errors.push(`schemaVersion ${String(doc.schemaVersion)} 不受支持（当前支持 1，旧文档迁移器尚未提供）`)
+  const source = raw as LevelDoc
+  if (source.schemaVersion !== 1) {
+    errors.push(`schemaVersion ${String(source.schemaVersion)} 不受支持（当前支持 1，旧文档迁移器尚未提供）`)
   }
 
   let lintWarnings: string[] = []
   if (errors.length === 0) {
     // v1 ECA → v2 图 IR 透明迁移：装载与保存出的内容恒为 v2（logicVersion 判别，信封 schemaVersion 保持 1）。
-    // 不变异调用方传入的对象：浅拷贝 doc/content 后再写入迁移结果
-    const source = raw as LevelDoc
+    // 不变异调用方传入的对象：浅拷贝 doc/content 后再写入迁移结果（注意：不得遮蔽外层 doc）
     const doc: LevelDoc = { ...source, content: { ...source.content } }
-    doc.content.logic = migrateLogicV1toV2(doc.content.logic)
+    try {
+      doc.content.logic = migrateLogicV1toV2(doc.content.logic)
+    } catch (err) {
+      // schema 合法但迁移器拒绝（如规则 id 重复、对象键非标识符）：作为装载错误而非崩溃
+      return { ok: false, errors: [`逻辑迁移失败: ${err instanceof Error ? err.message : String(err)}`] }
+    }
     const patchVarKeys = new Set<string>()
     for (const q of doc.content.questions) {
       for (const key of Object.keys(q.logicPatch?.variables ?? {})) patchVarKeys.add(key)
@@ -90,8 +94,8 @@ export function loadLevelDoc(raw: unknown): LoadResult {
       componentIds: doc.content.components.map((c) => c.id),
       extraVariableKeys: patchVarKeys,
     })
+    return { ok: true, doc, lintWarnings }
   }
 
-  if (errors.length > 0) return { ok: false, errors }
-  return { ok: true, doc, lintWarnings }
+  return { ok: false, errors }
 }

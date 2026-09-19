@@ -30,6 +30,32 @@ describe('ComponentStore', () => {
     expect(listener).toHaveBeenCalled()
   })
 
+  it('基座命令：非契约组件的 setVisible/setEnabled 写状态位；契约组件自有命令优先', () => {
+    const store = new ComponentStore()
+    store.init([spec('l1', 'label'), spec('b1', 'button', { props: { text: 'go' } })])
+    // label 无自有命令 → 基座拦截
+    store.applyCommand('l1', 'setVisible', { visible: false })
+    expect(store.snapshot('l1').state).toMatchObject({ __visible: false })
+    store.applyCommand('l1', 'setEnabled', { enabled: false })
+    expect(store.snapshot('l1').state).toMatchObject({ __enabled: false })
+    // button 自带 setEnabled → 组件命令优先（写 enabled，不写 __enabled）
+    store.applyCommand('b1', 'setEnabled', { enabled: false })
+    expect(store.snapshot('b1').state).toEqual({ text: 'go', enabled: false })
+    // setVisible 对 button 走基座（button 契约无 setVisible）
+    store.applyCommand('b1', 'setVisible', { visible: false })
+    expect(store.snapshot('b1').state).toMatchObject({ __visible: false, enabled: false })
+  })
+
+  it('query：契约查询方法读取组件状态；未实现查询抛错', () => {
+    const store = new ComponentStore()
+    store.init([spec('i1', 'input'), spec('s1', 'sound')])
+    expect(store.query('i1', 'getValue', [])).toBe('')
+    store.applyCommand('i1', 'setValue', { value: 'abc' })
+    expect(store.query('i1', 'getValue', [])).toBe('abc')
+    expect(() => store.query('s1', 'getValue', [])).toThrow(/不支持查询/)
+    expect(() => store.query('ghost', 'getValue', [])).toThrow(/不存在/)
+  })
+
   it('sound.play 产出 audio.play 效果（含 tempo 与 mode）', () => {
     const store = new ComponentStore()
     store.init([spec('s1', 'sound')])

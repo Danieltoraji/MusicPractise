@@ -135,11 +135,16 @@ export class GraphEngine {
 
   private async drain(): Promise<void> {
     this.draining = true
-    const gen = this.generation
+    let gen = this.generation
     try {
       const maxEvents = this.host.budgets?.maxEvents ?? 64
       while (this.queue.length > 0) {
-        if (this.generation !== gen) return
+        // 代数变化（reset/restart）= 放弃当前批次；队列中剩余事件属新一代（reset 已清队，
+        // 这里只会是 reset 之后新入队的生命周期事件），换代继续消费而不是让 drain 带队殉葬
+        if (this.generation !== gen) {
+          gen = this.generation
+          this.eventsProcessed = 0
+        }
         if (this.eventsProcessed >= maxEvents) {
           this.fail(new Error(`事件级联超过预算（${maxEvents}）`), { event: '' })
           this.queue.length = 0
@@ -148,7 +153,7 @@ export class GraphEngine {
         const { event, payload } = this.queue.shift()!
         this.eventsProcessed++
         for (const on of this.idx.onsByEvent.get(event) ?? []) {
-          if (this.generation !== gen) return
+          if (this.generation !== gen) break
           await this.runHandler(on, payload, gen, event)
         }
       }

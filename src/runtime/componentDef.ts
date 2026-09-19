@@ -155,7 +155,8 @@ export const CHOICE_DEF: ComponentDef<ChoiceState> = {
   initialState: () => ({ options: [], revealed: null }),
   applyBinding: (s, key, value) => {
     if (key === 'options' && Array.isArray(value)) {
-      return { options: value.map((o) => (typeof o === 'string' ? o : JSON.stringify(o))), revealed: null }
+      // spread 保留基座状态位（__visible/__enabled），换题重放绑定不丢
+      return { ...s, options: value.map((o) => (typeof o === 'string' ? o : JSON.stringify(o))), revealed: null }
     }
     return s
   },
