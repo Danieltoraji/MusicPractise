@@ -11,6 +11,7 @@ import { putResource } from '../library/db'
 import { ErrorBoundary } from '../library/ErrorBoundary'
 import { allContracts, ComponentStore, getDef } from '../runtime/store'
 import { ComponentView } from '../components/views'
+import { makeDirtyHashHandler } from './graph/dirtyGuard'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentInstance, LevelDoc, Question } from '../engine/level'
 import type { Json } from '../engine/expr'
@@ -31,6 +32,9 @@ type Tab = 'canvas' | 'graph' | 'script' | 'questions' | 'json'
 const GraphEditor = lazy(() => import('./graph/GraphEditor'))
 /** 脚本页与节点图同包域（依赖 script 引擎，体量小；保持同目录一致管理） */
 const ScriptTab = lazy(() => import('./graph/ScriptTab'))
+
+/** 预览层的空事件发射器（模块级稳定引用，避免内联箭头导致子组件反复重渲染） */
+const noopEmit = (): void => {}
 
 /** 表达式实时校验：语法错误返回消息，合法返回 null */
 export function checkExprText(text: string): string | null {
@@ -66,29 +70,29 @@ export function EditorPage({ id }: Props) {
   const [savedTip, setSavedTip] = useState('')
   const [dirty, setDirty] = useState(false)
 
-  // dirty-guard：刷新/关闭前浏览器原生确认；站内 hash 跳转在捕获阶段确认，取消则回滚 hash
+  // dirty-guard：刷新/关闭前浏览器原生确认；站内 hash 跳转在捕获阶段确认，取消则回滚 hash。
+  // 回滚会再触发一次 hashchange——回声抑制：location.hash 已等于 prevHash 时直接放行。
   const dirtyRef = useRef(dirty)
   dirtyRef.current = dirty
   const prevHashRef = useRef(window.location.hash)
+  const onHashChangeCapture = useMemo(
+    () =>
+      makeDirtyHashHandler({
+        dirtyRef,
+        prevHashRef,
+        confirm: (m) => window.confirm(m),
+        getLocationHash: () => window.location.hash,
+        rollback: (hash) => {
+          window.location.hash = hash
+        },
+      }),
+    [],
+  )
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent): void => {
       if (!dirtyRef.current) return
       e.preventDefault()
-    }
-    const onHashChangeCapture = (e: HashChangeEvent): void => {
-      if (!dirtyRef.current) {
-        prevHashRef.current = window.location.hash
-        return
-      }
-      const leave = window.confirm('有未保存的更改，离开将丢失。确定离开吗？')
-      if (leave) {
-        setDirty(false)
-        prevHashRef.current = window.location.hash
-        return
-      }
-      e.preventDefault()
-      e.stopPropagation()
-      window.location.hash = prevHashRef.current // 回滚到离开前的路由
+      e.returnValue = '' // Safari 兼容
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     window.addEventListener('hashchange', onHashChangeCapture, true)
@@ -96,7 +100,7 @@ export function EditorPage({ id }: Props) {
       window.removeEventListener('beforeunload', onBeforeUnload)
       window.removeEventListener('hashchange', onHashChangeCapture, true)
     }
-  }, [])
+  }, [onHashChangeCapture])
 
   // 装载：new = 空白模板；否则取库内文档。
   // loadedIdRef 语义：同一关卡不重复装载（保护未保存编辑）；换 id（#/edit/A → #/edit/B）强制重装
@@ -149,14 +153,7 @@ export function EditorPage({ id }: Props) {
   return (
     <div className="page editor">
       <div className="editor-head">
-        <a
-          href="#/library"
-          onClick={(e) => {
-            if (dirtyRef.current && !window.confirm('有未保存的更改，离开将丢失。确定离开吗？')) e.preventDefault()
-          }}
-        >
-          ← 资源库
-        </a>
+        <a href="#/library">← 资源库</a>
         <input
           className="editor-title"
           value={String(doc.meta.title ?? '')}
@@ -328,8 +325,8 @@ function EditorCanvas({
             onPointerCancel={onBoxPointerUp}
             title={`${comp.type} · ${comp.name ?? comp.id}`}
           >
-            <div className="editor-box-preview">
-              <ComponentView spec={{ ...comp, visible: true }} store={previewStore} emit={() => {}} />
+            <div className="editor-box-preview" inert={true as unknown as boolean}>
+              <ComponentView spec={{ ...comp, visible: true }} store={previewStore} emit={noopEmit} />
             </div>
             <span className="box-label">{comp.name ?? comp.id}</span>
           </div>
@@ -479,7 +476,11 @@ function Inspector({
           })}
         </div>
       )}
-      <details>
+      <details
+        onToggle={(e) => {
+          if ((e.target as HTMLDetailsElement).open) setPropsText(JSON.stringify(comp.props ?? {}, null, 2))
+        }}
+      >
         <summary className="muted">props JSON（高级）</summary>
         <label>
           props JSON
