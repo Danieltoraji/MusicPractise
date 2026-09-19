@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "kind": "level",
   "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A1",
   "version": "1.0.0",
@@ -34,7 +34,8 @@
         },
         "props": {
           "text": "得分: 0"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "staff1",
@@ -53,7 +54,8 @@
         },
         "bindings": {
           "music": "$q.data.music"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "feedback",
@@ -68,7 +70,8 @@
         },
         "props": {
           "text": ""
-        }
+        },
+        "view": "main"
       },
       {
         "id": "listenBtn",
@@ -84,7 +87,8 @@
         "props": {
           "text": "🔊 听",
           "enabled": true
-        }
+        },
+        "view": "main"
       },
       {
         "id": "nextBtn",
@@ -100,13 +104,15 @@
         "props": {
           "text": "下一题 →",
           "enabled": false
-        }
+        },
+        "view": "main"
       },
       {
         "id": "sound1",
         "type": "sound",
         "name": "发声器",
-        "visible": false
+        "visible": false,
+        "view": "main"
       }
     ],
     "logic": {
@@ -556,196 +562,224 @@
         }
       ]
     },
-    "questions": [
-      {
-        "id": "q1",
-        "prompt": {
-          "text": "听 —— 点击你听到的那个音"
-        },
-        "data": {
-          "music": {
-            "notes": [
-              {
-                "midi": 60
-              },
-              {
-                "midi": 62
-              },
-              {
-                "midi": 64
-              },
-              {
-                "midi": 65
-              }
-            ],
-            "clef": "treble"
-          },
-          "listenNotes": [
-            {
-              "midi": 64,
-              "dur": "2n",
-              "vel": 100
-            }
-          ],
-          "answerMidi": 64,
-          "rewardChord": [
-            {
-              "midi": 60,
-              "vel": 100
-            },
-            {
-              "midi": 64,
-              "vel": 100
-            },
-            {
-              "midi": 67,
-              "vel": 100
-            },
-            {
-              "midi": 72,
-              "vel": 100
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "中央C 右边相邻的跳进音"
-          }
-        ],
-        "explanation": "E4 位于五线谱第一间。"
-      },
-      {
-        "id": "q2",
-        "prompt": {
-          "text": "听 —— 点击你听到的那个音"
-        },
-        "data": {
-          "music": {
-            "notes": [
-              {
-                "midi": 65
-              },
-              {
-                "midi": 67
-              },
-              {
-                "midi": 69
-              },
-              {
-                "midi": 71
-              }
-            ],
-            "clef": "treble"
-          },
-          "listenNotes": [
-            {
-              "midi": 71,
-              "dur": "2n"
-            }
-          ],
-          "answerMidi": 71,
-          "rewardChord": [
-            {
-              "midi": 65
-            },
-            {
-              "midi": 69
-            },
-            {
-              "midi": 72
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "第三线上的音"
-          }
-        ],
-        "explanation": "B4 位于第三线。"
-      },
-      {
-        "id": "q3",
-        "prompt": {
-          "text": "听 —— 点击你听到的那个音"
-        },
-        "data": {
-          "music": {
-            "notes": [
-              {
-                "midi": 67
-              },
-              {
-                "midi": 69
-              },
-              {
-                "midi": 72
-              },
-              {
-                "midi": 74
-              }
-            ],
-            "clef": "treble"
-          },
-          "listenNotes": [
-            {
-              "midi": 72,
-              "dur": "2n"
-            }
-          ],
-          "answerMidi": 72,
-          "rewardChord": [
-            {
-              "midi": 67
-            },
-            {
-              "midi": 72
-            },
-            {
-              "midi": 76
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "比第三间高一个八度的 C"
-          }
-        ],
-        "explanation": "C5 位于第三间之上、第四线之下的加线上。"
-      }
-    ],
     "flow": {
       "order": "sequential",
       "count": null,
       "pass": {
         "expr": "v.score >= 20"
       }
+    },
+    "views": [
+      {
+        "id": "main",
+        "name": "主视图",
+        "template": true
+      }
+    ],
+    "table": {
+      "columns": [
+        {
+          "key": "prompt",
+          "label": "题面"
+        },
+        {
+          "key": "data",
+          "label": "数据"
+        },
+        {
+          "key": "scoring",
+          "label": "分值"
+        },
+        {
+          "key": "hints",
+          "label": "提示"
+        },
+        {
+          "key": "explanation",
+          "label": "解析"
+        }
+      ],
+      "rows": [
+        {
+          "prompt": {
+            "text": "听 —— 点击你听到的那个音"
+          },
+          "data": {
+            "music": {
+              "notes": [
+                {
+                  "midi": 60
+                },
+                {
+                  "midi": 62
+                },
+                {
+                  "midi": 64
+                },
+                {
+                  "midi": 65
+                }
+              ],
+              "clef": "treble"
+            },
+            "listenNotes": [
+              {
+                "midi": 64,
+                "dur": "2n",
+                "vel": 100
+              }
+            ],
+            "answerMidi": 64,
+            "rewardChord": [
+              {
+                "midi": 60,
+                "vel": 100
+              },
+              {
+                "midi": 64,
+                "vel": 100
+              },
+              {
+                "midi": 67,
+                "vel": 100
+              },
+              {
+                "midi": 72,
+                "vel": 100
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "中央C 右边相邻的跳进音"
+            }
+          ],
+          "explanation": "E4 位于五线谱第一间。"
+        },
+        {
+          "prompt": {
+            "text": "听 —— 点击你听到的那个音"
+          },
+          "data": {
+            "music": {
+              "notes": [
+                {
+                  "midi": 65
+                },
+                {
+                  "midi": 67
+                },
+                {
+                  "midi": 69
+                },
+                {
+                  "midi": 71
+                }
+              ],
+              "clef": "treble"
+            },
+            "listenNotes": [
+              {
+                "midi": 71,
+                "dur": "2n"
+              }
+            ],
+            "answerMidi": 71,
+            "rewardChord": [
+              {
+                "midi": 65
+              },
+              {
+                "midi": 69
+              },
+              {
+                "midi": 72
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "第三线上的音"
+            }
+          ],
+          "explanation": "B4 位于第三线。"
+        },
+        {
+          "prompt": {
+            "text": "听 —— 点击你听到的那个音"
+          },
+          "data": {
+            "music": {
+              "notes": [
+                {
+                  "midi": 67
+                },
+                {
+                  "midi": 69
+                },
+                {
+                  "midi": 72
+                },
+                {
+                  "midi": 74
+                }
+              ],
+              "clef": "treble"
+            },
+            "listenNotes": [
+              {
+                "midi": 72,
+                "dur": "2n"
+              }
+            ],
+            "answerMidi": 72,
+            "rewardChord": [
+              {
+                "midi": 67
+              },
+              {
+                "midi": 72
+              },
+              {
+                "midi": 76
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "比第三间高一个八度的 C"
+            }
+          ],
+          "explanation": "C5 位于第三间之上、第四线之下的加线上。"
+        }
+      ]
     }
   }
 }

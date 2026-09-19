@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "kind": "level",
   "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A4",
   "version": "1.0.0",
@@ -34,7 +34,8 @@
         },
         "props": {
           "text": "得分: 0"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "timerLabel",
@@ -49,7 +50,8 @@
         },
         "props": {
           "text": "⏱ 3 秒"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "choice1",
@@ -65,7 +67,8 @@
         "props": {},
         "bindings": {
           "options": "$q.data.options"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "feedback",
@@ -80,7 +83,8 @@
         },
         "props": {
           "text": ""
-        }
+        },
+        "view": "main"
       },
       {
         "id": "listenBtn",
@@ -96,7 +100,8 @@
         "props": {
           "text": "🔊 重听",
           "enabled": true
-        }
+        },
+        "view": "main"
       },
       {
         "id": "nextBtn",
@@ -112,28 +117,87 @@
         "props": {
           "text": "下一题 →",
           "enabled": false
-        }
+        },
+        "view": "main"
       },
       {
         "id": "sound1",
         "type": "sound",
         "name": "发声器",
-        "visible": false
+        "visible": false,
+        "view": "main"
       },
       {
         "id": "timer1",
         "type": "timer",
         "name": "限时器",
-        "visible": false
+        "visible": false,
+        "view": "main"
       }
     ],
     "logic": {
       "logicVersion": 2,
       "variables": {
         "score": 0,
-        "done": false
+        "done": false,
+        "__row": null,
+        "answered": null
       },
       "nodes": [
+        {
+          "id": "q0_load",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "q0_gate",
+          "kind": "branch",
+          "cond": "v.__row == 0"
+        },
+        {
+          "id": "q0_var_answered",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "false"
+          }
+        },
+        {
+          "id": "q1_load",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "q1_gate",
+          "kind": "branch",
+          "cond": "v.__row == 1"
+        },
+        {
+          "id": "q1_var_answered",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "false"
+          }
+        },
+        {
+          "id": "q2_load",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "q2_gate",
+          "kind": "branch",
+          "cond": "v.__row == 2"
+        },
+        {
+          "id": "q2_var_answered",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "false"
+          }
+        },
         {
           "id": "load-question_on",
           "kind": "on",
@@ -674,188 +738,234 @@
           "id": "m38",
           "from": "on-finish_on",
           "to": "on-finish_d0"
+        },
+        {
+          "id": "e_p1",
+          "from": "q0_load",
+          "to": "q0_gate"
+        },
+        {
+          "id": "e_p2",
+          "from": "q0_gate",
+          "to": "q0_var_answered",
+          "port": "true"
+        },
+        {
+          "id": "e_p3",
+          "from": "q1_load",
+          "to": "q1_gate"
+        },
+        {
+          "id": "e_p4",
+          "from": "q1_gate",
+          "to": "q1_var_answered",
+          "port": "true"
+        },
+        {
+          "id": "e_p5",
+          "from": "q2_load",
+          "to": "q2_gate"
+        },
+        {
+          "id": "e_p6",
+          "from": "q2_gate",
+          "to": "q2_var_answered",
+          "port": "true"
         }
       ]
     },
-    "questions": [
-      {
-        "id": "q1",
-        "prompt": {
-          "text": "快速听辨：这是什么三和弦？"
-        },
-        "data": {
-          "options": [
-            "大三和弦",
-            "小三和弦",
-            "减三和弦",
-            "增三和弦"
-          ],
-          "correctIndex": 0,
-          "listenNotes": [
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            },
-            {
-              "midi": 67
-            }
-          ],
-          "rewardChord": [
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            },
-            {
-              "midi": 67
-            },
-            {
-              "midi": 72
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "明亮的色彩"
-          }
-        ],
-        "explanation": "C-E-G 大三和弦。",
-        "logicPatch": {
-          "variables": {
-            "answered": false
-          }
-        }
-      },
-      {
-        "id": "q2",
-        "prompt": {
-          "text": "快速听辨：这是什么三和弦？"
-        },
-        "data": {
-          "options": [
-            "大三和弦",
-            "小三和弦",
-            "减三和弦",
-            "增三和弦"
-          ],
-          "correctIndex": 1,
-          "listenNotes": [
-            {
-              "midi": 57
-            },
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            }
-          ],
-          "rewardChord": [
-            {
-              "midi": 57
-            },
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            },
-            {
-              "midi": 69
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "暗淡的色彩"
-          }
-        ],
-        "explanation": "A-C-E 小三和弦。",
-        "logicPatch": {
-          "variables": {
-            "answered": false
-          }
-        }
-      },
-      {
-        "id": "q3",
-        "prompt": {
-          "text": "快速听辨：两个音是什么音程？"
-        },
-        "data": {
-          "options": [
-            "大二度",
-            "大三度",
-            "纯四度",
-            "纯五度"
-          ],
-          "correctIndex": 2,
-          "listenNotes": [
-            {
-              "midi": 60
-            },
-            {
-              "midi": 65
-            }
-          ],
-          "rewardChord": [
-            {
-              "midi": 60
-            },
-            {
-              "midi": 65
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "生日歌开头「祝你」的两个音"
-          }
-        ],
-        "explanation": "C4-F4 是纯四度。",
-        "logicPatch": {
-          "variables": {
-            "answered": false
-          }
-        }
-      }
-    ],
     "flow": {
       "order": "sequential",
       "count": null,
       "pass": {
         "expr": "v.score >= 20"
       }
+    },
+    "views": [
+      {
+        "id": "main",
+        "name": "主视图",
+        "template": true
+      }
+    ],
+    "table": {
+      "columns": [
+        {
+          "key": "prompt",
+          "label": "题面"
+        },
+        {
+          "key": "data",
+          "label": "数据"
+        },
+        {
+          "key": "scoring",
+          "label": "分值"
+        },
+        {
+          "key": "hints",
+          "label": "提示"
+        },
+        {
+          "key": "explanation",
+          "label": "解析"
+        }
+      ],
+      "rows": [
+        {
+          "prompt": {
+            "text": "快速听辨：这是什么三和弦？"
+          },
+          "data": {
+            "options": [
+              "大三和弦",
+              "小三和弦",
+              "减三和弦",
+              "增三和弦"
+            ],
+            "correctIndex": 0,
+            "listenNotes": [
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              },
+              {
+                "midi": 67
+              }
+            ],
+            "rewardChord": [
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              },
+              {
+                "midi": 67
+              },
+              {
+                "midi": 72
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "明亮的色彩"
+            }
+          ],
+          "explanation": "C-E-G 大三和弦。"
+        },
+        {
+          "prompt": {
+            "text": "快速听辨：这是什么三和弦？"
+          },
+          "data": {
+            "options": [
+              "大三和弦",
+              "小三和弦",
+              "减三和弦",
+              "增三和弦"
+            ],
+            "correctIndex": 1,
+            "listenNotes": [
+              {
+                "midi": 57
+              },
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              }
+            ],
+            "rewardChord": [
+              {
+                "midi": 57
+              },
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              },
+              {
+                "midi": 69
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "暗淡的色彩"
+            }
+          ],
+          "explanation": "A-C-E 小三和弦。"
+        },
+        {
+          "prompt": {
+            "text": "快速听辨：两个音是什么音程？"
+          },
+          "data": {
+            "options": [
+              "大二度",
+              "大三度",
+              "纯四度",
+              "纯五度"
+            ],
+            "correctIndex": 2,
+            "listenNotes": [
+              {
+                "midi": 60
+              },
+              {
+                "midi": 65
+              }
+            ],
+            "rewardChord": [
+              {
+                "midi": 60
+              },
+              {
+                "midi": 65
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "生日歌开头「祝你」的两个音"
+            }
+          ],
+          "explanation": "C4-F4 是纯四度。"
+        }
+      ]
     }
   }
 }

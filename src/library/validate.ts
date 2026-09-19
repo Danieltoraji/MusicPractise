@@ -6,7 +6,7 @@
 import Ajv2020 from 'ajv/dist/2020'
 import type { LevelDoc } from '../engine/level'
 import { lintGraphProgram } from '../engine/graphProgram'
-import { migrateLogicV1toV2 } from '../engine/migrate'
+import { migrateDocToV3 } from '../engine/migrateDoc'
 import type { ResourceKind } from './db'
 
 export const SCHEMA_BASE = 'https://music-practise.local/schemas/v1/'
@@ -57,7 +57,7 @@ export type LoadResult =
   | { ok: true; doc: LevelDoc; lintWarnings: string[] }
   | { ok: false; errors: string[] }
 
-/** 关卡装载管线：信封 schema → schemaVersion → 逻辑 lint */
+/** 关卡装载管线：信封 schema（v1|v3）→ 文档迁移器（统一出 v3）→ 逻辑 lint */
 export function loadLevelDoc(raw: unknown): LoadResult {
   const errors: string[] = []
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
@@ -70,29 +70,25 @@ export function loadLevelDoc(raw: unknown): LoadResult {
   const env = validateEnvelope('level', raw)
   if (!env.ok) errors.push(...env.errors)
 
-  const source = raw as LevelDoc
-  if (source.schemaVersion !== 1) {
-    errors.push(`schemaVersion ${String(source.schemaVersion)} 不受支持（当前支持 1，旧文档迁移器尚未提供）`)
+  const source = raw as { schemaVersion?: unknown }
+  if (source.schemaVersion !== 1 && source.schemaVersion !== 3) {
+    errors.push(`schemaVersion ${String(source.schemaVersion)} 不受支持（支持 1 → 自动升级 3；3 为当前格式）`)
   }
 
   let lintWarnings: string[] = []
   if (errors.length === 0) {
-    // v1 ECA → v2 图 IR 透明迁移：装载与保存出的内容恒为 v2（logicVersion 判别，信封 schemaVersion 保持 1）。
-    // 不变异调用方传入的对象：浅拷贝 doc/content 后再写入迁移结果（注意：不得遮蔽外层 doc）
-    const doc: LevelDoc = { ...source, content: { ...source.content } }
+    // 迁移器统一出 v3：v1 questions → 数据表、logicPatch → 行门控子图、组件归属视图、
+    // 逻辑 v1 ECA → v2 图 IR。不变异调用方传入的对象（浅拷贝后写入）。
+    let doc: LevelDoc
     try {
-      doc.content.logic = migrateLogicV1toV2(doc.content.logic)
+      doc = migrateDocToV3(source)
     } catch (err) {
-      // schema 合法但迁移器拒绝（如规则 id 重复、对象键非标识符）：作为装载错误而非崩溃
-      return { ok: false, errors: [`逻辑迁移失败: ${err instanceof Error ? err.message : String(err)}`] }
-    }
-    const patchVarKeys = new Set<string>()
-    for (const q of doc.content.questions) {
-      for (const key of Object.keys(q.logicPatch?.variables ?? {})) patchVarKeys.add(key)
+      // schema 合法但迁移器拒绝：作为装载错误而非崩溃
+      return { ok: false, errors: [`文档迁移失败: ${err instanceof Error ? err.message : String(err)}`] }
     }
     lintWarnings = lintGraphProgram(doc.content.logic, {
       componentIds: doc.content.components.map((c) => c.id),
-      extraVariableKeys: patchVarKeys,
+      viewIds: doc.content.views.map((v) => v.id),
     })
     return { ok: true, doc, lintWarnings }
   }

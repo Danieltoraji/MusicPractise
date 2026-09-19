@@ -1,83 +1,234 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://music-practise.local/schemas/v1/level.json",
-  "title": "关卡文档 v1",
+  "title": "关卡文档（v1 旧格式 / v3 视图+数据表；装载管线统一迁出 v3）",
   "type": "object",
-  "properties": {
-    "schemaVersion": {
-      "const": 1
+  "oneOf": [
+    {
+      "$ref": "#/$defs/V1Level"
     },
-    "kind": {
-      "const": "level"
-    },
-    "id": {
-      "type": "string",
-      "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$"
-    },
-    "version": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
-    },
-    "meta": {
-      "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Meta"
-    },
-    "refs": {
-      "type": "array",
-      "items": {
-        "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Ref"
-      }
-    },
-    "content": {
+    {
+      "$ref": "#/$defs/V3Level"
+    }
+  ],
+  "$defs": {
+    "V1Level": {
       "type": "object",
       "properties": {
-        "components": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "level"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "meta": {
+          "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Meta"
+        },
+        "refs": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ComponentInstance"
-          },
-          "maxItems": 64
+            "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Ref"
+          }
         },
-        "logic": {
-          "anyOf": [
-            {
-              "$ref": "https://music-practise.local/schemas/v1/logic.json"
+        "content": {
+          "type": "object",
+          "properties": {
+            "components": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ComponentInstance"
+              },
+              "maxItems": 64
             },
-            {
-              "$ref": "https://music-practise.local/schemas/v1/graph-logic.json"
+            "logic": {
+              "anyOf": [
+                {
+                  "$ref": "https://music-practise.local/schemas/v1/logic.json"
+                },
+                {
+                  "$ref": "https://music-practise.local/schemas/v1/graph-logic.json"
+                }
+              ],
+              "description": "关卡逻辑：v1 ECA 规则（logic.json，装载时自动迁移为 v2）或 v2 图 IR（graph-logic.json）"
+            },
+            "questions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Question"
+              },
+              "minItems": 1,
+              "maxItems": 512
+            },
+            "flow": {
+              "$ref": "#/$defs/Flow"
             }
-          ],
-          "description": "关卡逻辑：v1 ECA 规则（logic.json，装载时自动迁移为 v2）或 v2 图 IR（graph-logic.json）"
-        },
-        "questions": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Question"
           },
-          "minItems": 1,
-          "maxItems": 512
-        },
-        "flow": {
-          "$ref": "#/$defs/Flow"
+          "required": [
+            "components",
+            "logic",
+            "questions"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
-        "components",
-        "logic",
-        "questions"
+        "schemaVersion",
+        "kind",
+        "id",
+        "version",
+        "meta",
+        "content"
       ],
       "additionalProperties": false
-    }
-  },
-  "required": [
-    "schemaVersion",
-    "kind",
-    "id",
-    "version",
-    "meta",
-    "content"
-  ],
-  "additionalProperties": false,
-  "$defs": {
+    },
+    "V3Level": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 3
+        },
+        "kind": {
+          "const": "level"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "meta": {
+          "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Meta"
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Ref"
+          }
+        },
+        "content": {
+          "type": "object",
+          "properties": {
+            "views": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewDef"
+              },
+              "minItems": 1,
+              "maxItems": 32,
+              "description": "互斥视图；template（模版视图）至多一个，level.next 推进行后自动切换到它"
+            },
+            "components": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ComponentInstance"
+              },
+              "maxItems": 64
+            },
+            "logic": {
+              "$ref": "https://music-practise.local/schemas/v1/graph-logic.json",
+              "description": "关卡逻辑：GraphProgram v2 图 IR"
+            },
+            "table": {
+              "$ref": "#/$defs/DataTable"
+            },
+            "flow": {
+              "$ref": "#/$defs/Flow"
+            }
+          },
+          "required": [
+            "views",
+            "components",
+            "logic",
+            "table"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "id",
+        "version",
+        "meta",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "ViewDef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "maxLength": 32
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "template": {
+          "type": "boolean",
+          "description": "模版视图：进入/换行时按当前表格行重放数据绑定（「显示题目」抽象）"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "DataTable": {
+      "type": "object",
+      "description": "题目数据表格：自定义列 × 行；q.* 表达式作用域指向当前行",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "maxLength": 32
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 24
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 32
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/JsonValue"
+            }
+          },
+          "maxItems": 512
+        }
+      },
+      "required": [
+        "columns",
+        "rows"
+      ],
+      "additionalProperties": false
+    },
     "ComponentInstance": {
       "type": "object",
       "properties": {
@@ -90,9 +241,16 @@
             },
             {
               "not": {
-                "const": "level"
+                "anyOf": [
+                  {
+                    "const": "level"
+                  },
+                  {
+                    "const": "views"
+                  }
+                ]
               },
-              "description": "\"level\" 是运行器伪组件的保留字"
+              "description": "\"level\" / \"views\" 是运行器伪组件的保留字"
             }
           ]
         },
@@ -107,6 +265,10 @@
           "type": "boolean",
           "default": true
         },
+        "view": {
+          "type": "string",
+          "description": "所属视图 id（缺省 = 首视图，装载管线补齐）"
+        },
         "layout": {
           "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Layout"
         },
@@ -115,7 +277,7 @@
         },
         "bindings": {
           "type": "object",
-          "description": "绑定槽位 → 随题目注入的值",
+          "description": "绑定槽位 → 随题目注入的值（$q.<列>… 指向表格当前行）",
           "additionalProperties": {
             "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/BindingValue"
           }
@@ -129,6 +291,7 @@
     },
     "Question": {
       "type": "object",
+      "description": "（仅 v1 文档）旧题目条目",
       "properties": {
         "id": {
           "type": "string",
@@ -182,7 +345,7 @@
         },
         "logicPatch": {
           "type": "object",
-          "description": "单题逻辑补丁 v1：追加规则/覆盖变量初值",
+          "description": "单题逻辑补丁 v1：装载时由迁移器编译为图上的行门控子图",
           "properties": {
             "variables": {
               "additionalProperties": {

@@ -56,6 +56,9 @@ export interface GEdge {
 /** level facade 暴露给逻辑的方法（伪实例 id = "level"） */
 export const LEVEL_METHODS = ['next', 'restart', 'finish'] as const
 
+/** views 伪实例的方法（v3 视图切换）；goto 的参数 = 视图 id 字符串字面量 */
+export const VIEWS_METHODS = ['goto'] as const
+
 /** 判定一段未知 JSON 是否为 GraphProgram（装载/导入管线用） */
 export function isGraphProgram(x: unknown): x is GraphProgram {
   if (x === null || typeof x !== 'object') return false
@@ -227,6 +230,8 @@ export interface GraphLintCtx {
   componentIds?: Iterable<string>
   /** 题目 logicPatch.variables 声明的变量豁免 */
   extraVariableKeys?: Iterable<string>
+  /** 视图 id 集合（v3）：views.goto 的字面量参数据此校验 */
+  viewIds?: Iterable<string>
 }
 
 /** 收集节点中出现的全部表达式源文本（仅在字段为字符串时收集，schema 问题由 structure 检查报告） */
@@ -278,6 +283,7 @@ const VAR_REF_RE = /\bv\.([A-Za-z_][A-Za-z0-9_]*)/g
 export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintCtx): LintIssue[] {
   const issues: LintIssue[] = []
   const compIds = ctx?.componentIds ? new Set(ctx.componentIds) : null
+  const viewIdSet = ctx?.viewIds ? new Set(ctx.viewIds) : null
   const declaredVars = new Set<string>(ctx?.extraVariableKeys ?? [])
   for (const key of Object.keys(program.variables ?? {})) declaredVars.add(key)
 
@@ -489,9 +495,39 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
               message: `${where}: level 没有 "${node.method}" 方法（可用: ${LEVEL_METHODS.join('/')}）`,
             })
           }
-        } else {
-          checkCompRef(node.target, where, node.id, 'target')
+          break
         }
+        if (node.target === 'views') {
+          if (!(VIEWS_METHODS as readonly string[]).includes(node.method)) {
+            issues.push({
+              code: 'dangling-ref',
+              nodeId: node.id,
+              field: 'method',
+              message: `${where}: views 没有 "${node.method}" 方法（可用: ${VIEWS_METHODS.join('/')}）`,
+            })
+            break
+          }
+          // goto 的视图 id：字符串字面量 → 校验存在性；非字面量 → 只提示写法
+          const raw = node.args?.[0]
+          const literal = typeof raw === 'string' ? /^["'](.+)["']$/.exec(raw.trim()) : null
+          if (!literal) {
+            issues.push({
+              code: 'structure',
+              nodeId: node.id,
+              field: 'args',
+              message: `${where}: views.goto 需要视图 id（字符串字面量，如 "main"）`,
+            })
+          } else if (viewIdSet && !viewIdSet.has(literal[1])) {
+            issues.push({
+              code: 'dangling-ref',
+              nodeId: node.id,
+              field: 'args',
+              message: `${where}: views.goto 指向不存在的视图 "${literal[1]}"`,
+            })
+          }
+          break
+        }
+        checkCompRef(node.target, where, node.id, 'target')
         break
       }
       case 'emit':

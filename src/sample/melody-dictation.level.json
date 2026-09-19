@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "kind": "level",
   "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A3",
   "version": "1.0.0",
@@ -34,7 +34,8 @@
         },
         "props": {
           "text": "得分: 0"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "feedback",
@@ -49,7 +50,8 @@
         },
         "props": {
           "text": ""
-        }
+        },
+        "view": "main"
       },
       {
         "id": "keys1",
@@ -65,7 +67,8 @@
         "props": {
           "lowMidi": 60,
           "highMidi": 76
-        }
+        },
+        "view": "main"
       },
       {
         "id": "listenBtn",
@@ -81,7 +84,8 @@
         "props": {
           "text": "🔊 重听",
           "enabled": true
-        }
+        },
+        "view": "main"
       },
       {
         "id": "resetBtn",
@@ -97,7 +101,8 @@
         "props": {
           "text": "↺ 清空",
           "enabled": true
-        }
+        },
+        "view": "main"
       },
       {
         "id": "nextBtn",
@@ -113,13 +118,15 @@
         "props": {
           "text": "下一题 →",
           "enabled": false
-        }
+        },
+        "view": "main"
       },
       {
         "id": "sound1",
         "type": "sound",
         "name": "发声器",
-        "visible": false
+        "visible": false,
+        "view": "main"
       }
     ],
     "logic": {
@@ -127,9 +134,65 @@
       "variables": {
         "score": 0,
         "typed": [],
-        "done": false
+        "done": false,
+        "__row": null,
+        "answered": null
       },
       "nodes": [
+        {
+          "id": "q0_load",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "q0_gate",
+          "kind": "branch",
+          "cond": "v.__row == 0"
+        },
+        {
+          "id": "q0_var_answered",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "false"
+          }
+        },
+        {
+          "id": "q1_load",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "q1_gate",
+          "kind": "branch",
+          "cond": "v.__row == 1"
+        },
+        {
+          "id": "q1_var_answered",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "false"
+          }
+        },
+        {
+          "id": "q2_load",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "q2_gate",
+          "kind": "branch",
+          "cond": "v.__row == 2"
+        },
+        {
+          "id": "q2_var_answered",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "false"
+          }
+        },
         {
           "id": "load-question_on",
           "kind": "on",
@@ -628,197 +691,243 @@
           "from": "on-finish_cond",
           "to": "on-finish_e0",
           "port": "false"
+        },
+        {
+          "id": "e_p1",
+          "from": "q0_load",
+          "to": "q0_gate"
+        },
+        {
+          "id": "e_p2",
+          "from": "q0_gate",
+          "to": "q0_var_answered",
+          "port": "true"
+        },
+        {
+          "id": "e_p3",
+          "from": "q1_load",
+          "to": "q1_gate"
+        },
+        {
+          "id": "e_p4",
+          "from": "q1_gate",
+          "to": "q1_var_answered",
+          "port": "true"
+        },
+        {
+          "id": "e_p5",
+          "from": "q2_load",
+          "to": "q2_gate"
+        },
+        {
+          "id": "e_p6",
+          "from": "q2_gate",
+          "to": "q2_var_answered",
+          "port": "true"
         }
       ]
     },
-    "questions": [
-      {
-        "id": "q1",
-        "prompt": {
-          "text": "听旋律，在键盘上弹出它（C-D-E）"
-        },
-        "data": {
-          "listenNotes": [
-            {
-              "midi": 60,
-              "dur": "4n"
-            },
-            {
-              "midi": 62,
-              "dur": "4n"
-            },
-            {
-              "midi": 64,
-              "dur": "2n"
-            }
-          ],
-          "answerSeq": [
-            60,
-            62,
-            64
-          ],
-          "rewardChord": [
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            },
-            {
-              "midi": 67
-            },
-            {
-              "midi": 72
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "do re mi，三个音都在白键上"
-          }
-        ],
-        "explanation": "C4-D4-E4，级进上行。",
-        "logicPatch": {
-          "variables": {
-            "answered": false
-          }
-        }
-      },
-      {
-        "id": "q2",
-        "prompt": {
-          "text": "听旋律，在键盘上弹出它（有一个跳进）"
-        },
-        "data": {
-          "listenNotes": [
-            {
-              "midi": 60,
-              "dur": "4n"
-            },
-            {
-              "midi": 64,
-              "dur": "4n"
-            },
-            {
-              "midi": 67,
-              "dur": "2n"
-            }
-          ],
-          "answerSeq": [
-            60,
-            64,
-            67
-          ],
-          "rewardChord": [
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            },
-            {
-              "midi": 67
-            },
-            {
-              "midi": 72
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "do mi sol，三度跳进"
-          }
-        ],
-        "explanation": "C4-E4-G4，主和弦分解上行。",
-        "logicPatch": {
-          "variables": {
-            "answered": false
-          }
-        }
-      },
-      {
-        "id": "q3",
-        "prompt": {
-          "text": "听旋律，在键盘上弹出它"
-        },
-        "data": {
-          "listenNotes": [
-            {
-              "midi": 64,
-              "dur": "4n"
-            },
-            {
-              "midi": 67,
-              "dur": "4n"
-            },
-            {
-              "midi": 69,
-              "dur": "2n"
-            }
-          ],
-          "answerSeq": [
-            64,
-            67,
-            69
-          ],
-          "rewardChord": [
-            {
-              "midi": 64
-            },
-            {
-              "midi": 69
-            },
-            {
-              "midi": 72
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "从 mi 开始：mi sol la"
-          }
-        ],
-        "explanation": "E4-G4-A4。",
-        "logicPatch": {
-          "variables": {
-            "answered": false
-          }
-        }
-      }
-    ],
     "flow": {
       "order": "sequential",
       "count": null,
       "pass": {
         "expr": "v.score >= 20"
       }
+    },
+    "views": [
+      {
+        "id": "main",
+        "name": "主视图",
+        "template": true
+      }
+    ],
+    "table": {
+      "columns": [
+        {
+          "key": "prompt",
+          "label": "题面"
+        },
+        {
+          "key": "data",
+          "label": "数据"
+        },
+        {
+          "key": "scoring",
+          "label": "分值"
+        },
+        {
+          "key": "hints",
+          "label": "提示"
+        },
+        {
+          "key": "explanation",
+          "label": "解析"
+        }
+      ],
+      "rows": [
+        {
+          "prompt": {
+            "text": "听旋律，在键盘上弹出它（C-D-E）"
+          },
+          "data": {
+            "listenNotes": [
+              {
+                "midi": 60,
+                "dur": "4n"
+              },
+              {
+                "midi": 62,
+                "dur": "4n"
+              },
+              {
+                "midi": 64,
+                "dur": "2n"
+              }
+            ],
+            "answerSeq": [
+              60,
+              62,
+              64
+            ],
+            "rewardChord": [
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              },
+              {
+                "midi": 67
+              },
+              {
+                "midi": 72
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "do re mi，三个音都在白键上"
+            }
+          ],
+          "explanation": "C4-D4-E4，级进上行。"
+        },
+        {
+          "prompt": {
+            "text": "听旋律，在键盘上弹出它（有一个跳进）"
+          },
+          "data": {
+            "listenNotes": [
+              {
+                "midi": 60,
+                "dur": "4n"
+              },
+              {
+                "midi": 64,
+                "dur": "4n"
+              },
+              {
+                "midi": 67,
+                "dur": "2n"
+              }
+            ],
+            "answerSeq": [
+              60,
+              64,
+              67
+            ],
+            "rewardChord": [
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              },
+              {
+                "midi": 67
+              },
+              {
+                "midi": 72
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "do mi sol，三度跳进"
+            }
+          ],
+          "explanation": "C4-E4-G4，主和弦分解上行。"
+        },
+        {
+          "prompt": {
+            "text": "听旋律，在键盘上弹出它"
+          },
+          "data": {
+            "listenNotes": [
+              {
+                "midi": 64,
+                "dur": "4n"
+              },
+              {
+                "midi": 67,
+                "dur": "4n"
+              },
+              {
+                "midi": 69,
+                "dur": "2n"
+              }
+            ],
+            "answerSeq": [
+              64,
+              67,
+              69
+            ],
+            "rewardChord": [
+              {
+                "midi": 64
+              },
+              {
+                "midi": 69
+              },
+              {
+                "midi": 72
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "从 mi 开始：mi sol la"
+            }
+          ],
+          "explanation": "E4-G4-A4。"
+        }
+      ]
     }
   }
 }

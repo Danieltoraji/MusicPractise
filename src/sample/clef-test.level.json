@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "kind": "level",
   "id": "res_01J9E0E0E0E0E0E0E0E0E0E0E0",
   "version": "1.0.0",
@@ -34,7 +34,8 @@
         },
         "props": {
           "text": "得分: 0"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "clefLabel",
@@ -49,7 +50,8 @@
         },
         "props": {
           "text": ""
-        }
+        },
+        "view": "main"
       },
       {
         "id": "staff1",
@@ -68,7 +70,8 @@
         },
         "bindings": {
           "music": "$q.data.music"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "feedback",
@@ -83,7 +86,8 @@
         },
         "props": {
           "text": ""
-        }
+        },
+        "view": "main"
       },
       {
         "id": "listenBtn",
@@ -99,7 +103,8 @@
         "props": {
           "text": "🔊 重听",
           "enabled": true
-        }
+        },
+        "view": "main"
       },
       {
         "id": "nextBtn",
@@ -115,13 +120,15 @@
         "props": {
           "text": "下一题 →",
           "enabled": false
-        }
+        },
+        "view": "main"
       },
       {
         "id": "sound1",
         "type": "sound",
         "name": "发声器",
-        "visible": false
+        "visible": false,
+        "view": "main"
       }
     ],
     "logic": {
@@ -442,531 +449,559 @@
         }
       ]
     },
-    "questions": [
-      {
-        "id": "q1",
-        "prompt": {
-          "text": "听 —— 在高音谱号谱面上点击你听到的那个音"
-        },
-        "data": {
-          "clefLabel": "高音谱号",
-          "music": {
-            "notes": [
-              {
-                "midi": 53,
-                "dur": "1n"
-              },
-              {
-                "midi": 54,
-                "dur": "1n"
-              },
-              {
-                "midi": 55,
-                "dur": "1n"
-              },
-              {
-                "midi": 56,
-                "dur": "1n"
-              },
-              {
-                "midi": 57,
-                "dur": "1n"
-              },
-              {
-                "midi": 58,
-                "dur": "1n"
-              },
-              {
-                "midi": 59,
-                "dur": "1n"
-              },
-              {
-                "midi": 60,
-                "dur": "1n"
-              },
-              {
-                "midi": 61,
-                "dur": "1n"
-              },
-              {
-                "midi": 62,
-                "dur": "1n"
-              },
-              {
-                "midi": 63,
-                "dur": "1n"
-              },
-              {
-                "midi": 64,
-                "dur": "1n"
-              },
-              {
-                "midi": 65,
-                "dur": "1n"
-              },
-              {
-                "midi": 66,
-                "dur": "1n"
-              },
-              {
-                "midi": 67,
-                "dur": "1n"
-              },
-              {
-                "midi": 68,
-                "dur": "1n"
-              },
-              {
-                "midi": 69,
-                "dur": "1n"
-              },
-              {
-                "midi": 70,
-                "dur": "1n"
-              },
-              {
-                "midi": 71,
-                "dur": "1n"
-              },
-              {
-                "midi": 72,
-                "dur": "1n"
-              },
-              {
-                "midi": 73,
-                "dur": "1n"
-              },
-              {
-                "midi": 74,
-                "dur": "1n"
-              },
-              {
-                "midi": 75,
-                "dur": "1n"
-              },
-              {
-                "midi": 76,
-                "dur": "1n"
-              }
-            ],
-            "clef": "treble"
-          },
-          "answerMidi": 69,
-          "listenNotes": [
-            {
-              "midi": 69,
-              "dur": "2n"
-            }
-          ],
-          "rewardChord": [
-            {
-              "midi": 69
-            },
-            {
-              "midi": 73
-            },
-            {
-              "midi": 76
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 33,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "范围：F3 到 E5，全部半音可用"
-          }
-        ],
-        "explanation": "高音谱号：从 F3（下加三线）到 E5（上加三线）。"
-      },
-      {
-        "id": "q2",
-        "prompt": {
-          "text": "听 —— 在中音谱号谱面上点击你听到的那个音"
-        },
-        "data": {
-          "clefLabel": "中音谱号",
-          "music": {
-            "notes": [
-              {
-                "midi": 43,
-                "dur": "1n"
-              },
-              {
-                "midi": 44,
-                "dur": "1n"
-              },
-              {
-                "midi": 45,
-                "dur": "1n"
-              },
-              {
-                "midi": 46,
-                "dur": "1n"
-              },
-              {
-                "midi": 47,
-                "dur": "1n"
-              },
-              {
-                "midi": 48,
-                "dur": "1n"
-              },
-              {
-                "midi": 49,
-                "dur": "1n"
-              },
-              {
-                "midi": 50,
-                "dur": "1n"
-              },
-              {
-                "midi": 51,
-                "dur": "1n"
-              },
-              {
-                "midi": 52,
-                "dur": "1n"
-              },
-              {
-                "midi": 53,
-                "dur": "1n"
-              },
-              {
-                "midi": 54,
-                "dur": "1n"
-              },
-              {
-                "midi": 55,
-                "dur": "1n"
-              },
-              {
-                "midi": 56,
-                "dur": "1n"
-              },
-              {
-                "midi": 57,
-                "dur": "1n"
-              },
-              {
-                "midi": 58,
-                "dur": "1n"
-              },
-              {
-                "midi": 59,
-                "dur": "1n"
-              },
-              {
-                "midi": 60,
-                "dur": "1n"
-              },
-              {
-                "midi": 61,
-                "dur": "1n"
-              },
-              {
-                "midi": 62,
-                "dur": "1n"
-              },
-              {
-                "midi": 63,
-                "dur": "1n"
-              },
-              {
-                "midi": 64,
-                "dur": "1n"
-              },
-              {
-                "midi": 65,
-                "dur": "1n"
-              },
-              {
-                "midi": 66,
-                "dur": "1n"
-              },
-              {
-                "midi": 67,
-                "dur": "1n"
-              },
-              {
-                "midi": 68,
-                "dur": "1n"
-              },
-              {
-                "midi": 69,
-                "dur": "1n"
-              },
-              {
-                "midi": 70,
-                "dur": "1n"
-              },
-              {
-                "midi": 71,
-                "dur": "1n"
-              },
-              {
-                "midi": 72,
-                "dur": "1n"
-              },
-              {
-                "midi": 73,
-                "dur": "1n"
-              },
-              {
-                "midi": 74,
-                "dur": "1n"
-              },
-              {
-                "midi": 75,
-                "dur": "1n"
-              },
-              {
-                "midi": 76,
-                "dur": "1n"
-              },
-              {
-                "midi": 77,
-                "dur": "1n"
-              }
-            ],
-            "clef": "alto"
-          },
-          "answerMidi": 60,
-          "listenNotes": [
-            {
-              "midi": 60,
-              "dur": "2n"
-            }
-          ],
-          "rewardChord": [
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            },
-            {
-              "midi": 67
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 33,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "范围：G2 到 F5，全部半音可用"
-          }
-        ],
-        "explanation": "中音谱号：从 G2（下加三线）到 F5（上加三线）。"
-      },
-      {
-        "id": "q3",
-        "prompt": {
-          "text": "听 —— 在低音谱号谱面上点击你听到的那个音"
-        },
-        "data": {
-          "clefLabel": "低音谱号",
-          "music": {
-            "notes": [
-              {
-                "midi": 33,
-                "dur": "1n"
-              },
-              {
-                "midi": 34,
-                "dur": "1n"
-              },
-              {
-                "midi": 35,
-                "dur": "1n"
-              },
-              {
-                "midi": 36,
-                "dur": "1n"
-              },
-              {
-                "midi": 37,
-                "dur": "1n"
-              },
-              {
-                "midi": 38,
-                "dur": "1n"
-              },
-              {
-                "midi": 39,
-                "dur": "1n"
-              },
-              {
-                "midi": 40,
-                "dur": "1n"
-              },
-              {
-                "midi": 41,
-                "dur": "1n"
-              },
-              {
-                "midi": 42,
-                "dur": "1n"
-              },
-              {
-                "midi": 43,
-                "dur": "1n"
-              },
-              {
-                "midi": 44,
-                "dur": "1n"
-              },
-              {
-                "midi": 45,
-                "dur": "1n"
-              },
-              {
-                "midi": 46,
-                "dur": "1n"
-              },
-              {
-                "midi": 47,
-                "dur": "1n"
-              },
-              {
-                "midi": 48,
-                "dur": "1n"
-              },
-              {
-                "midi": 49,
-                "dur": "1n"
-              },
-              {
-                "midi": 50,
-                "dur": "1n"
-              },
-              {
-                "midi": 51,
-                "dur": "1n"
-              },
-              {
-                "midi": 52,
-                "dur": "1n"
-              },
-              {
-                "midi": 53,
-                "dur": "1n"
-              },
-              {
-                "midi": 54,
-                "dur": "1n"
-              },
-              {
-                "midi": 55,
-                "dur": "1n"
-              },
-              {
-                "midi": 56,
-                "dur": "1n"
-              },
-              {
-                "midi": 57,
-                "dur": "1n"
-              },
-              {
-                "midi": 58,
-                "dur": "1n"
-              },
-              {
-                "midi": 59,
-                "dur": "1n"
-              },
-              {
-                "midi": 60,
-                "dur": "1n"
-              },
-              {
-                "midi": 61,
-                "dur": "1n"
-              },
-              {
-                "midi": 62,
-                "dur": "1n"
-              },
-              {
-                "midi": 63,
-                "dur": "1n"
-              },
-              {
-                "midi": 64,
-                "dur": "1n"
-              },
-              {
-                "midi": 65,
-                "dur": "1n"
-              },
-              {
-                "midi": 66,
-                "dur": "1n"
-              },
-              {
-                "midi": 67,
-                "dur": "1n"
-              }
-            ],
-            "clef": "bass"
-          },
-          "answerMidi": 50,
-          "listenNotes": [
-            {
-              "midi": 50,
-              "dur": "2n"
-            }
-          ],
-          "rewardChord": [
-            {
-              "midi": 50
-            },
-            {
-              "midi": 54
-            },
-            {
-              "midi": 57
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 33,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "范围：A1 到 G4，全部半音可用"
-          }
-        ],
-        "explanation": "低音谱号：从 A1（下加三线）到 G4（上加三线）。"
-      }
-    ],
     "flow": {
       "order": "sequential",
       "count": null,
       "pass": {
         "expr": "v.score >= 30"
       }
+    },
+    "views": [
+      {
+        "id": "main",
+        "name": "主视图",
+        "template": true
+      }
+    ],
+    "table": {
+      "columns": [
+        {
+          "key": "prompt",
+          "label": "题面"
+        },
+        {
+          "key": "data",
+          "label": "数据"
+        },
+        {
+          "key": "scoring",
+          "label": "分值"
+        },
+        {
+          "key": "hints",
+          "label": "提示"
+        },
+        {
+          "key": "explanation",
+          "label": "解析"
+        }
+      ],
+      "rows": [
+        {
+          "prompt": {
+            "text": "听 —— 在高音谱号谱面上点击你听到的那个音"
+          },
+          "data": {
+            "clefLabel": "高音谱号",
+            "music": {
+              "notes": [
+                {
+                  "midi": 53,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 54,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 55,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 56,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 57,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 58,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 59,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 60,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 61,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 62,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 63,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 64,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 65,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 66,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 67,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 68,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 69,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 70,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 71,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 72,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 73,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 74,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 75,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 76,
+                  "dur": "1n"
+                }
+              ],
+              "clef": "treble"
+            },
+            "answerMidi": 69,
+            "listenNotes": [
+              {
+                "midi": 69,
+                "dur": "2n"
+              }
+            ],
+            "rewardChord": [
+              {
+                "midi": 69
+              },
+              {
+                "midi": 73
+              },
+              {
+                "midi": 76
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 33,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "范围：F3 到 E5，全部半音可用"
+            }
+          ],
+          "explanation": "高音谱号：从 F3（下加三线）到 E5（上加三线）。"
+        },
+        {
+          "prompt": {
+            "text": "听 —— 在中音谱号谱面上点击你听到的那个音"
+          },
+          "data": {
+            "clefLabel": "中音谱号",
+            "music": {
+              "notes": [
+                {
+                  "midi": 43,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 44,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 45,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 46,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 47,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 48,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 49,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 50,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 51,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 52,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 53,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 54,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 55,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 56,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 57,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 58,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 59,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 60,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 61,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 62,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 63,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 64,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 65,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 66,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 67,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 68,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 69,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 70,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 71,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 72,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 73,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 74,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 75,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 76,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 77,
+                  "dur": "1n"
+                }
+              ],
+              "clef": "alto"
+            },
+            "answerMidi": 60,
+            "listenNotes": [
+              {
+                "midi": 60,
+                "dur": "2n"
+              }
+            ],
+            "rewardChord": [
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              },
+              {
+                "midi": 67
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 33,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "范围：G2 到 F5，全部半音可用"
+            }
+          ],
+          "explanation": "中音谱号：从 G2（下加三线）到 F5（上加三线）。"
+        },
+        {
+          "prompt": {
+            "text": "听 —— 在低音谱号谱面上点击你听到的那个音"
+          },
+          "data": {
+            "clefLabel": "低音谱号",
+            "music": {
+              "notes": [
+                {
+                  "midi": 33,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 34,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 35,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 36,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 37,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 38,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 39,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 40,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 41,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 42,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 43,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 44,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 45,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 46,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 47,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 48,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 49,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 50,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 51,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 52,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 53,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 54,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 55,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 56,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 57,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 58,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 59,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 60,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 61,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 62,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 63,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 64,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 65,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 66,
+                  "dur": "1n"
+                },
+                {
+                  "midi": 67,
+                  "dur": "1n"
+                }
+              ],
+              "clef": "bass"
+            },
+            "answerMidi": 50,
+            "listenNotes": [
+              {
+                "midi": 50,
+                "dur": "2n"
+              }
+            ],
+            "rewardChord": [
+              {
+                "midi": 50
+              },
+              {
+                "midi": 54
+              },
+              {
+                "midi": 57
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 33,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "范围：A1 到 G4，全部半音可用"
+            }
+          ],
+          "explanation": "低音谱号：从 A1（下加三线）到 G4（上加三线）。"
+        }
+      ]
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "kind": "level",
   "id": "res_01J9F1F1F1F1F1F1F1F1F1F1F1",
   "version": "1.0.0",
@@ -33,7 +33,8 @@
         },
         "props": {
           "text": "得分: 0"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "tuner1",
@@ -45,7 +46,8 @@
           "y": 90,
           "w": 720,
           "h": 260
-        }
+        },
+        "view": "main"
       },
       {
         "id": "feedback",
@@ -60,7 +62,8 @@
         },
         "props": {
           "text": ""
-        }
+        },
+        "view": "main"
       },
       {
         "id": "nextBtn",
@@ -76,7 +79,8 @@
         "props": {
           "text": "下一题 →",
           "enabled": false
-        }
+        },
+        "view": "main"
       }
     ],
     "logic": {
@@ -85,9 +89,62 @@
         "score": 0,
         "stable": 0,
         "scored": 0,
-        "done": false
+        "done": false,
+        "__row": null
       },
       "nodes": [
+        {
+          "id": "q0_load",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "q0_gate",
+          "kind": "branch",
+          "cond": "v.__row == 0"
+        },
+        {
+          "id": "q0_var_stable",
+          "kind": "assign",
+          "target": "stable",
+          "value": {
+            "expr": "0"
+          }
+        },
+        {
+          "id": "q0_var_scored",
+          "kind": "assign",
+          "target": "scored",
+          "value": {
+            "expr": "0"
+          }
+        },
+        {
+          "id": "q1_load",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "q1_gate",
+          "kind": "branch",
+          "cond": "v.__row == 1"
+        },
+        {
+          "id": "q1_var_stable",
+          "kind": "assign",
+          "target": "stable",
+          "value": {
+            "expr": "0"
+          }
+        },
+        {
+          "id": "q1_var_scored",
+          "kind": "assign",
+          "target": "scored",
+          "value": {
+            "expr": "0"
+          }
+        },
         {
           "id": "load_on",
           "kind": "on",
@@ -374,49 +431,90 @@
           "id": "m20",
           "from": "on-finish_on",
           "to": "on-finish_d0"
+        },
+        {
+          "id": "e_p1",
+          "from": "q0_load",
+          "to": "q0_gate"
+        },
+        {
+          "id": "e_p2",
+          "from": "q0_gate",
+          "to": "q0_var_stable",
+          "port": "true"
+        },
+        {
+          "id": "e_p3",
+          "from": "q0_var_stable",
+          "to": "q0_var_scored"
+        },
+        {
+          "id": "e_p4",
+          "from": "q1_load",
+          "to": "q1_gate"
+        },
+        {
+          "id": "e_p5",
+          "from": "q1_gate",
+          "to": "q1_var_stable",
+          "port": "true"
+        },
+        {
+          "id": "e_p6",
+          "from": "q1_var_stable",
+          "to": "q1_var_scored"
         }
       ]
     },
-    "questions": [
-      {
-        "id": "q1",
-        "prompt": {
-          "text": "把声音稳定在 A4 附近"
-        },
-        "data": {},
-        "scoring": {
-          "max": 10
-        },
-        "logicPatch": {
-          "variables": {
-            "stable": 0,
-            "scored": 0
-          }
-        }
-      },
-      {
-        "id": "q2",
-        "prompt": {
-          "text": "再来一次：这次用更低的音"
-        },
-        "data": {},
-        "scoring": {
-          "max": 10
-        },
-        "logicPatch": {
-          "variables": {
-            "stable": 0,
-            "scored": 0
-          }
-        }
-      }
-    ],
     "flow": {
       "order": "sequential",
       "count": null,
       "pass": {
         "expr": "v.score >= 20"
       }
+    },
+    "views": [
+      {
+        "id": "main",
+        "name": "主视图",
+        "template": true
+      }
+    ],
+    "table": {
+      "columns": [
+        {
+          "key": "prompt",
+          "label": "题面"
+        },
+        {
+          "key": "data",
+          "label": "数据"
+        },
+        {
+          "key": "scoring",
+          "label": "分值"
+        }
+      ],
+      "rows": [
+        {
+          "prompt": {
+            "text": "把声音稳定在 A4 附近"
+          },
+          "data": {},
+          "scoring": {
+            "max": 10
+          }
+        },
+        {
+          "prompt": {
+            "text": "再来一次：这次用更低的音"
+          },
+          "data": {},
+          "scoring": {
+            "max": 10
+          }
+        }
+      ]
     }
   }
 }

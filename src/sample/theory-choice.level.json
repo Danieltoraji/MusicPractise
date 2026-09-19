@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "kind": "level",
   "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A2",
   "version": "1.0.0",
@@ -34,7 +34,8 @@
         },
         "props": {
           "text": "得分: 0"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "choice1",
@@ -50,7 +51,8 @@
         "props": {},
         "bindings": {
           "options": "$q.data.options"
-        }
+        },
+        "view": "main"
       },
       {
         "id": "feedback",
@@ -65,7 +67,8 @@
         },
         "props": {
           "text": ""
-        }
+        },
+        "view": "main"
       },
       {
         "id": "listenBtn",
@@ -81,7 +84,8 @@
         "props": {
           "text": "🔊 重听",
           "enabled": true
-        }
+        },
+        "view": "main"
       },
       {
         "id": "nextBtn",
@@ -97,13 +101,15 @@
         "props": {
           "text": "下一题 →",
           "enabled": false
-        }
+        },
+        "view": "main"
       },
       {
         "id": "sound1",
         "type": "sound",
         "name": "发声器",
-        "visible": false
+        "visible": false,
+        "view": "main"
       }
     ],
     "logic": {
@@ -452,127 +458,156 @@
         }
       ]
     },
-    "questions": [
-      {
-        "id": "q1",
-        "prompt": {
-          "text": "听和弦，选出名称"
-        },
-        "data": {
-          "options": [
-            "大三和弦",
-            "小三和弦",
-            "减三和弦",
-            "增三和弦"
-          ],
-          "correctIndex": 0,
-          "listenNotes": [
-            {
-              "midi": 60,
-              "vel": 100
-            },
-            {
-              "midi": 64,
-              "vel": 100
-            },
-            {
-              "midi": 67,
-              "vel": 100
-            }
-          ],
-          "rewardChord": [
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            },
-            {
-              "midi": 67
-            },
-            {
-              "midi": 72
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "明亮、欢快的色彩"
-          }
-        ],
-        "explanation": "C-E-G：大三度 + 小三度 = 大三和弦。"
-      },
-      {
-        "id": "q2",
-        "prompt": {
-          "text": "听和弦，选出名称"
-        },
-        "data": {
-          "options": [
-            "大三和弦",
-            "小三和弦",
-            "减三和弦",
-            "增三和弦"
-          ],
-          "correctIndex": 1,
-          "listenNotes": [
-            {
-              "midi": 57
-            },
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            }
-          ],
-          "rewardChord": [
-            {
-              "midi": 57
-            },
-            {
-              "midi": 60
-            },
-            {
-              "midi": 64
-            },
-            {
-              "midi": 69
-            }
-          ],
-          "wrongBuzz": [
-            {
-              "midi": 43,
-              "dur": "8n"
-            }
-          ]
-        },
-        "scoring": {
-          "max": 10
-        },
-        "hints": [
-          {
-            "text": "暗淡、略带忧伤的色彩"
-          }
-        ],
-        "explanation": "A-C-E：小三度 + 大三度 = 小三和弦。"
-      }
-    ],
     "flow": {
       "order": "sequential",
       "count": null,
       "pass": {
         "expr": "v.score >= 10"
       }
+    },
+    "views": [
+      {
+        "id": "main",
+        "name": "主视图",
+        "template": true
+      }
+    ],
+    "table": {
+      "columns": [
+        {
+          "key": "prompt",
+          "label": "题面"
+        },
+        {
+          "key": "data",
+          "label": "数据"
+        },
+        {
+          "key": "scoring",
+          "label": "分值"
+        },
+        {
+          "key": "hints",
+          "label": "提示"
+        },
+        {
+          "key": "explanation",
+          "label": "解析"
+        }
+      ],
+      "rows": [
+        {
+          "prompt": {
+            "text": "听和弦，选出名称"
+          },
+          "data": {
+            "options": [
+              "大三和弦",
+              "小三和弦",
+              "减三和弦",
+              "增三和弦"
+            ],
+            "correctIndex": 0,
+            "listenNotes": [
+              {
+                "midi": 60,
+                "vel": 100
+              },
+              {
+                "midi": 64,
+                "vel": 100
+              },
+              {
+                "midi": 67,
+                "vel": 100
+              }
+            ],
+            "rewardChord": [
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              },
+              {
+                "midi": 67
+              },
+              {
+                "midi": 72
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "明亮、欢快的色彩"
+            }
+          ],
+          "explanation": "C-E-G：大三度 + 小三度 = 大三和弦。"
+        },
+        {
+          "prompt": {
+            "text": "听和弦，选出名称"
+          },
+          "data": {
+            "options": [
+              "大三和弦",
+              "小三和弦",
+              "减三和弦",
+              "增三和弦"
+            ],
+            "correctIndex": 1,
+            "listenNotes": [
+              {
+                "midi": 57
+              },
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              }
+            ],
+            "rewardChord": [
+              {
+                "midi": 57
+              },
+              {
+                "midi": 60
+              },
+              {
+                "midi": 64
+              },
+              {
+                "midi": 69
+              }
+            ],
+            "wrongBuzz": [
+              {
+                "midi": 43,
+                "dur": "8n"
+              }
+            ]
+          },
+          "scoring": {
+            "max": 10
+          },
+          "hints": [
+            {
+              "text": "暗淡、略带忧伤的色彩"
+            }
+          ],
+          "explanation": "A-C-E：小三度 + 大三度 = 小三和弦。"
+        }
+      ]
     }
   }
 }

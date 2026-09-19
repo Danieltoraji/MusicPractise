@@ -18,7 +18,7 @@ describe('装载管线 loadLevelDoc', () => {
 
   it('schema 缺字段拒绝并列出原因', () => {
     const bad = structuredClone(noteClickDoc) as Record<string, unknown>
-    delete (bad.content as Record<string, unknown>).questions
+    delete (bad.content as Record<string, unknown>).table
     const r = loadLevelDoc(bad)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.errors.length).toBeGreaterThan(0)
