@@ -1181,16 +1181,19 @@ a.level-row:hover {
   pointer-events: none;
 }
 
-/* 执行边 */
-.gedge {
+/* 执行边（RF 内置规则直接作用于 path，选择器下沉并以更高特异性覆盖） */
+.gedge .react-flow__edge-path,
+path.gedge {
   stroke: #64748b;
   stroke-width: 1.6;
 }
-.gedge-true {
+.gedge-true .react-flow__edge-path,
+path.gedge-true {
   stroke: var(--ok);
   stroke-width: 2;
 }
-.gedge-false {
+.gedge-false .react-flow__edge-path,
+path.gedge-false {
   stroke: var(--bad);
   stroke-width: 2;
 }

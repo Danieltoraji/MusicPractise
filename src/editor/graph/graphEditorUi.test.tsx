@@ -115,9 +115,11 @@ describe('GraphEditor（jsdom 冒烟）', () => {
       setter.call(input, 'v.score >= 10')
       input!.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    // 应用条件按钮（失焦提交模式）
-    const applyBtn = [...container.querySelectorAll('.ginsp button')].find((b) => b.textContent === '应用条件')!
-    act(() => (applyBtn as HTMLElement).click())
+    // 失焦即提交（评审 P1-3 修复：不再需要「应用」按钮）
+    act(() => {
+      // React 的 onBlur 委托到可冒泡的 focusout；jsdom 中未聚焦元素 .blur() 是 no-op
+      input!.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+    })
     const patched = doc.content.logic.nodes.find((n) => n.id === 'br1')
     expect(patched).toMatchObject({ kind: 'branch', cond: 'v.score >= 10' })
   })

@@ -22,6 +22,8 @@ const exprDatalistId = 'ginsp-expr-options'
 function ExprInput(props: {
   value: string
   onChange: (v: string) => void
+  /** 失焦时提交草稿（评审 P1-3：消除切节点丢稿窗口；「应用」按钮保留为显式兜底） */
+  onCommit?: () => void
   placeholder?: string
 }): React.ReactElement {
   const err = props.value.trim() === '' ? null : checkExprText(props.value)
@@ -32,6 +34,7 @@ function ExprInput(props: {
         placeholder={props.placeholder}
         list={exprDatalistId}
         onChange={(e) => props.onChange(e.target.value)}
+        onBlur={() => props.onCommit?.()}
       />
       {err && <span className="tone-error">{err}</span>}
     </span>
@@ -159,6 +162,7 @@ export function NodeInspector({ node, doc, issues, onPatch, onRemove }: Props) {
                     args[i] = v
                     set({ args })
                   }}
+                  onCommit={() => blurCommit('args')}
                 />
                 <button
                   type="button"
@@ -210,9 +214,13 @@ export function NodeInspector({ node, doc, issues, onPatch, onRemove }: Props) {
 
       {node.kind === 'branch' && (
         <label className="ginsp-row">
-          条件
-          <ExprInput value={String(draft.cond ?? '')} onChange={(v) => set({ cond: v })} placeholder="v.score >= 10" />
-          <button type="button" onClick={() => blurCommit('cond')}>应用条件</button>
+          条件（失焦即保存）
+          <ExprInput
+            value={String(draft.cond ?? '')}
+            onChange={(v) => set({ cond: v })}
+            onCommit={() => blurCommit('cond')}
+            placeholder="v.score >= 10"
+          />
         </label>
       )}
 
@@ -236,15 +244,13 @@ export function NodeInspector({ node, doc, issues, onPatch, onRemove }: Props) {
           </label>
           {draft.mode === 'while' ? (
             <label className="ginsp-row">
-              条件
-              <ExprInput value={String(draft.cond ?? '')} onChange={(v) => set({ cond: v })} />
-              <button type="button" onClick={() => blurCommit('cond')}>应用条件</button>
+              条件（失焦即保存）
+              <ExprInput value={String(draft.cond ?? '')} onChange={(v) => set({ cond: v })} onCommit={() => blurCommit('cond')} />
             </label>
           ) : (
             <label className="ginsp-row">
-              次数
-              <ExprInput value={String(draft.times ?? '')} onChange={(v) => set({ times: v })} />
-              <button type="button" onClick={() => blurCommit('times')}>应用次数</button>
+              次数（失焦即保存）
+              <ExprInput value={String(draft.times ?? '')} onChange={(v) => set({ times: v })} onCommit={() => blurCommit('times')} />
             </label>
           )}
         </>
@@ -252,9 +258,8 @@ export function NodeInspector({ node, doc, issues, onPatch, onRemove }: Props) {
 
       {node.kind === 'wait' && (
         <label className="ginsp-row">
-          毫秒
-          <ExprInput value={String(draft.ms ?? '')} onChange={(v) => set({ ms: v })} />
-          <button type="button" onClick={() => blurCommit('ms')}>应用</button>
+          毫秒（失焦即保存）
+          <ExprInput value={String(draft.ms ?? '')} onChange={(v) => set({ ms: v })} onCommit={() => blurCommit('ms')} />
         </label>
       )}
 
@@ -335,9 +340,9 @@ function AssignValueEditor(props: {
         <ExprInput
           value={'expr' in (draft.value as object) ? String((draft.value as { expr: string }).expr) : ''}
           onChange={(v) => {
-            // 草稿更新仅本地；失焦由下面的应用按钮提交（表达式逐键提交开销大且易半成品）
             set({ value: { expr: v } })
           }}
+          onCommit={() => commit({ value: draft.value } as unknown as Partial<GNode>)}
         />
       ) : (
         (() => {
@@ -368,11 +373,7 @@ function AssignValueEditor(props: {
           )
         })()
       )}
-      {mode === 'expr' && (
-        <button type="button" onClick={() => commit({ value: draft.value } as unknown as Partial<GNode>)}>
-          应用表达式
-        </button>
-      )}
+
     </div>
   )
 }

@@ -99,7 +99,7 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
     key: `var-assign-${name}`,
     label: `v.${name} = …`,
     desc: `给变量 ${name} 赋值（表达式或查询调用）`,
-    make: (pos) => ({ kind: 'assign', target: name, value: { expr: '' }, ...at(pos) }),
+    make: (pos) => ({ kind: 'assign', target: name, value: { expr: '0' }, ...at(pos) }),
   }))
 
   // 控制流组（默认值取有界/合法形态，避免添加即 lint 报错）

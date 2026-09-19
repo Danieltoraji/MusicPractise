@@ -120,7 +120,14 @@ export function updateNode<N extends GNode>(prog: GraphProgram, id: string, patc
   requireNode(prog, id)
   const next = clone(prog)
   const idx = next.nodes.findIndex((n) => n.id === id)
-  next.nodes[idx] = { ...next.nodes[idx], ...patch } as GNode
+  // patch 中显式 undefined = 删除该字段（如 loop 由 while 切 repeat 时清除 cond），
+  // 避免节点上留下显式 undefined 键（JSON 序列化与内存 doc 不同构）
+  const merged = { ...next.nodes[idx] } as Record<string, unknown>
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) delete merged[key]
+    else merged[key] = value
+  }
+  next.nodes[idx] = merged as unknown as GNode
   return next
 }
 
