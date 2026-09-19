@@ -5,13 +5,13 @@
 import dagre from '@dagrejs/dagre'
 import type { GraphProgram } from '../../engine/graphProgram'
 
-export const NODE_W = 220
-export const NODE_H = 64
+export const NODE_W = 244
+export const NODE_H = 84
 
 /** 计算全图 dagre 位置表 */
 export function dagrePositions(prog: GraphProgram): Map<string, { x: number; y: number }> {
   const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: 'LR', nodesep: 36, ranksep: 96, marginx: 24, marginy: 24 })
+  g.setGraph({ rankdir: 'LR', nodesep: 44, ranksep: 112, marginx: 28, marginy: 28 })
   g.setDefaultEdgeLabel(() => ({}))
   for (const node of prog.nodes) g.setNode(node.id, { width: NODE_W, height: NODE_H })
   for (const e of prog.edges) {

@@ -8,6 +8,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Background,
+  BackgroundVariant,
   Controls,
   MarkerType,
   MiniMap,
@@ -380,9 +381,10 @@ function GraphEditorInner({ doc, onChange }: Props) {
             deleteKeyCode={['Backspace', 'Delete']}
             fitView
             minZoom={0.2}
+            colorMode="dark"
             proOptions={{ hideAttribution: true }}
           >
-            <Background gap={16} />
+            <Background variant={BackgroundVariant.Dots} gap={26} size={1.6} color="#26355a" />
           <MiniMap pannable zoomable />
           <Controls showInteractive={false} />
           </ReactFlow>

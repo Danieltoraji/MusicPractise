@@ -19,15 +19,16 @@ export interface GraphCardData extends Record<string, unknown> {
 }
 export type GraphCardNode = Node<GraphCardData, 'graphCard'>
 
+// 深色工作台主题下的高亮度分类色（色带 + 类型名共用；docs/22 千星风格）
 const KIND_META: Record<GNode['kind'], { color: string; label: string }> = {
-  on: { color: '#7c3aed', label: '事件' },
-  call: { color: '#2563eb', label: '动作' },
-  assign: { color: '#16a34a', label: '赋值' },
-  emit: { color: '#d97706', label: '触发' },
-  branch: { color: '#ea580c', label: '分支' },
-  loop: { color: '#ea580c', label: '循环' },
-  wait: { color: '#ea580c', label: '等待' },
-  comment: { color: '#6b7280', label: '注释' },
+  on: { color: '#a78bfa', label: '事件' },
+  call: { color: '#60a5fa', label: '动作' },
+  assign: { color: '#34d399', label: '赋值' },
+  emit: { color: '#fbbf24', label: '触发' },
+  branch: { color: '#fb923c', label: '分支' },
+  loop: { color: '#fb923c', label: '循环' },
+  wait: { color: '#fb923c', label: '等待' },
+  comment: { color: '#94a3b8', label: '注释' },
 }
 
 /** 模块级稳定注册（React Flow 要求 nodeTypes 引用稳定） */
