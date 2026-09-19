@@ -55,7 +55,8 @@ export interface LevelDoc {
   refs?: unknown[]
   content: {
     components: ComponentInstance[]
-    logic: import('./logic').LogicProgram
+    /** 关卡逻辑：GraphProgram v2 图 IR（v1 ECA 文档在装载管线透明迁移后入库） */
+    logic: import('./graphProgram').GraphProgram
     questions: Question[]
     flow?: FlowConfig
   }

@@ -1,10 +1,12 @@
 /**
- * 文档校验与装载管线：Ajv（schema 注册一次共享）→ schemaVersion 检查 → 逻辑 lint。
+ * 文档校验与装载管线：Ajv（schema 注册一次共享）→ schemaVersion 检查 → 逻辑迁移与 lint。
  * 未知组件类型不在此拒绝——运行时 store 会降级为占位组件（docs/02 §7）。
+ * 关卡逻辑：v1 ECA 程序在此透明迁移为 GraphProgram v2 后入库（装载/保存出的内容恒为 v2）。
  */
 import Ajv2020 from 'ajv/dist/2020'
 import type { LevelDoc } from '../engine/level'
-import { LogicEngine } from '../engine/logic'
+import { lintGraphProgram } from '../engine/graphProgram'
+import { migrateLogicV1toV2 } from '../engine/migrate'
 import type { ResourceKind } from './db'
 
 export const SCHEMA_BASE = 'https://music-practise.local/schemas/v1/'
@@ -26,12 +28,13 @@ export function buildAjv(): Ajv2020 {
 // 显式静态导入（Vite JSON 模块）；新增 schema 时在此与 KNOWN_KINDS 同步
 import commonRaw from '../../schemas/v1/common.json'
 import logicRaw from '../../schemas/v1/logic.json'
+import graphLogicRaw from '../../schemas/v1/graph-logic.json'
 import levelRaw from '../../schemas/v1/level.json'
 import seriesRaw from '../../schemas/v1/series.json'
 import topicRaw from '../../schemas/v1/topic.json'
 import instrumentRaw from '../../schemas/v1/instrument.json'
 
-const SCHEMA_RAW = [commonRaw, logicRaw, levelRaw, seriesRaw, topicRaw, instrumentRaw]
+const SCHEMA_RAW = [commonRaw, logicRaw, graphLogicRaw, levelRaw, seriesRaw, topicRaw, instrumentRaw]
 
 export function validateEnvelope(
   kind: string,
@@ -74,11 +77,16 @@ export function loadLevelDoc(raw: unknown): LoadResult {
 
   let lintWarnings: string[] = []
   if (errors.length === 0) {
+    // v1 ECA → v2 图 IR 透明迁移：装载与保存出的内容恒为 v2（logicVersion 判别，信封 schemaVersion 保持 1）。
+    // 不变异调用方传入的对象：浅拷贝 doc/content 后再写入迁移结果
+    const source = raw as LevelDoc
+    const doc: LevelDoc = { ...source, content: { ...source.content } }
+    doc.content.logic = migrateLogicV1toV2(doc.content.logic)
     const patchVarKeys = new Set<string>()
     for (const q of doc.content.questions) {
       for (const key of Object.keys(q.logicPatch?.variables ?? {})) patchVarKeys.add(key)
     }
-    lintWarnings = LogicEngine.lint(doc.content.logic, {
+    lintWarnings = lintGraphProgram(doc.content.logic, {
       componentIds: doc.content.components.map((c) => c.id),
       extraVariableKeys: patchVarKeys,
     })

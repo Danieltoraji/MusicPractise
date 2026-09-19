@@ -1,11 +1,14 @@
 /**
- * 关卡逻辑图谱页：库内关卡的 LogicProgram 只读节点图 + 变量/规则摘要。
+ * 关卡逻辑图谱页：库内关卡的 GraphProgram v2 伪代码只读视图 + 变量表。
+ * 逻辑一律先透明迁移为 v2（旧 v1 ECA 文档也能查看），LevelScript 文本即图 IR 的投影（docs/12 §6）。
  */
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type LibraryRecord } from '../library/db'
 import type { LevelDoc } from '../engine/level'
+import { isGraphProgram, lintGraphProgram } from '../engine/graphProgram'
+import { migrateLogicV1toV2 } from '../engine/migrate'
+import { generateScript } from '../engine/script'
 import { ErrorBoundary } from '../library/ErrorBoundary'
-import LogicGraph from '../graph/LogicGraph'
 
 export function GraphPage({ id }: { id: string }) {
   const record = useLiveQuery(async () => (await db.resources.get(id)) ?? null, [id], 'loading')
@@ -29,17 +32,23 @@ export function GraphPage({ id }: { id: string }) {
   }
 
   const doc = (record as LibraryRecord).doc as unknown as LevelDoc
-  const varEntries = Object.entries(doc.content.logic.variables ?? {})
+  const program = isGraphProgram(doc.content.logic) ? doc.content.logic : migrateLogicV1toV2(doc.content.logic)
+  const script = generateScript(program)
+  const warnings = lintGraphProgram(program)
+  const varEntries = Object.entries(program.variables ?? {})
 
   return (
     <div className="page">
       <div className="breadcrumb"><a href="#/">← 返回首页</a> · <a href={`#/level/${id}`}>试玩此关</a> · <a href={`#/edit/${id}`}>编辑此关</a></div>
-      <h1>🧭 逻辑图谱 · {String(doc.meta.title ?? '')}</h1>
+      <h1>🧭 关卡脚本 · {String(doc.meta.title ?? '')}</h1>
       <p className="muted">
-        只读视图：⚡ 事件 → 规则（含条件）→ 动作；绿色实线为变量写入，虚线为触发/读取。拖动平移、滚轮缩放。
+        只读伪代码视图（LevelScript）：on 事件处理器内的语句即图 IR 的顺序投影；完整节点图编辑器见编辑器「节点图」页。
       </p>
+      {warnings.length > 0 && (
+        <div className="editor-lint">⚠ lint：{warnings.join('；')}</div>
+      )}
       <ErrorBoundary>
-        <LogicGraph program={doc.content.logic} height={560} />
+        <pre className="script-view">{script}</pre>
       </ErrorBoundary>
 
       <h2>变量（{varEntries.length}）</h2>
@@ -60,16 +69,6 @@ export function GraphPage({ id }: { id: string }) {
           </tbody>
         </table>
       )}
-
-      <h2>规则（{doc.content.logic.rules.length} 条）</h2>
-      <ul>
-        {doc.content.logic.rules.map((r) => (
-          <li key={r.id}>
-            <b>{r.id}</b> · on {r.on} · {r.when?.length ?? 0} 条件 · {r.do.length} 动作
-            {r.else && r.else.length > 0 ? ` · else ${r.else.length} 动作` : ''}
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }

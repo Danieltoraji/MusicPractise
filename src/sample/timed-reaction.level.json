@@ -128,252 +128,552 @@
       }
     ],
     "logic": {
+      "logicVersion": 2,
       "variables": {
         "score": 0,
         "done": false
       },
-      "rules": [
+      "nodes": [
         {
-          "id": "load-question",
-          "on": "level.questionLoaded",
-          "do": [
-            {
-              "cmd": "sound1.play",
-              "args": {
-                "notes": "$q.data.listenNotes"
-              }
-            },
-            {
-              "cmd": "choice1.reset"
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": false
-              }
-            },
-            {
-              "cmd": "timer1.start",
-              "args": {
-                "ms": 3000
-              }
-            },
-            {
-              "cmd": "timerLabel.show",
-              "args": {
-                "text": "⏱ 3 秒",
-                "tone": "info"
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "听 —— 3 秒内选出答案！",
-                "tone": "info"
-              }
-            }
+          "id": "load-question_on",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "load-question_d0",
+          "kind": "call",
+          "target": "sound1",
+          "method": "play",
+          "args": [
+            "{notes: q.data.listenNotes}"
           ]
         },
         {
-          "id": "replay",
-          "on": "listenBtn.clicked",
-          "do": [
-            {
-              "cmd": "sound1.play",
-              "args": {
-                "notes": "$q.data.listenNotes"
-              }
-            }
+          "id": "load-question_d1",
+          "kind": "call",
+          "target": "choice1",
+          "method": "reset",
+          "args": []
+        },
+        {
+          "id": "load-question_d2",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: false}"
           ]
         },
         {
-          "id": "correct",
-          "on": "choice1.chosen",
-          "when": [
-            "!v.answered",
-            "event.index == q.data.correctIndex"
-          ],
-          "do": [
-            {
-              "set": "answered",
-              "expr": "true"
-            },
-            {
-              "cmd": "timer1.stop"
-            },
-            {
-              "cmd": "sound1.play",
-              "args": {
-                "notes": "$q.data.rewardChord"
-              }
-            },
-            {
-              "cmd": "choice1.reveal",
-              "args": {
-                "correctIndex": "$q.data.correctIndex"
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "答对了！",
-                "tone": "success"
-              }
-            },
-            {
-              "set": "score",
-              "expr": "v.score + q.scoring.max"
-            },
-            {
-              "cmd": "scoreLabel.show",
-              "args": {
-                "text": "$expr:'得分: ' + v.score",
-                "tone": "success"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
+          "id": "load-question_d3",
+          "kind": "call",
+          "target": "timer1",
+          "method": "start",
+          "args": [
+            "{ms: 3000}"
           ]
         },
         {
-          "id": "wrong",
-          "on": "choice1.chosen",
-          "when": [
-            "!v.answered",
-            "!(event.index == q.data.correctIndex)"
-          ],
-          "do": [
-            {
-              "set": "answered",
-              "expr": "true"
-            },
-            {
-              "cmd": "timer1.stop"
-            },
-            {
-              "cmd": "sound1.play",
-              "args": {
-                "notes": "$q.data.wrongBuzz"
-              }
-            },
-            {
-              "cmd": "choice1.reveal",
-              "args": {
-                "correctIndex": "$q.data.correctIndex"
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "不对，正确答案已高亮",
-                "tone": "error"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
+          "id": "load-question_d4",
+          "kind": "call",
+          "target": "timerLabel",
+          "method": "show",
+          "args": [
+            "{text: '⏱ 3 秒', tone: 'info'}"
           ]
         },
         {
-          "id": "timeout",
-          "on": "timer1.tick",
-          "do": [
-            {
-              "set": "answered",
-              "expr": "true"
-            },
-            {
-              "cmd": "sound1.play",
-              "args": {
-                "notes": "$q.data.wrongBuzz"
-              }
-            },
-            {
-              "cmd": "choice1.reveal",
-              "args": {
-                "correctIndex": "$q.data.correctIndex"
-              }
-            },
-            {
-              "cmd": "timerLabel.show",
-              "args": {
-                "text": "⏱ 超时！",
-                "tone": "error"
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "时间到！正确答案已高亮",
-                "tone": "error"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
-          ],
-          "when": [
-            "!v.answered"
+          "id": "load-question_d5",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '听 —— 3 秒内选出答案！', tone: 'info'}"
           ]
         },
         {
-          "id": "next-or-restart",
-          "on": "nextBtn.clicked",
-          "when": [
-            "!v.done"
-          ],
-          "do": [
-            {
-              "cmd": "level.next"
-            }
-          ],
-          "else": [
-            {
-              "cmd": "level.restart"
-            }
+          "id": "replay_on",
+          "kind": "on",
+          "event": "listenBtn.clicked"
+        },
+        {
+          "id": "replay_d0",
+          "kind": "call",
+          "target": "sound1",
+          "method": "play",
+          "args": [
+            "{notes: q.data.listenNotes}"
           ]
         },
         {
-          "id": "on-finish",
-          "on": "level.finished",
-          "do": [
-            {
-              "set": "done",
-              "expr": "true"
-            },
-            {
-              "cmd": "timer1.stop"
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "$expr:event.passed ? '完成！得分 ' + v.score + ' 🎉 手够快！' : '完成！得分 ' + v.score + '，再快一点'",
-                "tone": "info"
-              }
-            },
-            {
-              "cmd": "nextBtn.setText",
-              "args": {
-                "text": "重新开始"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
+          "id": "correct_on",
+          "kind": "on",
+          "event": "choice1.chosen"
+        },
+        {
+          "id": "correct_cond",
+          "kind": "branch",
+          "cond": "(!v.answered) && (event.index == q.data.correctIndex)"
+        },
+        {
+          "id": "correct_d0",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "true"
+          }
+        },
+        {
+          "id": "correct_d1",
+          "kind": "call",
+          "target": "timer1",
+          "method": "stop",
+          "args": []
+        },
+        {
+          "id": "correct_d2",
+          "kind": "call",
+          "target": "sound1",
+          "method": "play",
+          "args": [
+            "{notes: q.data.rewardChord}"
           ]
+        },
+        {
+          "id": "correct_d3",
+          "kind": "call",
+          "target": "choice1",
+          "method": "reveal",
+          "args": [
+            "{correctIndex: q.data.correctIndex}"
+          ]
+        },
+        {
+          "id": "correct_d4",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '答对了！', tone: 'success'}"
+          ]
+        },
+        {
+          "id": "correct_d5",
+          "kind": "assign",
+          "target": "score",
+          "value": {
+            "expr": "v.score + q.scoring.max"
+          }
+        },
+        {
+          "id": "correct_d6",
+          "kind": "call",
+          "target": "scoreLabel",
+          "method": "show",
+          "args": [
+            "{text: '得分: ' + v.score, tone: 'success'}"
+          ]
+        },
+        {
+          "id": "correct_d7",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        },
+        {
+          "id": "wrong_on",
+          "kind": "on",
+          "event": "choice1.chosen"
+        },
+        {
+          "id": "wrong_cond",
+          "kind": "branch",
+          "cond": "(!v.answered) && (!(event.index == q.data.correctIndex))"
+        },
+        {
+          "id": "wrong_d0",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "true"
+          }
+        },
+        {
+          "id": "wrong_d1",
+          "kind": "call",
+          "target": "timer1",
+          "method": "stop",
+          "args": []
+        },
+        {
+          "id": "wrong_d2",
+          "kind": "call",
+          "target": "sound1",
+          "method": "play",
+          "args": [
+            "{notes: q.data.wrongBuzz}"
+          ]
+        },
+        {
+          "id": "wrong_d3",
+          "kind": "call",
+          "target": "choice1",
+          "method": "reveal",
+          "args": [
+            "{correctIndex: q.data.correctIndex}"
+          ]
+        },
+        {
+          "id": "wrong_d4",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '不对，正确答案已高亮', tone: 'error'}"
+          ]
+        },
+        {
+          "id": "wrong_d5",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        },
+        {
+          "id": "timeout_on",
+          "kind": "on",
+          "event": "timer1.tick"
+        },
+        {
+          "id": "timeout_cond",
+          "kind": "branch",
+          "cond": "(!v.answered)"
+        },
+        {
+          "id": "timeout_d0",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "true"
+          }
+        },
+        {
+          "id": "timeout_d1",
+          "kind": "call",
+          "target": "sound1",
+          "method": "play",
+          "args": [
+            "{notes: q.data.wrongBuzz}"
+          ]
+        },
+        {
+          "id": "timeout_d2",
+          "kind": "call",
+          "target": "choice1",
+          "method": "reveal",
+          "args": [
+            "{correctIndex: q.data.correctIndex}"
+          ]
+        },
+        {
+          "id": "timeout_d3",
+          "kind": "call",
+          "target": "timerLabel",
+          "method": "show",
+          "args": [
+            "{text: '⏱ 超时！', tone: 'error'}"
+          ]
+        },
+        {
+          "id": "timeout_d4",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '时间到！正确答案已高亮', tone: 'error'}"
+          ]
+        },
+        {
+          "id": "timeout_d5",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        },
+        {
+          "id": "next-or-restart_on",
+          "kind": "on",
+          "event": "nextBtn.clicked"
+        },
+        {
+          "id": "next-or-restart_cond",
+          "kind": "branch",
+          "cond": "(!v.done)"
+        },
+        {
+          "id": "next-or-restart_d0",
+          "kind": "call",
+          "target": "level",
+          "method": "next",
+          "args": []
+        },
+        {
+          "id": "next-or-restart_e0",
+          "kind": "call",
+          "target": "level",
+          "method": "restart",
+          "args": []
+        },
+        {
+          "id": "on-finish_on",
+          "kind": "on",
+          "event": "level.finished"
+        },
+        {
+          "id": "on-finish_d0",
+          "kind": "assign",
+          "target": "done",
+          "value": {
+            "expr": "true"
+          }
+        },
+        {
+          "id": "on-finish_d1",
+          "kind": "call",
+          "target": "timer1",
+          "method": "stop",
+          "args": []
+        },
+        {
+          "id": "on-finish_d2",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: event.passed ? '完成！得分 ' + v.score + ' 🎉 手够快！' : '完成！得分 ' + v.score + '，再快一点', tone: 'info'}"
+          ]
+        },
+        {
+          "id": "on-finish_d3",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setText",
+          "args": [
+            "{text: '重新开始'}"
+          ]
+        },
+        {
+          "id": "on-finish_d4",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "m1",
+          "from": "load-question_d0",
+          "to": "load-question_d1"
+        },
+        {
+          "id": "m2",
+          "from": "load-question_d1",
+          "to": "load-question_d2"
+        },
+        {
+          "id": "m3",
+          "from": "load-question_d2",
+          "to": "load-question_d3"
+        },
+        {
+          "id": "m4",
+          "from": "load-question_d3",
+          "to": "load-question_d4"
+        },
+        {
+          "id": "m5",
+          "from": "load-question_d4",
+          "to": "load-question_d5"
+        },
+        {
+          "id": "m6",
+          "from": "load-question_on",
+          "to": "load-question_d0"
+        },
+        {
+          "id": "m7",
+          "from": "replay_on",
+          "to": "replay_d0"
+        },
+        {
+          "id": "m8",
+          "from": "correct_on",
+          "to": "correct_cond"
+        },
+        {
+          "id": "m9",
+          "from": "correct_d0",
+          "to": "correct_d1"
+        },
+        {
+          "id": "m10",
+          "from": "correct_d1",
+          "to": "correct_d2"
+        },
+        {
+          "id": "m11",
+          "from": "correct_d2",
+          "to": "correct_d3"
+        },
+        {
+          "id": "m12",
+          "from": "correct_d3",
+          "to": "correct_d4"
+        },
+        {
+          "id": "m13",
+          "from": "correct_d4",
+          "to": "correct_d5"
+        },
+        {
+          "id": "m14",
+          "from": "correct_d5",
+          "to": "correct_d6"
+        },
+        {
+          "id": "m15",
+          "from": "correct_d6",
+          "to": "correct_d7"
+        },
+        {
+          "id": "m16",
+          "from": "correct_cond",
+          "to": "correct_d0",
+          "port": "true"
+        },
+        {
+          "id": "m17",
+          "from": "wrong_on",
+          "to": "wrong_cond"
+        },
+        {
+          "id": "m18",
+          "from": "wrong_d0",
+          "to": "wrong_d1"
+        },
+        {
+          "id": "m19",
+          "from": "wrong_d1",
+          "to": "wrong_d2"
+        },
+        {
+          "id": "m20",
+          "from": "wrong_d2",
+          "to": "wrong_d3"
+        },
+        {
+          "id": "m21",
+          "from": "wrong_d3",
+          "to": "wrong_d4"
+        },
+        {
+          "id": "m22",
+          "from": "wrong_d4",
+          "to": "wrong_d5"
+        },
+        {
+          "id": "m23",
+          "from": "wrong_cond",
+          "to": "wrong_d0",
+          "port": "true"
+        },
+        {
+          "id": "m24",
+          "from": "timeout_on",
+          "to": "timeout_cond"
+        },
+        {
+          "id": "m25",
+          "from": "timeout_d0",
+          "to": "timeout_d1"
+        },
+        {
+          "id": "m26",
+          "from": "timeout_d1",
+          "to": "timeout_d2"
+        },
+        {
+          "id": "m27",
+          "from": "timeout_d2",
+          "to": "timeout_d3"
+        },
+        {
+          "id": "m28",
+          "from": "timeout_d3",
+          "to": "timeout_d4"
+        },
+        {
+          "id": "m29",
+          "from": "timeout_d4",
+          "to": "timeout_d5"
+        },
+        {
+          "id": "m30",
+          "from": "timeout_cond",
+          "to": "timeout_d0",
+          "port": "true"
+        },
+        {
+          "id": "m31",
+          "from": "next-or-restart_on",
+          "to": "next-or-restart_cond"
+        },
+        {
+          "id": "m32",
+          "from": "next-or-restart_cond",
+          "to": "next-or-restart_d0",
+          "port": "true"
+        },
+        {
+          "id": "m33",
+          "from": "next-or-restart_cond",
+          "to": "next-or-restart_e0",
+          "port": "false"
+        },
+        {
+          "id": "m34",
+          "from": "on-finish_d0",
+          "to": "on-finish_d1"
+        },
+        {
+          "id": "m35",
+          "from": "on-finish_d1",
+          "to": "on-finish_d2"
+        },
+        {
+          "id": "m36",
+          "from": "on-finish_d2",
+          "to": "on-finish_d3"
+        },
+        {
+          "id": "m37",
+          "from": "on-finish_d3",
+          "to": "on-finish_d4"
+        },
+        {
+          "id": "m38",
+          "from": "on-finish_on",
+          "to": "on-finish_d0"
         }
       ]
     },

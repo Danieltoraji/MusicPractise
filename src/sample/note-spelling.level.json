@@ -106,191 +106,401 @@
       }
     ],
     "logic": {
+      "logicVersion": 2,
       "variables": {
         "score": 0,
         "done": false
       },
-      "rules": [
+      "nodes": [
         {
-          "id": "load-question",
-          "on": "level.questionLoaded",
-          "do": [
-            {
-              "cmd": "sound1.play",
-              "args": {
-                "notes": "$q.data.listenNotes"
-              }
-            },
-            {
-              "cmd": "input1.clear"
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": false
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "听和弦，用音名拼写它（回车提交）",
-                "tone": "info"
-              }
-            }
+          "id": "load-question_on",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "load-question_d0",
+          "kind": "call",
+          "target": "sound1",
+          "method": "play",
+          "args": [
+            "{notes: q.data.listenNotes}"
           ]
         },
         {
-          "id": "replay",
-          "on": "listenBtn.clicked",
-          "do": [
-            {
-              "cmd": "sound1.play",
-              "args": {
-                "notes": "$q.data.listenNotes"
-              }
-            }
+          "id": "load-question_d1",
+          "kind": "call",
+          "target": "input1",
+          "method": "clear",
+          "args": []
+        },
+        {
+          "id": "load-question_d2",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: false}"
           ]
         },
         {
-          "id": "judge-correct",
-          "on": "input1.submitted",
-          "when": [
-            "!v.answered",
-            "upper(event.value) == q.data.answer"
-          ],
-          "do": [
-            {
-              "set": "answered",
-              "expr": "true"
-            },
-            {
-              "cmd": "sound1.play",
-              "args": {
-                "notes": "$q.data.rewardChord"
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "拼对了！",
-                "tone": "success"
-              }
-            },
-            {
-              "set": "score",
-              "expr": "v.score + q.scoring.max"
-            },
-            {
-              "cmd": "scoreLabel.show",
-              "args": {
-                "text": "$expr:'得分: ' + v.score",
-                "tone": "success"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
+          "id": "load-question_d3",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '听和弦，用音名拼写它（回车提交）', tone: 'info'}"
           ]
         },
         {
-          "id": "judge-wrong",
-          "on": "input1.submitted",
-          "when": [
-            "!v.answered",
-            "!(upper(event.value) == q.data.answer)"
-          ],
-          "do": [
-            {
-              "cmd": "sound1.play",
-              "args": {
-                "notes": "$q.data.wrongBuzz"
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "$expr:'提示：' + q.data.hint",
-                "tone": "error"
-              }
-            }
+          "id": "replay_on",
+          "kind": "on",
+          "event": "listenBtn.clicked"
+        },
+        {
+          "id": "replay_d0",
+          "kind": "call",
+          "target": "sound1",
+          "method": "play",
+          "args": [
+            "{notes: q.data.listenNotes}"
           ]
         },
         {
-          "id": "next-or-restart",
-          "on": "nextBtn.clicked",
-          "when": [
-            "!v.done"
-          ],
-          "do": [
-            {
-              "cmd": "level.next"
-            }
-          ],
-          "else": [
-            {
-              "cmd": "level.restart"
-            }
+          "id": "judge-correct_on",
+          "kind": "on",
+          "event": "input1.submitted"
+        },
+        {
+          "id": "judge-correct_cond",
+          "kind": "branch",
+          "cond": "(!v.answered) && (upper(event.value) == q.data.answer)"
+        },
+        {
+          "id": "judge-correct_d0",
+          "kind": "assign",
+          "target": "answered",
+          "value": {
+            "expr": "true"
+          }
+        },
+        {
+          "id": "judge-correct_d1",
+          "kind": "call",
+          "target": "sound1",
+          "method": "play",
+          "args": [
+            "{notes: q.data.rewardChord}"
           ]
         },
         {
-          "id": "on-finish",
-          "on": "level.finished",
-          "when": [
-            "event.passed"
-          ],
-          "do": [
-            {
-              "set": "done",
-              "expr": "true"
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "$expr:'完成！得分 ' + v.score + ' 🎉 理论扎实'",
-                "tone": "success"
-              }
-            },
-            {
-              "cmd": "nextBtn.setText",
-              "args": {
-                "text": "重新开始"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
-          ],
-          "else": [
-            {
-              "set": "done",
-              "expr": "true"
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "$expr:'完成！得分 ' + v.score + '，再练一次'",
-                "tone": "info"
-              }
-            },
-            {
-              "cmd": "nextBtn.setText",
-              "args": {
-                "text": "重新开始"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
+          "id": "judge-correct_d2",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '拼对了！', tone: 'success'}"
           ]
+        },
+        {
+          "id": "judge-correct_d3",
+          "kind": "assign",
+          "target": "score",
+          "value": {
+            "expr": "v.score + q.scoring.max"
+          }
+        },
+        {
+          "id": "judge-correct_d4",
+          "kind": "call",
+          "target": "scoreLabel",
+          "method": "show",
+          "args": [
+            "{text: '得分: ' + v.score, tone: 'success'}"
+          ]
+        },
+        {
+          "id": "judge-correct_d5",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        },
+        {
+          "id": "judge-wrong_on",
+          "kind": "on",
+          "event": "input1.submitted"
+        },
+        {
+          "id": "judge-wrong_cond",
+          "kind": "branch",
+          "cond": "(!v.answered) && (!(upper(event.value) == q.data.answer))"
+        },
+        {
+          "id": "judge-wrong_d0",
+          "kind": "call",
+          "target": "sound1",
+          "method": "play",
+          "args": [
+            "{notes: q.data.wrongBuzz}"
+          ]
+        },
+        {
+          "id": "judge-wrong_d1",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '提示：' + q.data.hint, tone: 'error'}"
+          ]
+        },
+        {
+          "id": "next-or-restart_on",
+          "kind": "on",
+          "event": "nextBtn.clicked"
+        },
+        {
+          "id": "next-or-restart_cond",
+          "kind": "branch",
+          "cond": "(!v.done)"
+        },
+        {
+          "id": "next-or-restart_d0",
+          "kind": "call",
+          "target": "level",
+          "method": "next",
+          "args": []
+        },
+        {
+          "id": "next-or-restart_e0",
+          "kind": "call",
+          "target": "level",
+          "method": "restart",
+          "args": []
+        },
+        {
+          "id": "on-finish_on",
+          "kind": "on",
+          "event": "level.finished"
+        },
+        {
+          "id": "on-finish_cond",
+          "kind": "branch",
+          "cond": "(event.passed)"
+        },
+        {
+          "id": "on-finish_d0",
+          "kind": "assign",
+          "target": "done",
+          "value": {
+            "expr": "true"
+          }
+        },
+        {
+          "id": "on-finish_d1",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '完成！得分 ' + v.score + ' 🎉 理论扎实', tone: 'success'}"
+          ]
+        },
+        {
+          "id": "on-finish_d2",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setText",
+          "args": [
+            "{text: '重新开始'}"
+          ]
+        },
+        {
+          "id": "on-finish_d3",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        },
+        {
+          "id": "on-finish_e0",
+          "kind": "assign",
+          "target": "done",
+          "value": {
+            "expr": "true"
+          }
+        },
+        {
+          "id": "on-finish_e1",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '完成！得分 ' + v.score + '，再练一次', tone: 'info'}"
+          ]
+        },
+        {
+          "id": "on-finish_e2",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setText",
+          "args": [
+            "{text: '重新开始'}"
+          ]
+        },
+        {
+          "id": "on-finish_e3",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "m1",
+          "from": "load-question_d0",
+          "to": "load-question_d1"
+        },
+        {
+          "id": "m2",
+          "from": "load-question_d1",
+          "to": "load-question_d2"
+        },
+        {
+          "id": "m3",
+          "from": "load-question_d2",
+          "to": "load-question_d3"
+        },
+        {
+          "id": "m4",
+          "from": "load-question_on",
+          "to": "load-question_d0"
+        },
+        {
+          "id": "m5",
+          "from": "replay_on",
+          "to": "replay_d0"
+        },
+        {
+          "id": "m6",
+          "from": "judge-correct_on",
+          "to": "judge-correct_cond"
+        },
+        {
+          "id": "m7",
+          "from": "judge-correct_d0",
+          "to": "judge-correct_d1"
+        },
+        {
+          "id": "m8",
+          "from": "judge-correct_d1",
+          "to": "judge-correct_d2"
+        },
+        {
+          "id": "m9",
+          "from": "judge-correct_d2",
+          "to": "judge-correct_d3"
+        },
+        {
+          "id": "m10",
+          "from": "judge-correct_d3",
+          "to": "judge-correct_d4"
+        },
+        {
+          "id": "m11",
+          "from": "judge-correct_d4",
+          "to": "judge-correct_d5"
+        },
+        {
+          "id": "m12",
+          "from": "judge-correct_cond",
+          "to": "judge-correct_d0",
+          "port": "true"
+        },
+        {
+          "id": "m13",
+          "from": "judge-wrong_on",
+          "to": "judge-wrong_cond"
+        },
+        {
+          "id": "m14",
+          "from": "judge-wrong_d0",
+          "to": "judge-wrong_d1"
+        },
+        {
+          "id": "m15",
+          "from": "judge-wrong_cond",
+          "to": "judge-wrong_d0",
+          "port": "true"
+        },
+        {
+          "id": "m16",
+          "from": "next-or-restart_on",
+          "to": "next-or-restart_cond"
+        },
+        {
+          "id": "m17",
+          "from": "next-or-restart_cond",
+          "to": "next-or-restart_d0",
+          "port": "true"
+        },
+        {
+          "id": "m18",
+          "from": "next-or-restart_cond",
+          "to": "next-or-restart_e0",
+          "port": "false"
+        },
+        {
+          "id": "m19",
+          "from": "on-finish_on",
+          "to": "on-finish_cond"
+        },
+        {
+          "id": "m20",
+          "from": "on-finish_d0",
+          "to": "on-finish_d1"
+        },
+        {
+          "id": "m21",
+          "from": "on-finish_d1",
+          "to": "on-finish_d2"
+        },
+        {
+          "id": "m22",
+          "from": "on-finish_d2",
+          "to": "on-finish_d3"
+        },
+        {
+          "id": "m23",
+          "from": "on-finish_cond",
+          "to": "on-finish_d0",
+          "port": "true"
+        },
+        {
+          "id": "m24",
+          "from": "on-finish_e0",
+          "to": "on-finish_e1"
+        },
+        {
+          "id": "m25",
+          "from": "on-finish_e1",
+          "to": "on-finish_e2"
+        },
+        {
+          "id": "m26",
+          "from": "on-finish_e2",
+          "to": "on-finish_e3"
+        },
+        {
+          "id": "m27",
+          "from": "on-finish_cond",
+          "to": "on-finish_e0",
+          "port": "false"
         }
       ]
     },

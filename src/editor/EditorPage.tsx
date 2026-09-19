@@ -1,8 +1,9 @@
 /**
- * 关卡编辑器 MVP：组件面板 / 画布拖放 / 属性检查器 / 规则表单 / 题目编辑 / JSON 视图 / 保存与试运行。
+ * 关卡编辑器：组件面板 / 画布拖放 / 属性检查器 / 题目编辑 / JSON 视图 / 保存与试运行。
  * 组件类型与事件/命令枚举全部来自组件注册表契约（单一来源）。
+ * 逻辑编辑面在 3-1 期间临时收敛为 JSON 页；节点图与代码页随 3-2/3-3 回归。
  */
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../library/db'
 import type { LibraryRecord } from '../library/db'
@@ -10,27 +11,19 @@ import { loadLevelDoc } from '../library/validate'
 import { putResource } from '../library/db'
 import { allContracts, getDef } from '../runtime/store'
 import type { ComponentInstance, LevelDoc, Question } from '../engine/level'
-import type { Rule } from '../engine/logic'
 import type { Json } from '../engine/expr'
-import { exprFunctionNames, parseExpr, ExprError } from '../engine/expr'
+import { parseExpr, ExprError } from '../engine/expr'
 import {
   addComponent,
   blankLevelDoc,
   parseJsonText,
   removeComponent,
-  removeVariable,
-  renameVariable,
   setMeta,
-  setVariable,
-  parseScalarInput,
   updateComponent,
   updateQuestion,
 } from './docState'
 
-type Tab = 'canvas' | 'rules' | 'questions' | 'graph' | 'json'
-
-/** 节点图视图懒加载：React Flow 体量较大，不进主包 */
-const LogicGraph = lazy(() => import('../graph/LogicGraph'))
+type Tab = 'canvas' | 'questions' | 'json'
 
 /** 表达式实时校验：语法错误返回消息，合法返回 null */
 export function checkExprText(text: string): string | null {
@@ -135,9 +128,7 @@ export function EditorPage({ id }: Props) {
       <div className="editor-tabs">
         {([
           ['canvas', '画布'],
-          ['rules', '规则'],
           ['questions', '题目'],
-          ['graph', '节点图'],
           ['json', 'JSON'],
         ] as [Tab, string][]).map(([t, label]) => (
           <button key={t} type="button" className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
@@ -165,22 +156,8 @@ export function EditorPage({ id }: Props) {
         />
       )}
 
-      {tab === 'rules' && (
-        <RulesEditor
-          doc={doc}
-          onChange={update}
-          declaredVariables={Object.keys(doc.content.logic.variables ?? {})}
-        />
-      )}
-
       {tab === 'questions' && (
         <QuestionsEditor doc={doc} onChange={update} />
-      )}
-
-      {tab === 'graph' && (
-        <Suspense fallback={<p className="muted">节点图加载中…</p>}>
-          <LogicGraph program={doc.content.logic} height={560} />
-        </Suspense>
       )}
 
       {tab === 'json' && (
@@ -404,315 +381,10 @@ function safeContract(type: string) {
 }
 
 // ---------------------------------------------------------------------------
-// 规则编辑器
+// 题目编辑器
 // ---------------------------------------------------------------------------
 
-type RawAction = Record<string, unknown>
-
-function actionKind(a: RawAction): 'cmd' | 'set' | 'emit' {
-  // 与引擎运行时判定顺序对齐（cmd > set > emit）
-  if ('cmd' in a) return 'cmd'
-  if ('set' in a) return 'set'
-  return 'emit'
-}
-
-export function RulesEditor({
-  doc,
-  onChange,
-  declaredVariables = [],
-}: {
-  doc: LevelDoc
-  onChange: (doc: LevelDoc) => void
-  /** 已声明变量名（用于改名撞名守卫） */
-  declaredVariables?: string[]
-}) {
-  const rules = doc.content.logic.rules
-  const declaredSet = new Set(declaredVariables)
-  const patchRule = (index: number, patch: Partial<Rule>): void => {
-    const next = structuredClone(doc)
-    Object.assign(next.content.logic.rules[index], patch)
-    onChange(next)
-  }
-
-  const eventOptions = ['level.started', 'level.questionLoaded', 'level.finished']
-  const commandOptions = ['level.next', 'level.restart']
-  for (const c of doc.content.components) {
-    const contract = safeContract(c.type)
-    for (const ev of Object.keys(contract.events)) eventOptions.push(`${c.id}.${ev}`)
-    for (const cmd of Object.keys(contract.commands)) {
-      if (!cmd.startsWith('__')) commandOptions.push(`${c.id}.${cmd}`)
-    }
-  }
-  const variableNames = Object.keys(doc.content.logic.variables ?? {})
-  const exprSuggestions = [
-    ...variableNames.map((v) => `v.${v}`),
-    'q.data',
-    'event.',
-    ...exprFunctionNames,
-  ]
-
-  const variables = doc.content.logic.variables ?? {}
-  const patchVarValue = (name: string, text: string): void => {
-    onChange(setVariable(doc, name, parseScalarInput(text)))
-  }
-  const renameVar = (oldName: string, nextName: string): void => {
-    const next = nextName.trim()
-    if (next === oldName || next === '') return
-    // 撞名守卫：目标变量已存在时拒绝改名，避免静默吞掉已有初值
-    if (variableNames.includes(next) || declaredSet.has(next)) return
-    onChange(renameVariable(doc, oldName, next))
-  }
-
-  return (
-    <div className="rules-editor">
-      <div className="vars-editor">
-        <b>变量（logic.variables）</b>
-        {variableNames.map((name) => (
-          <div key={name} className="var-row">
-            <input
-              value={name}
-              aria-label="变量名"
-              onChange={(e) => renameVar(name, e.target.value)}
-            />
-            <input
-              value={String(variables[name])}
-              aria-label="初始值"
-              onChange={(e) => patchVarValue(name, e.target.value)}
-            />
-            <button
-              type="button"
-              className="link danger"
-              onClick={() => onChange(removeVariable(doc, name))}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => {
-            let n = variableNames.length + 1
-            while (variableNames.includes(`var${n}`)) n++
-            onChange(setVariable(doc, `var${n}`, 0))
-          }}
-        >
-          + 添加变量
-        </button>
-      </div>
-
-      <div className="rules-toolbar">
-        <button
-          type="button"
-          onClick={() => {
-            const next = structuredClone(doc)
-            next.content.logic.rules.push({ id: `rule-${rules.length + 1}`, on: eventOptions[0] ?? 'level.started', do: [] })
-            onChange(next)
-          }}
-        >
-          + 添加规则
-        </button>
-        <span className="muted">
-          事件/命令在输入时可从下拉建议中选择（来自组件契约）。同事件多条规则按声明顺序执行。
-        </span>
-      </div>
-      <datalist id="event-options">
-        {eventOptions.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
-      <datalist id="command-options">
-        {commandOptions.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
-      <datalist id="expr-options">
-        {exprSuggestions.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
-
-      {rules.map((rule, ri) => (
-        <div key={rule.id} className="rule-card">
-          <div className="rule-head">
-            <b>{rule.id}</b>
-            <button
-              type="button"
-              className="link danger"
-              onClick={() => {
-                const next = structuredClone(doc)
-                next.content.logic.rules = next.content.logic.rules.filter((_, i) => i !== ri)
-                onChange(next)
-              }}
-            >
-              删除规则
-            </button>
-          </div>
-          <label>
-            当事件
-            <input value={rule.on} list="event-options" onChange={(e) => patchRule(ri, { on: e.target.value })} />
-          </label>
-          <label>
-            条件（每行一个表达式，全部满足才走 do；失焦时提交，留空 = 恒真）
-            <LinesField
-              value={rule.when ?? []}
-              onCommit={(lines) => patchRule(ri, { when: lines })}
-              validateLine={checkExprText}
-            />
-          </label>
-          <ActionList
-            label="则执行（do）"
-            actions={rule.do as unknown as RawAction[]}
-            onChange={(actions) => patchRule(ri, { do: actions as unknown as Rule['do'] })}
-          />
-          <ActionList
-            label="否则执行（else，可空）"
-            actions={(rule.else ?? []) as unknown as RawAction[]}
-            onChange={(actions) => patchRule(ri, { else: actions as unknown as Rule['else'] })}
-          />
-        </div>
-      ))}
-      {rules.length === 0 && <p className="muted">还没有规则。</p>}
-      <p className="muted">
-        变量：{JSON.stringify(doc.content.logic.variables ?? {})}（编辑器可视化变量管理在后续版本提供）
-      </p>
-    </div>
-  )
-}
-
-/** 多行条件输入：本地编辑、失焦提交（避免受控值过滤空行导致无法换行）。
- *  validateLine 可选：逐行实时校验，首个错误显示在输入下方。 */
-function LinesField({
-  value,
-  onCommit,
-  validateLine,
-}: {
-  value: string[]
-  onCommit: (lines: string[]) => void
-  validateLine?: (line: string) => string | null
-}) {
-  const [text, setText] = useState(value.join('\n'))
-  const lines = text.split('\n')
-  const firstError = validateLine
-    ? lines.map((l, i) => ({ l, i })).map(({ l, i }) => ({ i, err: l.trim() === '' ? null : validateLine(l) })).find((x) => x.err !== null)
-    : null
-  return (
-    <>
-      <textarea
-        rows={2}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => onCommit(text.split('\n').map((s) => s.trim()).filter((s) => s !== ''))}
-      />
-      {firstError && <span className="tone-error">第 {firstError.i + 1} 行：{firstError.err}</span>}
-    </>
-  )
-}
-
-function ActionList({
-  label,
-  actions,
-  onChange,
-}: {
-  label: string
-  actions: RawAction[]
-  onChange: (actions: RawAction[]) => void
-}) {
-  const patch = (index: number, a: RawAction): void => {
-    const next = actions.map((x, i) => (i === index ? a : x))
-    onChange(next)
-  }
-  return (
-    <div className="action-list">
-      <b>{label}</b>
-      {actions.map((a, i) => {
-        const kind = actionKind(a)
-        return (
-          <div key={i} className="action-row">
-            <select
-              value={kind}
-              onChange={(e) => {
-                const k = e.target.value
-                if (k === 'cmd') patch(i, { cmd: '', args: {} })
-                else if (k === 'set') patch(i, { set: '', expr: '' })
-                else patch(i, { emit: ':', payload: {} })
-              }}
-            >
-              <option value="cmd">命令</option>
-              <option value="set">写变量</option>
-              <option value="emit">发事件</option>
-            </select>
-            {kind === 'cmd' && (
-              <>
-                <input
-                  value={String(a.cmd ?? '')}
-                  list="command-options"
-                  placeholder="组件id.命令"
-                  onChange={(e) => patch(i, { cmd: e.target.value, args: a.args ?? {} })}
-                />
-                <input
-                  value={JSON.stringify(a.args ?? {})}
-                  onChange={(e) => {
-                    const v = parseJsonText(e.target.value)
-                    if (v !== null && typeof v === 'object' && !Array.isArray(v)) patch(i, { cmd: a.cmd, args: v as Record<string, Json> })
-                  }}
-                  title="参数 JSON"
-                />
-              </>
-            )}
-            {kind === 'set' && (
-              <>
-                <input
-                  value={String(a.set ?? '')}
-                  placeholder="变量名"
-                  onChange={(e) => patch(i, { set: e.target.value, expr: a.expr ?? '' })}
-                />
-                <input
-                  value={String(a.expr ?? '')}
-                  placeholder="表达式，如 v.score + 10"
-                  list="expr-options"
-                  onChange={(e) => patch(i, { set: a.set, expr: e.target.value })}
-                />
-                {(() => {
-                  const err = checkExprText(String(a.expr ?? ''))
-                  return err ? <span className="tone-error expr-err">{err}</span> : null
-                })()}
-              </>
-            )}
-            {kind === 'emit' && (
-              <>
-                <input
-                  value={String(a.emit ?? '')}
-                  placeholder="名字:名字"
-                  onChange={(e) => patch(i, { emit: e.target.value, payload: a.payload ?? {} })}
-                />
-              </>
-            )}
-            <button type="button" className="link danger" onClick={() => onChange(actions.filter((_, x) => x !== i))}>
-              ✕
-            </button>
-          </div>
-        )
-      })}
-      <div className="action-add">
-        <button type="button" onClick={() => onChange([...actions, { cmd: '', args: {} }])}>
-          + 命令
-        </button>
-        <button type="button" onClick={() => onChange([...actions, { set: '', expr: '' }])}>
-          + 写变量
-        </button>
-        <button type="button" onClick={() => onChange([...actions, { emit: '名字:名字' }])}>
-          + 发事件
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// 题目编辑
-// ---------------------------------------------------------------------------
-
-function QuestionsEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
+export function QuestionsEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
   const questions = doc.content.questions
   const patchQ = (index: number, patch: Partial<Question>): void => {
     onChange(updateQuestion(doc, index, patch))

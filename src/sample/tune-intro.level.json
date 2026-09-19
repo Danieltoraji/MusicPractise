@@ -80,141 +80,300 @@
       }
     ],
     "logic": {
+      "logicVersion": 2,
       "variables": {
         "score": 0,
         "stable": 0,
         "scored": 0,
         "done": false
       },
-      "rules": [
+      "nodes": [
         {
-          "id": "load",
-          "on": "level.questionLoaded",
-          "do": [
-            {
-              "cmd": "tuner1.start"
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": false
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "对麦克风唱「啊」或拉长音，音分稳定在 ±50 内保持 1 秒",
-                "tone": "info"
-              }
-            }
+          "id": "load_on",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "load_d0",
+          "kind": "call",
+          "target": "tuner1",
+          "method": "start",
+          "args": []
+        },
+        {
+          "id": "load_d1",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: false}"
           ]
         },
         {
-          "id": "in-tune",
-          "on": "tuner1.pitch",
-          "when": [
-            "v.scored == 0",
-            "abs(event.cents) < 50"
-          ],
-          "do": [
-            {
-              "set": "stable",
-              "expr": "v.stable + 1"
-            }
-          ],
-          "else": [
-            {
-              "set": "stable",
-              "expr": "0"
-            }
+          "id": "load_d2",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '对麦克风唱「啊」或拉长音，音分稳定在 ±50 内保持 1 秒', tone: 'info'}"
           ]
         },
         {
-          "id": "passed",
-          "on": "tuner1.pitch",
-          "when": [
-            "v.stable >= 10",
-            "v.scored == 0"
-          ],
-          "do": [
-            {
-              "set": "scored",
-              "expr": "1"
-            },
-            {
-              "set": "score",
-              "expr": "v.score + q.scoring.max"
-            },
-            {
-              "cmd": "scoreLabel.show",
-              "args": {
-                "text": "$expr:'得分: ' + v.score",
-                "tone": "success"
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "音准了！保持得很好",
-                "tone": "success"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
+          "id": "in-tune_on",
+          "kind": "on",
+          "event": "tuner1.pitch"
+        },
+        {
+          "id": "in-tune_cond",
+          "kind": "branch",
+          "cond": "(v.scored == 0) && (abs(event.cents) < 50)"
+        },
+        {
+          "id": "in-tune_d0",
+          "kind": "assign",
+          "target": "stable",
+          "value": {
+            "expr": "v.stable + 1"
+          }
+        },
+        {
+          "id": "in-tune_e0",
+          "kind": "assign",
+          "target": "stable",
+          "value": {
+            "expr": "0"
+          }
+        },
+        {
+          "id": "passed_on",
+          "kind": "on",
+          "event": "tuner1.pitch"
+        },
+        {
+          "id": "passed_cond",
+          "kind": "branch",
+          "cond": "(v.stable >= 10) && (v.scored == 0)"
+        },
+        {
+          "id": "passed_d0",
+          "kind": "assign",
+          "target": "scored",
+          "value": {
+            "expr": "1"
+          }
+        },
+        {
+          "id": "passed_d1",
+          "kind": "assign",
+          "target": "score",
+          "value": {
+            "expr": "v.score + q.scoring.max"
+          }
+        },
+        {
+          "id": "passed_d2",
+          "kind": "call",
+          "target": "scoreLabel",
+          "method": "show",
+          "args": [
+            "{text: '得分: ' + v.score, tone: 'success'}"
           ]
         },
         {
-          "id": "next-or-restart",
-          "on": "nextBtn.clicked",
-          "when": [
-            "!v.done"
-          ],
-          "do": [
-            {
-              "cmd": "level.next"
-            }
-          ],
-          "else": [
-            {
-              "cmd": "level.restart"
-            }
+          "id": "passed_d3",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '音准了！保持得很好', tone: 'success'}"
           ]
         },
         {
-          "id": "on-finish",
-          "on": "level.finished",
-          "do": [
-            {
-              "set": "done",
-              "expr": "true"
-            },
-            {
-              "cmd": "tuner1.stop"
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "$expr:'调音练习完成！得分 ' + v.score + ' 🎉'",
-                "tone": "info"
-              }
-            },
-            {
-              "cmd": "nextBtn.setText",
-              "args": {
-                "text": "重新开始"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
+          "id": "passed_d4",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
           ]
+        },
+        {
+          "id": "next-or-restart_on",
+          "kind": "on",
+          "event": "nextBtn.clicked"
+        },
+        {
+          "id": "next-or-restart_cond",
+          "kind": "branch",
+          "cond": "(!v.done)"
+        },
+        {
+          "id": "next-or-restart_d0",
+          "kind": "call",
+          "target": "level",
+          "method": "next",
+          "args": []
+        },
+        {
+          "id": "next-or-restart_e0",
+          "kind": "call",
+          "target": "level",
+          "method": "restart",
+          "args": []
+        },
+        {
+          "id": "on-finish_on",
+          "kind": "on",
+          "event": "level.finished"
+        },
+        {
+          "id": "on-finish_d0",
+          "kind": "assign",
+          "target": "done",
+          "value": {
+            "expr": "true"
+          }
+        },
+        {
+          "id": "on-finish_d1",
+          "kind": "call",
+          "target": "tuner1",
+          "method": "stop",
+          "args": []
+        },
+        {
+          "id": "on-finish_d2",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '调音练习完成！得分 ' + v.score + ' 🎉', tone: 'info'}"
+          ]
+        },
+        {
+          "id": "on-finish_d3",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setText",
+          "args": [
+            "{text: '重新开始'}"
+          ]
+        },
+        {
+          "id": "on-finish_d4",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "m1",
+          "from": "load_d0",
+          "to": "load_d1"
+        },
+        {
+          "id": "m2",
+          "from": "load_d1",
+          "to": "load_d2"
+        },
+        {
+          "id": "m3",
+          "from": "load_on",
+          "to": "load_d0"
+        },
+        {
+          "id": "m4",
+          "from": "in-tune_on",
+          "to": "in-tune_cond"
+        },
+        {
+          "id": "m5",
+          "from": "in-tune_cond",
+          "to": "in-tune_d0",
+          "port": "true"
+        },
+        {
+          "id": "m6",
+          "from": "in-tune_cond",
+          "to": "in-tune_e0",
+          "port": "false"
+        },
+        {
+          "id": "m7",
+          "from": "passed_on",
+          "to": "passed_cond"
+        },
+        {
+          "id": "m8",
+          "from": "passed_d0",
+          "to": "passed_d1"
+        },
+        {
+          "id": "m9",
+          "from": "passed_d1",
+          "to": "passed_d2"
+        },
+        {
+          "id": "m10",
+          "from": "passed_d2",
+          "to": "passed_d3"
+        },
+        {
+          "id": "m11",
+          "from": "passed_d3",
+          "to": "passed_d4"
+        },
+        {
+          "id": "m12",
+          "from": "passed_cond",
+          "to": "passed_d0",
+          "port": "true"
+        },
+        {
+          "id": "m13",
+          "from": "next-or-restart_on",
+          "to": "next-or-restart_cond"
+        },
+        {
+          "id": "m14",
+          "from": "next-or-restart_cond",
+          "to": "next-or-restart_d0",
+          "port": "true"
+        },
+        {
+          "id": "m15",
+          "from": "next-or-restart_cond",
+          "to": "next-or-restart_e0",
+          "port": "false"
+        },
+        {
+          "id": "m16",
+          "from": "on-finish_d0",
+          "to": "on-finish_d1"
+        },
+        {
+          "id": "m17",
+          "from": "on-finish_d1",
+          "to": "on-finish_d2"
+        },
+        {
+          "id": "m18",
+          "from": "on-finish_d2",
+          "to": "on-finish_d3"
+        },
+        {
+          "id": "m19",
+          "from": "on-finish_d3",
+          "to": "on-finish_d4"
+        },
+        {
+          "id": "m20",
+          "from": "on-finish_on",
+          "to": "on-finish_d0"
         }
       ]
     },

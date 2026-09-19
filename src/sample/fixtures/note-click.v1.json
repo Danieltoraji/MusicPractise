@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "kind": "level",
+  "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A1",
+  "version": "1.0.0",
+  "meta": {
+    "title": "听音点击 · 入门",
+    "description": "听发声器播放的音，在五线谱上点击对应的音符。演示 staff/sound/label/button 四类组件与 ECA 规则判定。",
+    "author": { "name": "POC 内置示例" },
+    "tags": ["练耳", "音名", "入门"],
+    "locale": "zh-CN",
+    "license": "CC0-1.0",
+    "difficulty": 1
+  },
+  "refs": [],
+  "content": {
+    "components": [
+      {
+        "id": "scoreLabel",
+        "type": "label",
+        "name": "得分",
+        "visible": true,
+        "layout": { "x": 40, "y": 20, "w": 300, "h": 40 },
+        "props": { "text": "得分: 0" }
+      },
+      {
+        "id": "staff1",
+        "type": "staff",
+        "name": "题目谱面",
+        "visible": true,
+        "layout": { "x": 40, "y": 90, "w": 720, "h": 180 },
+        "props": { "clef": "treble", "clickable": true },
+        "bindings": { "music": "$q.data.music" }
+      },
+      {
+        "id": "feedback",
+        "type": "label",
+        "name": "反馈文本",
+        "visible": true,
+        "layout": { "x": 40, "y": 300, "w": 720, "h": 48 },
+        "props": { "text": "" }
+      },
+      {
+        "id": "listenBtn",
+        "type": "button",
+        "name": "听",
+        "visible": true,
+        "layout": { "x": 40, "y": 380, "w": 140, "h": 48 },
+        "props": { "text": "🔊 听", "enabled": true }
+      },
+      {
+        "id": "nextBtn",
+        "type": "button",
+        "name": "下一题",
+        "visible": true,
+        "layout": { "x": 620, "y": 380, "w": 140, "h": 48 },
+        "props": { "text": "下一题 →", "enabled": false }
+      },
+      {
+        "id": "sound1",
+        "type": "sound",
+        "name": "发声器",
+        "visible": false
+      }
+    ],
+    "logic": {
+      "variables": { "score": 0, "streak": 0, "done": false },
+      "rules": [
+        {
+          "id": "hint-on-start",
+          "on": "level.started",
+          "do": [
+            { "cmd": "feedback.show", "args": { "text": "点「🔊 听」播放声音，然后点击谱面上对应的音符", "tone": "info" } }
+          ]
+        },
+        {
+          "id": "load-question",
+          "on": "level.questionLoaded",
+          "do": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.listenNotes" } },
+            { "cmd": "staff1.clear" },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": false } },
+            { "cmd": "feedback.show", "args": { "text": "听 —— 是哪个音？", "tone": "info" } }
+          ]
+        },
+        {
+          "id": "replay",
+          "on": "listenBtn.clicked",
+          "do": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.listenNotes" } }
+          ]
+        },
+        {
+          "id": "check-answer",
+          "on": "staff1.noteClicked",
+          "when": [ "event.midi == q.data.answerMidi" ],
+          "do": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.rewardChord" } },
+            { "cmd": "staff1.highlight", "args": { "target": "$event.midi", "style": "correct" } },
+            { "cmd": "feedback.show", "args": { "text": "答对了！", "tone": "success" } },
+            { "set": "score", "expr": "v.score + q.scoring.max" },
+            { "cmd": "scoreLabel.show", "args": { "text": "$expr:'得分: ' + v.score", "tone": "success" } },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } },
+            { "emit": "level:correct" }
+          ],
+          "else": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.wrongBuzz" } },
+            { "cmd": "staff1.highlight", "args": { "target": "$event.midi", "style": "wrong" } },
+            { "cmd": "feedback.show", "args": { "text": "不对哦，再听一次", "tone": "error" } }
+          ]
+        },
+        {
+          "id": "track-streak",
+          "on": "level:correct",
+          "do": [
+            { "set": "streak", "expr": "v.streak + 1" }
+          ]
+        },
+        {
+          "id": "next-or-restart",
+          "on": "nextBtn.clicked",
+          "when": [ "!v.done" ],
+          "do": [ { "cmd": "level.next" } ],
+          "else": [ { "cmd": "level.restart" } ]
+        },
+        {
+          "id": "on-finish",
+          "on": "level.finished",
+          "when": [ "event.passed" ],
+          "do": [
+            { "set": "done", "expr": "true" },
+            { "cmd": "feedback.show", "args": { "text": "$expr:'完成！得分 ' + v.score + '（连对 ' + v.streak + '）🎉 满分通关'", "tone": "success" } },
+            { "cmd": "nextBtn.setText", "args": { "text": "重新开始" } },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+          ],
+          "else": [
+            { "set": "done", "expr": "true" },
+            { "cmd": "feedback.show", "args": { "text": "$expr:'完成！得分 ' + v.score + '，未达通过线，再练一次吧'", "tone": "info" } },
+            { "cmd": "nextBtn.setText", "args": { "text": "重新开始" } },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+          ]
+        }
+      ]
+    },
+    "questions": [
+      {
+        "id": "q1",
+        "prompt": { "text": "听 —— 点击你听到的那个音" },
+        "data": {
+          "music": { "notes": [ { "midi": 60 }, { "midi": 62 }, { "midi": 64 }, { "midi": 65 } ], "clef": "treble" },
+          "listenNotes": [ { "midi": 64, "dur": "2n", "vel": 100 } ],
+          "answerMidi": 64,
+          "rewardChord": [ { "midi": 60, "vel": 100 }, { "midi": 64, "vel": 100 }, { "midi": 67, "vel": 100 }, { "midi": 72, "vel": 100 } ],
+          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
+        },
+        "scoring": { "max": 10 },
+        "hints": [ { "text": "中央C 右边相邻的跳进音" } ],
+        "explanation": "E4 位于五线谱第一间。"
+      },
+      {
+        "id": "q2",
+        "prompt": { "text": "听 —— 点击你听到的那个音" },
+        "data": {
+          "music": { "notes": [ { "midi": 65 }, { "midi": 67 }, { "midi": 69 }, { "midi": 71 } ], "clef": "treble" },
+          "listenNotes": [ { "midi": 71, "dur": "2n" } ],
+          "answerMidi": 71,
+          "rewardChord": [ { "midi": 65 }, { "midi": 69 }, { "midi": 72 } ],
+          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
+        },
+        "scoring": { "max": 10 },
+        "hints": [ { "text": "第三线上的音" } ],
+        "explanation": "B4 位于第三线。"
+      },
+      {
+        "id": "q3",
+        "prompt": { "text": "听 —— 点击你听到的那个音" },
+        "data": {
+          "music": { "notes": [ { "midi": 67 }, { "midi": 69 }, { "midi": 72 }, { "midi": 74 } ], "clef": "treble" },
+          "listenNotes": [ { "midi": 72, "dur": "2n" } ],
+          "answerMidi": 72,
+          "rewardChord": [ { "midi": 67 }, { "midi": 72 }, { "midi": 76 } ],
+          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
+        },
+        "scoring": { "max": 10 },
+        "hints": [ { "text": "比第三间高一个八度的 C" } ],
+        "explanation": "C5 位于第三间之上、第四线之下的加线上。"
+      }
+    ],
+    "flow": {
+      "order": "sequential",
+      "count": null,
+      "pass": { "expr": "v.score >= 20" }
+    }
+  }
+}

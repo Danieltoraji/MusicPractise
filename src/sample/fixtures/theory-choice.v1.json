@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "kind": "level",
+  "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A2",
+  "version": "1.0.0",
+  "meta": {
+    "title": "和弦听辨 · 选择题模板",
+    "description": "听和弦，从选项中选出名称。演示 choice 组件、reveal 判定展示与选择题模板复用。",
+    "author": { "name": "POC 内置示例" },
+    "tags": ["练耳", "和弦", "选择题"],
+    "locale": "zh-CN",
+    "license": "CC0-1.0",
+    "difficulty": 2
+  },
+  "refs": [],
+  "content": {
+    "components": [
+      {
+        "id": "scoreLabel",
+        "type": "label",
+        "name": "得分",
+        "visible": true,
+        "layout": { "x": 40, "y": 20, "w": 300, "h": 40 },
+        "props": { "text": "得分: 0" }
+      },
+      {
+        "id": "choice1",
+        "type": "choice",
+        "name": "选项组",
+        "visible": true,
+        "layout": { "x": 40, "y": 100, "w": 720, "h": 220 },
+        "props": {},
+        "bindings": { "options": "$q.data.options" }
+      },
+      {
+        "id": "feedback",
+        "type": "label",
+        "name": "反馈文本",
+        "visible": true,
+        "layout": { "x": 40, "y": 350, "w": 720, "h": 48 },
+        "props": { "text": "" }
+      },
+      {
+        "id": "listenBtn",
+        "type": "button",
+        "name": "重听",
+        "visible": true,
+        "layout": { "x": 40, "y": 430, "w": 140, "h": 48 },
+        "props": { "text": "🔊 重听", "enabled": true }
+      },
+      {
+        "id": "nextBtn",
+        "type": "button",
+        "name": "下一题",
+        "visible": true,
+        "layout": { "x": 620, "y": 430, "w": 140, "h": 48 },
+        "props": { "text": "下一题 →", "enabled": false }
+      },
+      {
+        "id": "sound1",
+        "type": "sound",
+        "name": "发声器",
+        "visible": false
+      }
+    ],
+    "logic": {
+      "variables": { "score": 0, "done": false },
+      "rules": [
+        {
+          "id": "load-question",
+          "on": "level.questionLoaded",
+          "do": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.listenNotes" } },
+            { "cmd": "choice1.reset" },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": false } },
+            { "cmd": "feedback.show", "args": { "text": "听和弦 —— 它是什么三和弦？", "tone": "info" } }
+          ]
+        },
+        {
+          "id": "replay",
+          "on": "listenBtn.clicked",
+          "do": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.listenNotes" } }
+          ]
+        },
+        {
+          "id": "check-answer",
+          "on": "choice1.chosen",
+          "when": [ "event.index == q.data.correctIndex" ],
+          "do": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.rewardChord" } },
+            { "cmd": "choice1.reveal", "args": { "correctIndex": "$q.data.correctIndex" } },
+            { "cmd": "feedback.show", "args": { "text": "答对了！", "tone": "success" } },
+            { "set": "score", "expr": "v.score + q.scoring.max" },
+            { "cmd": "scoreLabel.show", "args": { "text": "$expr:'得分: ' + v.score", "tone": "success" } },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+          ],
+          "else": [
+            { "cmd": "sound1.play", "args": { "notes": "$q.data.wrongBuzz" } },
+            { "cmd": "choice1.reveal", "args": { "correctIndex": "$q.data.correctIndex" } },
+            { "cmd": "feedback.show", "args": { "text": "不对，正确答案已高亮，进入下一题", "tone": "error" } },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+          ]
+        },
+        {
+          "id": "next-or-restart",
+          "on": "nextBtn.clicked",
+          "when": [ "!v.done" ],
+          "do": [ { "cmd": "level.next" } ],
+          "else": [ { "cmd": "level.restart" } ]
+        },
+        {
+          "id": "on-finish",
+          "on": "level.finished",
+          "do": [
+            { "set": "done", "expr": "true" },
+            { "cmd": "feedback.show", "args": { "text": "$expr:event.passed ? '完成！得分 ' + v.score + ' 🎉' : '完成！得分 ' + v.score + '，再练一次'", "tone": "info" } },
+            { "cmd": "nextBtn.setText", "args": { "text": "重新开始" } },
+            { "cmd": "nextBtn.setEnabled", "args": { "enabled": true } }
+          ]
+        }
+      ]
+    },
+    "questions": [
+      {
+        "id": "q1",
+        "prompt": { "text": "听和弦，选出名称" },
+        "data": {
+          "options": [ "大三和弦", "小三和弦", "减三和弦", "增三和弦" ],
+          "correctIndex": 0,
+          "listenNotes": [ { "midi": 60, "vel": 100 }, { "midi": 64, "vel": 100 }, { "midi": 67, "vel": 100 } ],
+          "rewardChord": [ { "midi": 60 }, { "midi": 64 }, { "midi": 67 }, { "midi": 72 } ],
+          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
+        },
+        "scoring": { "max": 10 },
+        "hints": [ { "text": "明亮、欢快的色彩" } ],
+        "explanation": "C-E-G：大三度 + 小三度 = 大三和弦。"
+      },
+      {
+        "id": "q2",
+        "prompt": { "text": "听和弦，选出名称" },
+        "data": {
+          "options": [ "大三和弦", "小三和弦", "减三和弦", "增三和弦" ],
+          "correctIndex": 1,
+          "listenNotes": [ { "midi": 57 }, { "midi": 60 }, { "midi": 64 } ],
+          "rewardChord": [ { "midi": 57 }, { "midi": 60 }, { "midi": 64 }, { "midi": 69 } ],
+          "wrongBuzz": [ { "midi": 43, "dur": "8n" } ]
+        },
+        "scoring": { "max": 10 },
+        "hints": [ { "text": "暗淡、略带忧伤的色彩" } ],
+        "explanation": "A-C-E：小三度 + 大三度 = 小三和弦。"
+      }
+    ],
+    "flow": {
+      "order": "sequential",
+      "count": null,
+      "pass": { "expr": "v.score >= 10" }
+    }
+  }
+}

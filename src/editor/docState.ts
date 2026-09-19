@@ -25,14 +25,13 @@ export function blankLevelDoc(): LevelDoc {
     content: {
       components: [],
       logic: {
+        logicVersion: 2,
         variables: { score: 0 },
-        rules: [
-          {
-            id: 'score-on-correct',
-            on: 'level:correct',
-            do: [{ set: 'score', expr: 'v.score + 10' }],
-          },
+        nodes: [
+          { id: 'on_correct', kind: 'on', event: 'level:correct' },
+          { id: 'add_score', kind: 'assign', target: 'score', value: { expr: 'v.score + 10' } },
         ],
+        edges: [{ id: 'e1', from: 'on_correct', to: 'add_score' }],
       },
       questions: [{ id: 'q1', data: {}, scoring: { max: 10 } }],
       flow: { order: 'sequential', pass: { expr: 'v.score >= 10' } },

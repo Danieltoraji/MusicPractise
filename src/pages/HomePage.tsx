@@ -42,7 +42,7 @@ export function HomePage() {
         <h1>音乐练习 · UGC 平台原型</h1>
         <p>
           关卡 = 组件 + 逻辑规则 + 题目数据，全部由 JSON 定义。判定、计分、反馈都写在关卡文档的{' '}
-          <code>logic.rules</code> 里（事件→条件→动作）。内容存放在浏览器本地资源库，可在
+          <code>logic</code> 图程序里（事件→节点→动作，可编辑节点图与伪代码）。内容存放在浏览器本地资源库，可在
           <a href="#/library"> 资源库 </a>中导入导出。
         </p>
       </section>

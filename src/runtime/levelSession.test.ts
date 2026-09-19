@@ -10,7 +10,8 @@ const flush = async (): Promise<void> => {
 
 function makeDoc(overrides?: {
   questions?: Question[]
-  rules?: LevelDoc['content']['logic']['rules']
+  /** v1 ECA 规则（本测试有意用 v1 形态构造，验证 LevelSession 的透明迁移） */
+  rules?: { id: string; on: string; when?: string[]; do: { set?: string; expr?: string; cmd?: string; args?: Json }[]; else?: { set?: string; expr?: string; cmd?: string; args?: Json }[] }[]
   pass?: string
   variables?: Record<string, Json>
 }): LevelDoc {
@@ -30,19 +31,21 @@ function makeDoc(overrides?: {
         { id: 'sound1', type: 'sound', visible: false },
         { id: 'choice1', type: 'choice', bindings: { options: '$q.data.options' } },
       ],
+      // 有意以 v1 ECA 形态构造：验证 LevelSession/GraphEngine 对旧文档的透明迁移
       logic: {
         variables: overrides?.variables ?? { score: 0, done: false },
-        rules: overrides?.rules ?? [
-          {
-            id: 'check',
-            on: 'staff1.noteClicked',
-            when: ['event.midi == q.data.answerMidi'],
-            do: [{ set: 'score', expr: 'v.score + q.scoring.max' }],
-            else: [{ set: 'score', expr: 'v.score - 1' }],
-          },
-          { id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'level.next' }] },
-        ],
-      },
+        rules:
+          overrides?.rules ?? [
+            {
+              id: 'check',
+              on: 'staff1.noteClicked',
+              when: ['event.midi == q.data.answerMidi'],
+              do: [{ set: 'score', expr: 'v.score + q.scoring.max' }],
+              else: [{ set: 'score', expr: 'v.score - 1' }],
+            },
+            { id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'level.next' }] },
+          ],
+      } as unknown as LevelDoc['content']['logic'],
       questions,
       flow: { order: 'sequential', pass: overrides?.pass ? { expr: overrides.pass } : undefined },
     },
@@ -114,7 +117,7 @@ describe('LevelSession', () => {
   })
 
   it('finish 幂等：on level.finished 规则再发 level.next 不会无限递归/重复结算', async () => {
-    const rules: LevelDoc['content']['logic']['rules'] = [
+    const rules = [
       { id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'level.next' }] },
       // UGC 作者常见误写：结束后想自动进入下一关
       { id: 'again', on: 'level.finished', do: [{ cmd: 'level.next' }] },
@@ -222,7 +225,7 @@ describe('LevelSession', () => {
   it('timer：单次 tick 派发事件；stop 取消不再触发', async () => {
     vi.useFakeTimers()
     try {
-      const rules: LevelDoc['content']['logic']['rules'] = [
+      const rules = [
         { id: 'arm', on: 'level.questionLoaded', do: [{ cmd: 'timer1.start', args: { ms: 50 } }] },
         { id: 'onTick', on: 'timer1.tick', when: ['event.count == 1'], do: [{ set: 'fired', expr: 'true' }] },
         { id: 'stop', on: 'x.stop', do: [{ cmd: 'timer1.stop' }] },
@@ -253,7 +256,7 @@ describe('LevelSession', () => {
   it('timer：repeat 模式多次 tick，dispose 后不再触发', async () => {
     vi.useFakeTimers()
     try {
-      const rules: LevelDoc['content']['logic']['rules'] = [
+      const rules = [
         { id: 'arm', on: 'level.questionLoaded', do: [{ cmd: 'timer1.start', args: { ms: 40, repeat: true } }] },
         { id: 'onTick', on: 'timer1.tick', do: [{ set: 'ticks', expr: 'v.ticks + 1' }] },
       ]
@@ -326,7 +329,7 @@ describe('LevelSession', () => {
   })
 
   it('未知组件引用被 lint 捕获（console.warn 不抛错）', async () => {
-    const rules: LevelDoc['content']['logic']['rules'] = [
+    const rules = [
       { id: 'bad', on: 'ghost.noteClicked', do: [{ cmd: 'ghost.clear' }] },
     ]
     const { host } = makeHost()

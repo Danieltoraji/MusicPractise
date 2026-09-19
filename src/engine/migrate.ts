@@ -11,7 +11,7 @@
 
 import type { Json } from './expr'
 import type { Action, LogicProgram, Rule } from './logic'
-import type { GEdge, GNode, GraphProgram } from './graphProgram'
+import { isGraphProgram, type GEdge, type GNode, type GraphProgram } from './graphProgram'
 
 const REF_RE = /^\$(q|event|v)(\.[A-Za-z_][A-Za-z0-9_]*)+$/
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -68,7 +68,9 @@ function actionToNode(ruleId: string, phase: 'd' | 'e', i: number, action: Actio
   }
 }
 
-export function migrateLogicV1toV2(program: LogicProgram): GraphProgram {
+/** v1 ECA → v2 图 IR；已是 v2 时原样返回（装载管线/引擎的统一入口） */
+export function migrateLogicV1toV2(program: LogicProgram | GraphProgram): GraphProgram {
+  if (isGraphProgram(program)) return program
   const nodes: GNode[] = []
   const edges: GEdge[] = []
   let edgeSeq = 0

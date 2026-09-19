@@ -1,0 +1,263 @@
+{
+  "schemaVersion": 1,
+  "kind": "level",
+  "id": "res_01J9F1F1F1F1F1F1F1F1F1F1F1",
+  "version": "1.0.0",
+  "meta": {
+    "title": "调音入门",
+    "description": "对麦克风唱/奏标准音 A4（440Hz），音分稳定在 ±50 以内保持 1 秒即通过。需要麦克风权限。",
+    "author": {
+      "name": "POC 内置示例"
+    },
+    "tags": [
+      "调音",
+      "麦克风"
+    ],
+    "locale": "zh-CN",
+    "license": "CC0-1.0",
+    "difficulty": 2
+  },
+  "refs": [],
+  "content": {
+    "components": [
+      {
+        "id": "scoreLabel",
+        "type": "label",
+        "name": "得分",
+        "visible": true,
+        "layout": {
+          "x": 40,
+          "y": 20,
+          "w": 300,
+          "h": 40
+        },
+        "props": {
+          "text": "得分: 0"
+        }
+      },
+      {
+        "id": "tuner1",
+        "type": "tuner",
+        "name": "校音器",
+        "visible": true,
+        "layout": {
+          "x": 40,
+          "y": 90,
+          "w": 720,
+          "h": 260
+        }
+      },
+      {
+        "id": "feedback",
+        "type": "label",
+        "name": "反馈",
+        "visible": true,
+        "layout": {
+          "x": 40,
+          "y": 380,
+          "w": 720,
+          "h": 48
+        },
+        "props": {
+          "text": ""
+        }
+      },
+      {
+        "id": "nextBtn",
+        "type": "button",
+        "name": "下一题",
+        "visible": true,
+        "layout": {
+          "x": 620,
+          "y": 460,
+          "w": 140,
+          "h": 48
+        },
+        "props": {
+          "text": "下一题 →",
+          "enabled": false
+        }
+      }
+    ],
+    "logic": {
+      "variables": {
+        "score": 0,
+        "stable": 0,
+        "scored": 0,
+        "done": false
+      },
+      "rules": [
+        {
+          "id": "load",
+          "on": "level.questionLoaded",
+          "do": [
+            {
+              "cmd": "tuner1.start"
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": false
+              }
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "对麦克风唱「啊」或拉长音，音分稳定在 ±50 内保持 1 秒",
+                "tone": "info"
+              }
+            }
+          ]
+        },
+        {
+          "id": "in-tune",
+          "on": "tuner1.pitch",
+          "when": [
+            "v.scored == 0",
+            "abs(event.cents) < 50"
+          ],
+          "do": [
+            {
+              "set": "stable",
+              "expr": "v.stable + 1"
+            }
+          ],
+          "else": [
+            {
+              "set": "stable",
+              "expr": "0"
+            }
+          ]
+        },
+        {
+          "id": "passed",
+          "on": "tuner1.pitch",
+          "when": [
+            "v.stable >= 10",
+            "v.scored == 0"
+          ],
+          "do": [
+            {
+              "set": "scored",
+              "expr": "1"
+            },
+            {
+              "set": "score",
+              "expr": "v.score + q.scoring.max"
+            },
+            {
+              "cmd": "scoreLabel.show",
+              "args": {
+                "text": "$expr:'得分: ' + v.score",
+                "tone": "success"
+              }
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "音准了！保持得很好",
+                "tone": "success"
+              }
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "next-or-restart",
+          "on": "nextBtn.clicked",
+          "when": [
+            "!v.done"
+          ],
+          "do": [
+            {
+              "cmd": "level.next"
+            }
+          ],
+          "else": [
+            {
+              "cmd": "level.restart"
+            }
+          ]
+        },
+        {
+          "id": "on-finish",
+          "on": "level.finished",
+          "do": [
+            {
+              "set": "done",
+              "expr": "true"
+            },
+            {
+              "cmd": "tuner1.stop"
+            },
+            {
+              "cmd": "feedback.show",
+              "args": {
+                "text": "$expr:'调音练习完成！得分 ' + v.score + ' 🎉'",
+                "tone": "info"
+              }
+            },
+            {
+              "cmd": "nextBtn.setText",
+              "args": {
+                "text": "重新开始"
+              }
+            },
+            {
+              "cmd": "nextBtn.setEnabled",
+              "args": {
+                "enabled": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "questions": [
+      {
+        "id": "q1",
+        "prompt": {
+          "text": "把声音稳定在 A4 附近"
+        },
+        "data": {},
+        "scoring": {
+          "max": 10
+        },
+        "logicPatch": {
+          "variables": {
+            "stable": 0,
+            "scored": 0
+          }
+        }
+      },
+      {
+        "id": "q2",
+        "prompt": {
+          "text": "再来一次：这次用更低的音"
+        },
+        "data": {},
+        "scoring": {
+          "max": 10
+        },
+        "logicPatch": {
+          "variables": {
+            "stable": 0,
+            "scored": 0
+          }
+        }
+      }
+    ],
+    "flow": {
+      "order": "sequential",
+      "count": null,
+      "pass": {
+        "expr": "v.score >= 20"
+      }
+    }
+  }
+}

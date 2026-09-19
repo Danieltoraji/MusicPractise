@@ -65,24 +65,33 @@ describe('关卡文档 JSON Schema', () => {
     expect(validate!(bad)).toBe(false)
   })
 
-  it('坏规则被拒绝（emit 事件名不合法）', () => {
+  it('坏节点被拒绝（emit 事件名不含冒号）', () => {
     const bad = structuredClone(noteClickDoc)
-    bad.content.logic.rules[0].do = [{ emit: 'no-colon' } as unknown as never]
-    expect(validate!(bad)).toBe(false)
-  })
-
-  it('坏规则被拒绝（单段 on 是死规则）', () => {
-    const bad = structuredClone(noteClickDoc)
-    bad.content.logic.rules[0].on = 'bare'
-    expect(validate!(bad)).toBe(false)
-  })
-
-  it('动作参数 "$100" 被拒绝（非合法引用形态）', () => {
-    const bad = structuredClone(noteClickDoc)
-    bad.content.logic.rules[0].do = [
-      { cmd: 'feedback.show', args: { text: '$100' } } as unknown as never,
+    ;(bad.content.logic as Record<string, unknown>).nodes = [
+      { id: 'm1', kind: 'emit', event: 'no-colon' },
     ]
     expect(validate!(bad)).toBe(false)
+  })
+
+  it('坏节点被拒绝（单段 on 是死规则）', () => {
+    const bad = structuredClone(noteClickDoc)
+    ;(bad.content.logic as Record<string, unknown>).nodes = [
+      { id: 'e1', kind: 'on', event: 'bare' },
+    ]
+    expect(validate!(bad)).toBe(false)
+  })
+
+  it('坏节点被拒绝（branch 缺 cond / 未知 kind）', () => {
+    const bad = structuredClone(noteClickDoc)
+    ;(bad.content.logic as Record<string, unknown>).nodes = [
+      { id: 'b1', kind: 'branch' },
+    ]
+    expect(validate!(bad)).toBe(false)
+    const bad2 = structuredClone(noteClickDoc)
+    ;(bad2.content.logic as Record<string, unknown>).nodes = [
+      { id: 'x1', kind: 'teleport' },
+    ]
+    expect(validate!(bad2)).toBe(false)
   })
 
   it('Note 定义：16n/32n 合法、3n 非法、vel 0..127（拒绝旧 0..1 语义）', () => {

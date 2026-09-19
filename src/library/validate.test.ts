@@ -33,10 +33,12 @@ describe('装载管线 loadLevelDoc', () => {
   it('lint 告警收集为警告而非拒绝', () => {
     const doc = structuredClone(noteClickDoc) as Record<string, unknown>
     const logic = (doc.content as Record<string, unknown>).logic as Record<string, unknown>
-    ;(logic.rules as unknown[]).push({
-      id: 'ghost-setter',
-      on: 'x.y',
-      do: [{ set: 'ghostVar', expr: '1' }],
+    // v2：未声明变量的 assign 节点（ghostVar 不在 variables 中）由 lint 捕获为警告
+    ;(logic.nodes as Record<string, unknown>[]).push({
+      id: 'ghost_setter',
+      kind: 'assign',
+      target: 'ghostVar',
+      value: { expr: '1' },
     })
     const r = loadLevelDoc(doc)
     expect(r.ok).toBe(true)

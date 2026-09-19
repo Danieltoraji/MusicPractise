@@ -4,14 +4,15 @@ import { lintGraphProgram, type GNode, type GraphProgram } from './graphProgram'
 import { jsonToExpr, migrateLogicV1toV2 } from './migrate'
 import type { LogicProgram } from './logic'
 
-import noteClickDoc from '../sample/note-click.level.json'
-import theoryChoiceDoc from '../sample/theory-choice.level.json'
-import melodyDictationDoc from '../sample/melody-dictation.level.json'
-import timedReactionDoc from '../sample/timed-reaction.level.json'
-import noteSpellingDoc from '../sample/note-spelling.level.json'
-import clefTestDoc from '../sample/clef-test.level.json'
-import rhythmFollowDoc from '../sample/rhythm-follow.level.json'
-import tuneIntroDoc from '../sample/tune-intro.level.json'
+// v1 夹具：内置关卡转为 v2 前的原始 ECA 形态（迁移器与行为等价测试的永久输入）
+import noteClickDoc from '../sample/fixtures/note-click.v1.json'
+import theoryChoiceDoc from '../sample/fixtures/theory-choice.v1.json'
+import melodyDictationDoc from '../sample/fixtures/melody-dictation.v1.json'
+import timedReactionDoc from '../sample/fixtures/timed-reaction.v1.json'
+import noteSpellingDoc from '../sample/fixtures/note-spelling.v1.json'
+import clefTestDoc from '../sample/fixtures/clef-test.v1.json'
+import rhythmFollowDoc from '../sample/fixtures/rhythm-follow.v1.json'
+import tuneIntroDoc from '../sample/fixtures/tune-intro.v1.json'
 
 describe('jsonToExpr', () => {
   it('$ 引用与 $expr: 去前缀', () => {

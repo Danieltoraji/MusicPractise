@@ -83,166 +83,325 @@
       }
     ],
     "logic": {
+      "logicVersion": 2,
       "variables": {
         "score": 0,
         "taps": [],
         "done": false
       },
-      "rules": [
+      "nodes": [
         {
-          "id": "load",
-          "on": "level.questionLoaded",
-          "do": [
-            {
-              "cmd": "rhythm1.start",
-              "args": {
-                "bpm": "$q.data.bpm",
-                "beats": 8,
-                "countInBeats": 4
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": false
-              }
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "预备拍后，跟着节拍在圆盘上打拍子",
-                "tone": "info"
-              }
-            }
+          "id": "load_on",
+          "kind": "on",
+          "event": "level.questionLoaded"
+        },
+        {
+          "id": "load_d0",
+          "kind": "call",
+          "target": "rhythm1",
+          "method": "start",
+          "args": [
+            "{bpm: q.data.bpm, beats: 8, countInBeats: 4}"
           ]
         },
         {
-          "id": "collect",
-          "on": "rhythm1.tap",
-          "do": [
-            {
-              "set": "taps",
-              "expr": "append(v.taps, event.t)"
-            }
+          "id": "load_d1",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: false}"
           ]
         },
         {
-          "id": "judge",
-          "on": "rhythm1.roundDone",
-          "do": [
-            {
-              "emit": "rhythm:judge",
-              "payload": {
-                "score": "$expr:rhythmScore(v.taps, q.data.grid, 120)"
-              }
-            },
-            {
-              "set": "taps",
-              "expr": "[]"
-            }
+          "id": "load_d2",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '预备拍后，跟着节拍在圆盘上打拍子', tone: 'info'}"
           ]
         },
         {
-          "id": "judged",
-          "on": "rhythm:judge",
-          "when": [
-            "event.score >= 0.6"
-          ],
-          "do": [
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "$expr:'不错！节奏契合度 ' + round(event.score * 100) + '%'",
-                "tone": "success"
-              }
-            },
-            {
-              "set": "score",
-              "expr": "v.score + round(event.score * q.scoring.max)"
-            },
-            {
-              "cmd": "scoreLabel.show",
-              "args": {
-                "text": "$expr:'得分: ' + v.score",
-                "tone": "success"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
-          ],
-          "else": [
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "节奏还不够稳，再来一轮",
-                "tone": "error"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            },
-            {
-              "cmd": "rhythm1.start",
-              "args": {
-                "bpm": "$q.data.bpm",
-                "beats": 8,
-                "countInBeats": 4
-              }
-            }
+          "id": "collect_on",
+          "kind": "on",
+          "event": "rhythm1.tap"
+        },
+        {
+          "id": "collect_d0",
+          "kind": "assign",
+          "target": "taps",
+          "value": {
+            "expr": "append(v.taps, event.t)"
+          }
+        },
+        {
+          "id": "judge_on",
+          "kind": "on",
+          "event": "rhythm1.roundDone"
+        },
+        {
+          "id": "judge_d0",
+          "kind": "emit",
+          "event": "rhythm:judge",
+          "payload": {
+            "score": "rhythmScore(v.taps, q.data.grid, 120)"
+          }
+        },
+        {
+          "id": "judge_d1",
+          "kind": "assign",
+          "target": "taps",
+          "value": {
+            "expr": "[]"
+          }
+        },
+        {
+          "id": "judged_on",
+          "kind": "on",
+          "event": "rhythm:judge"
+        },
+        {
+          "id": "judged_cond",
+          "kind": "branch",
+          "cond": "(event.score >= 0.6)"
+        },
+        {
+          "id": "judged_d0",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '不错！节奏契合度 ' + round(event.score * 100) + '%', tone: 'success'}"
           ]
         },
         {
-          "id": "next-or-restart",
-          "on": "nextBtn.clicked",
-          "when": [
-            "!v.done"
-          ],
-          "do": [
-            {
-              "cmd": "level.next"
-            }
-          ],
-          "else": [
-            {
-              "cmd": "level.restart"
-            }
+          "id": "judged_d1",
+          "kind": "assign",
+          "target": "score",
+          "value": {
+            "expr": "v.score + round(event.score * q.scoring.max)"
+          }
+        },
+        {
+          "id": "judged_d2",
+          "kind": "call",
+          "target": "scoreLabel",
+          "method": "show",
+          "args": [
+            "{text: '得分: ' + v.score, tone: 'success'}"
           ]
         },
         {
-          "id": "on-finish",
-          "on": "level.finished",
-          "do": [
-            {
-              "set": "done",
-              "expr": "true"
-            },
-            {
-              "cmd": "feedback.show",
-              "args": {
-                "text": "$expr:'节奏测试完成！得分 ' + v.score + ' 🎉'",
-                "tone": "info"
-              }
-            },
-            {
-              "cmd": "nextBtn.setText",
-              "args": {
-                "text": "重新开始"
-              }
-            },
-            {
-              "cmd": "nextBtn.setEnabled",
-              "args": {
-                "enabled": true
-              }
-            }
+          "id": "judged_d3",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
           ]
+        },
+        {
+          "id": "judged_e0",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '节奏还不够稳，再来一轮', tone: 'error'}"
+          ]
+        },
+        {
+          "id": "judged_e1",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        },
+        {
+          "id": "judged_e2",
+          "kind": "call",
+          "target": "rhythm1",
+          "method": "start",
+          "args": [
+            "{bpm: q.data.bpm, beats: 8, countInBeats: 4}"
+          ]
+        },
+        {
+          "id": "next-or-restart_on",
+          "kind": "on",
+          "event": "nextBtn.clicked"
+        },
+        {
+          "id": "next-or-restart_cond",
+          "kind": "branch",
+          "cond": "(!v.done)"
+        },
+        {
+          "id": "next-or-restart_d0",
+          "kind": "call",
+          "target": "level",
+          "method": "next",
+          "args": []
+        },
+        {
+          "id": "next-or-restart_e0",
+          "kind": "call",
+          "target": "level",
+          "method": "restart",
+          "args": []
+        },
+        {
+          "id": "on-finish_on",
+          "kind": "on",
+          "event": "level.finished"
+        },
+        {
+          "id": "on-finish_d0",
+          "kind": "assign",
+          "target": "done",
+          "value": {
+            "expr": "true"
+          }
+        },
+        {
+          "id": "on-finish_d1",
+          "kind": "call",
+          "target": "feedback",
+          "method": "show",
+          "args": [
+            "{text: '节奏测试完成！得分 ' + v.score + ' 🎉', tone: 'info'}"
+          ]
+        },
+        {
+          "id": "on-finish_d2",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setText",
+          "args": [
+            "{text: '重新开始'}"
+          ]
+        },
+        {
+          "id": "on-finish_d3",
+          "kind": "call",
+          "target": "nextBtn",
+          "method": "setEnabled",
+          "args": [
+            "{enabled: true}"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "m1",
+          "from": "load_d0",
+          "to": "load_d1"
+        },
+        {
+          "id": "m2",
+          "from": "load_d1",
+          "to": "load_d2"
+        },
+        {
+          "id": "m3",
+          "from": "load_on",
+          "to": "load_d0"
+        },
+        {
+          "id": "m4",
+          "from": "collect_on",
+          "to": "collect_d0"
+        },
+        {
+          "id": "m5",
+          "from": "judge_d0",
+          "to": "judge_d1"
+        },
+        {
+          "id": "m6",
+          "from": "judge_on",
+          "to": "judge_d0"
+        },
+        {
+          "id": "m7",
+          "from": "judged_on",
+          "to": "judged_cond"
+        },
+        {
+          "id": "m8",
+          "from": "judged_d0",
+          "to": "judged_d1"
+        },
+        {
+          "id": "m9",
+          "from": "judged_d1",
+          "to": "judged_d2"
+        },
+        {
+          "id": "m10",
+          "from": "judged_d2",
+          "to": "judged_d3"
+        },
+        {
+          "id": "m11",
+          "from": "judged_cond",
+          "to": "judged_d0",
+          "port": "true"
+        },
+        {
+          "id": "m12",
+          "from": "judged_e0",
+          "to": "judged_e1"
+        },
+        {
+          "id": "m13",
+          "from": "judged_e1",
+          "to": "judged_e2"
+        },
+        {
+          "id": "m14",
+          "from": "judged_cond",
+          "to": "judged_e0",
+          "port": "false"
+        },
+        {
+          "id": "m15",
+          "from": "next-or-restart_on",
+          "to": "next-or-restart_cond"
+        },
+        {
+          "id": "m16",
+          "from": "next-or-restart_cond",
+          "to": "next-or-restart_d0",
+          "port": "true"
+        },
+        {
+          "id": "m17",
+          "from": "next-or-restart_cond",
+          "to": "next-or-restart_e0",
+          "port": "false"
+        },
+        {
+          "id": "m18",
+          "from": "on-finish_d0",
+          "to": "on-finish_d1"
+        },
+        {
+          "id": "m19",
+          "from": "on-finish_d1",
+          "to": "on-finish_d2"
+        },
+        {
+          "id": "m20",
+          "from": "on-finish_d2",
+          "to": "on-finish_d3"
+        },
+        {
+          "id": "m21",
+          "from": "on-finish_on",
+          "to": "on-finish_d0"
         }
       ]
     },

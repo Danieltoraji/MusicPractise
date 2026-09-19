@@ -1,0 +1,365 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://music-practise.local/schemas/v1/graph-logic.json",
+  "title": "逻辑程序（GraphProgram）v2：控制流图 IR（事件处理器 + 执行边 + 内联表达式）",
+  "type": "object",
+  "properties": {
+    "logicVersion": {
+      "const": 2,
+      "description": "逻辑 IR 版本判别（信封 schemaVersion 保持 1）"
+    },
+    "variables": {
+      "type": "object",
+      "maxProperties": 64,
+      "additionalProperties": {
+        "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/JsonValue"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "$ref": "#/$defs/Node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/$defs/Edge"
+      }
+    }
+  },
+  "required": [
+    "logicVersion",
+    "nodes",
+    "edges"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Expr": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "安全表达式源文本（同 v1 expr；v2 另支持对象字面量 {key: expr}）"
+    },
+    "Ident": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+      "maxLength": 64
+    },
+    "Call": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/Ident"
+        },
+        "method": {
+          "$ref": "#/$defs/Ident"
+        },
+        "args": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/Expr"
+          }
+        }
+      },
+      "required": [
+        "target",
+        "method",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "RValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "expr": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "expr"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "call": {
+              "$ref": "#/$defs/Call"
+            }
+          },
+          "required": [
+            "call"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EventName": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*([.:][A-Za-z_][A-Za-z0-9_]*)+$",
+      "maxLength": 96
+    },
+    "Node": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Ident"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "on",
+            "assign",
+            "call",
+            "emit",
+            "branch",
+            "loop",
+            "wait",
+            "comment"
+          ]
+        },
+        "event": {
+          "type": "string",
+          "maxLength": 96
+        },
+        "target": {
+          "$ref": "#/$defs/Ident"
+        },
+        "method": {
+          "$ref": "#/$defs/Ident"
+        },
+        "args": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/Expr"
+          }
+        },
+        "payload": {
+          "type": "object",
+          "maxProperties": 16,
+          "additionalProperties": {
+            "$ref": "#/$defs/Expr"
+          }
+        },
+        "cond": {
+          "$ref": "#/$defs/Expr"
+        },
+        "mode": {
+          "enum": [
+            "while",
+            "repeat"
+          ]
+        },
+        "times": {
+          "$ref": "#/$defs/Expr"
+        },
+        "ms": {
+          "$ref": "#/$defs/Expr"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "value": {
+          "$ref": "#/$defs/RValue"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "on"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "event": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*([.:][A-Za-z_][A-Za-z0-9_]*)+$"
+              }
+            },
+            "required": [
+              "event"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "assign"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "target",
+              "value"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "call"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "target",
+              "method",
+              "args"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "emit"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "event": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*:[A-Za-z_][A-Za-z0-9_]*$"
+              }
+            },
+            "required": [
+              "event"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "branch"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "cond"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "loop"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "mode"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "wait"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "ms"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "comment"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
+    },
+    "Edge": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "from": {
+          "$ref": "#/$defs/Ident"
+        },
+        "to": {
+          "$ref": "#/$defs/Ident"
+        },
+        "port": {
+          "enum": [
+            "true",
+            "false"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
