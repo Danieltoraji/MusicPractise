@@ -79,7 +79,12 @@ export function EditorPage({ id }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
   const [saveErrors, setSaveErrors] = useState<string[]>([])
   const [lintWarnings, setLintWarnings] = useState<string[]>([])
-  const [savedTip, setSavedTip] = useState('')
+  // 一次性提示：跨重挂载传达（内置另存副本后 hash 切换会重建本组件，评审 P2-2）
+  const [savedTip, setSavedTip] = useState(() => {
+    const n = sessionStorage.getItem('edit-notice') ?? ''
+    if (n) sessionStorage.removeItem('edit-notice')
+    return n
+  })
   const [dirty, setDirty] = useState(false)
 
   // dirty-guard：刷新/关闭前浏览器原生确认；站内 hash 跳转在捕获阶段确认，取消则回滚 hash。
@@ -143,9 +148,11 @@ export function EditorPage({ id }: Props) {
     setDoc(next)
   }, [])
 
+  const savingRef = useRef(false)
   /** 保存：普通关卡覆盖原记录；内置示例不可覆盖（会被种子重写）——自动另存为用户副本并切换过去 */
   const save = useCallback(async (): Promise<{ ok: boolean; savedId: string | null }> => {
-    if (!doc) return { ok: false, savedId: null }
+    if (!doc || savingRef.current) return { ok: false, savedId: null } // 防重入：快速双击不产生双副本（评审 P2-4）
+    savingRef.current = true
     const existing = await db.resources.get(doc.id)
     const isBuiltIn = existing?.builtIn === 1
     const target = isBuiltIn ? copyForEditing(doc) : doc
@@ -158,8 +165,9 @@ export function EditorPage({ id }: Props) {
     setLintWarnings(result.lintWarnings)
     await putResource(result.doc as never)
     setDirty(false)
+    dirtyRef.current = false // 显式同步：不依赖「React 调度先于 hashchange 任务」的时序假设（评审 P2-1）
     if (isBuiltIn) {
-      setSavedTip('内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
+      sessionStorage.setItem('edit-notice', '内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
       setDoc(result.doc)
       window.location.hash = `#/edit/${result.doc.id}` // 切到副本继续编辑（App 按 hash 重挂载）
     } else {

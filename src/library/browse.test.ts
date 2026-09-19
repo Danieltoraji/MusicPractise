@@ -95,3 +95,50 @@ describe('filterTree', () => {
     expect(filterTree(rows, '')).toBe(rows)
   })
 })
+
+describe('评审修复回归（docs/23）', () => {
+  it('循环引用（专题自指/两专题互指）被深度截断，不栈溢出', () => {
+    const res = [
+      S('se1', '系列', ['tp1']),
+      T('tp1', '自指专题', ['tp1']),
+      T('tp2', '互指A', ['tp3']),
+      T('tp3', '互指B', ['tp2']),
+      L('lv1', '关卡'),
+    ]
+    expect(() => buildLibraryTree(res)).not.toThrow()
+    const { series, loose } = buildLibraryTree(res)
+    // 自指专题：按树语义深度截断（系列0→专题1→专题2→空），有限行数而非无限展开
+    const selfRef = series[0].children![0]
+    expect(selfRef.children![0].rec.id).toBe('tp1')
+    expect(selfRef.children![0].children![0].children).toEqual([])
+    // lv1 是未被引用的独立关卡，同属未整理区
+    expect(loose.map((r) => r.rec.id).sort()).toEqual(['lv1', 'tp2', 'tp3'])
+  })
+
+  it('重复子引用去重（React key 不冲突、计数不虚高）', () => {
+    const { series } = buildLibraryTree([
+      S('se1', '系列', ['tp1', 'tp1']),
+      T('tp1', '专题', ['lv1', 'lv1']),
+      L('lv1', '关卡'),
+    ])
+    const topics = series[0].children ?? []
+    expect(topics).toHaveLength(1)
+    expect(topics[0].children).toHaveLength(1)
+  })
+
+  it('filterTree 大小写不敏感', () => {
+    const { loose } = buildLibraryTree([L('lv1', 'Rhythm Trainer')])
+    expect(filterTree(loose, 'rhythm')).toHaveLength(1)
+    expect(filterTree(loose, 'RHYTHM')).toHaveLength(1)
+  })
+
+  it('partitionLevels / organizedLevelIds（HomePage 存活代码回归）', async () => {
+    const { partitionLevels, organizedLevelIds } = await import('./browse')
+    const topics = [T('tp1', '专题', ['lvA'])]
+    const levels = [L('lvA', 'A'), L('lvB', 'B')]
+    expect(organizedLevelIds(topics)).toEqual(new Set(['lvA']))
+    const { organized, independent } = partitionLevels(levels, topics)
+    expect(organized.map((r) => r.id)).toEqual(['lvA'])
+    expect(independent.map((r) => r.id)).toEqual(['lvB'])
+  })
+})

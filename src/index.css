@@ -2364,3 +2364,10 @@ a.lib-title:hover {
   font-size: 13px;
   color: var(--ink);
 }
+
+/* 触屏无 hover：行操作常显（评审 P1-2） */
+@media (hover: none) {
+  .lib-row .row-actions {
+    display: inline-flex;
+  }
+}

@@ -44,14 +44,26 @@ export interface LibraryTreeRow {
   children?: LibraryTreeRow[]
 }
 
-const childRecords = (all: Map<string, LibraryRecord>, ids: string[]): LibraryTreeRow[] =>
-  ids
-    .map((id) => all.get(id))
-    .filter((r): r is LibraryRecord => r !== undefined)
-    .map((rec) => ({
+/**
+ * 取有序子行：缺失 id 跳过、重复 id 去重（评审 P2-3）。
+ * 深度上限 = 树语义层数（系列0→专题1→关卡2），更深即循环引用毒数据，截断而非栈溢出（评审 P1-1）。
+ */
+function childRecords(all: Map<string, LibraryRecord>, ids: string[], depth = 0): LibraryTreeRow[] {
+  if (depth > 2) return []
+  const seen = new Set<string>()
+  const out: LibraryTreeRow[] = []
+  for (const id of ids) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    const rec = all.get(id)
+    if (rec === undefined) continue
+    out.push({
       rec,
-      children: rec.kind === 'topic' ? childRecords(all, childIds(rec.doc, 'levelIds')) : undefined,
-    }))
+      children: rec.kind === 'topic' ? childRecords(all, childIds(rec.doc, 'levelIds'), depth + 1) : undefined,
+    })
+  }
+  return out
+}
 
 /**
  * 把平铺的资源记录组织成树：系列（引用的专题）→ 专题（引用的关卡）。
