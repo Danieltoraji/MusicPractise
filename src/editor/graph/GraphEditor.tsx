@@ -31,7 +31,7 @@ import {
   type GraphProgram,
 } from '../../engine/graphProgram'
 import { buildPalette } from './palette'
-import { arrangeLayout, dagrePositions } from './layout'
+import { NODE_H, NODE_W, arrangeLayout, dagrePositions } from './layout'
 import { graphCardNodeTypes, type GraphCardData } from './nodeTypes'
 import { NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
 import { NodeInspector } from './NodeInspector'
@@ -94,6 +94,8 @@ function GraphEditorInner({ doc, onChange }: Props) {
           type: 'graphCard',
           position: { x: p?.x ?? 0, y: p?.y ?? 0 },
           data: { node, errors: issuesByNode.get(node.id) },
+          width: NODE_W,
+          height: NODE_H,
         }
       }),
     [program, fallbackPos, issuesByNode],
