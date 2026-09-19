@@ -1,10 +1,13 @@
 /**
  * 关卡会话：与 React 无关的流程核心（装载题目/下一题/结算/重开 + logicPatch）。
  * 抽出为纯类是为了可单测（评审 P1：流程逻辑零测试）；LevelRunner 只是其薄壳。
+ * 逻辑执行 = GraphEngine（图 IR v2；v1 ECA 程序构造时透明迁移，题目 logicPatch.appendRules 运行时迁移）。
  */
 import type { LevelDoc, Question } from '../engine/level'
 import type { Json } from '../engine/expr'
-import { LogicEngine, type Rule } from '../engine/logic'
+import { GraphEngine } from '../engine/graphEngine'
+import { isGraphProgram, lintGraphProgram, type GraphProgram } from '../engine/graphProgram'
+import { migrateLogicV1toV2 } from '../engine/migrate'
 import { ComponentStore } from './store'
 import type { Effect } from './componentDef'
 
@@ -20,9 +23,11 @@ export interface SessionHost {
 
 export class LevelSession {
   readonly store = new ComponentStore()
-  readonly engine: LogicEngine
+  readonly engine: GraphEngine
   private readonly doc: LevelDoc
   private readonly host: SessionHost
+  /** v2 基础程序（logicPatch 追加以外的部分） */
+  private readonly baseProgram: GraphProgram
   private readonly order: number[] = []
   private pos = 0
   private finishedFlag = false
@@ -47,9 +52,11 @@ export class LevelSession {
     }
     if (typeof content.flow?.count === 'number') this.order = this.order.slice(0, content.flow.count)
 
-    this.engine = new LogicEngine(content.logic, {
+    this.baseProgram = isGraphProgram(content.logic) ? content.logic : migrateLogicV1toV2(content.logic)
+    this.engine = new GraphEngine(this.baseProgram, {
       getQuestion: () => this.question as unknown as Json,
       dispatchCommand: (path, args) => this.handleCommand(path, args),
+      queryComponent: (target, method, args) => this.store.query(target, method, args),
       getNowSeconds: host.getNowSeconds,
       onError: (err, where) => console.error('[logic]', where, err),
     })
@@ -59,7 +66,7 @@ export class LevelSession {
     for (const q of content.questions) {
       for (const key of Object.keys(q.logicPatch?.variables ?? {})) patchVarKeys.add(key)
     }
-    const problems = LogicEngine.lint(content.logic, {
+    const problems = lintGraphProgram(this.baseProgram, {
       componentIds: content.components.map((c) => c.id),
       extraVariableKeys: patchVarKeys,
     })
@@ -136,13 +143,17 @@ export class LevelSession {
 
   /**
    * logicPatch 语义：variables 在题目装载时 merge 覆盖引擎变量；
-   * appendRules 仅在本题期间生效——每次装载用"基础规则 + 本题追加"重建索引。
+   * appendRules（v1 形态，运行时迁移为图片段）仅在本题期间生效——
+   * 每次装载用"基础程序 + 本题追加片段"重建索引。
    */
   private applyLogicPatch(q: Question | null): void {
     const patch = q?.logicPatch
-    const base = this.doc.content.logic.rules
-    const rules: Rule[] = patch?.appendRules?.length ? [...base, ...patch.appendRules] : base
-    this.engine.setDynamicRules(rules)
+    let dyn = this.baseProgram
+    if (patch?.appendRules?.length) {
+      const frag = migrateLogicV1toV2({ variables: {}, rules: patch.appendRules })
+      dyn = { ...this.baseProgram, nodes: [...this.baseProgram.nodes, ...frag.nodes], edges: [...this.baseProgram.edges, ...frag.edges] }
+    }
+    this.engine.setDynamicProgram(dyn)
     if (patch?.variables) Object.assign(this.engine.vars, structuredClone(patch.variables))
   }
 
@@ -157,6 +168,10 @@ export class LevelSession {
         else this.finish()
       } else if (cmd === 'restart') {
         this.restart()
+      } else if (cmd === 'finish') {
+        // level facade：主动结算（args.passed === false 时强制未通过）
+        const passedArg = args !== null && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, Json>).passed : undefined
+        this.finish(passedArg === false ? false : undefined)
       }
       return
     }
@@ -207,7 +222,7 @@ export class LevelSession {
     this.timers.clear()
   }
 
-  private finish(): void {
+  private finish(passedArg?: boolean): void {
     // 幂等守卫：已结算后再触发（如 UGC 规则 on finished → level.next）直接忽略，
     // 否则会形成 finish → level.finished → level.next → finish 的无界同步递归
     if (this.finishedFlag) return
@@ -222,6 +237,8 @@ export class LevelSession {
         passed = false
       }
     }
+    // level.finish(false) 显式强制未通过
+    if (passedArg === false) passed = false
     const score = this.engine.vars.score ?? 0
     this.host.onFinished({ score, passed })
     this.engine.dispatch('level.finished', { score, passed })

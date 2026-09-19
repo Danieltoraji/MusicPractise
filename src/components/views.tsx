@@ -126,7 +126,9 @@ export function LabelView({ spec, store }: ViewProps) {
 // ---------------------------------------------------------------------------
 
 export function ButtonView({ spec, store, emit }: ViewProps) {
-  const { text, enabled } = useComponentState<ButtonState>(store, spec.id)
+  const state = useComponentState<ButtonState & { __enabled?: boolean }>(store, spec.id)
+  const { text } = state
+  const enabled = state.enabled && state.__enabled !== false
   return (
     <button
       type="button"
@@ -145,7 +147,10 @@ export function ButtonView({ spec, store, emit }: ViewProps) {
 // ---------------------------------------------------------------------------
 
 export function ChoiceView({ spec, store, emit }: ViewProps) {
-  const { options, revealed } = useComponentState<ChoiceState>(store, spec.id)
+  const state = useComponentState<ChoiceState & { __enabled?: boolean }>(store, spec.id)
+  const { options } = state
+  const revealed = state.revealed
+  const disabled = revealed !== null || state.__enabled === false
   const [selected, setSelected] = useState<number | null>(null)
 
   // 换题（options 变化）时清除本地点选
@@ -164,9 +169,9 @@ export function ChoiceView({ spec, store, emit }: ViewProps) {
             key={`${i}-${opt}`}
             type="button"
             className={cls}
-            disabled={revealed !== null}
+            disabled={disabled}
             onClick={() => {
-              if (revealed !== null) return
+              if (disabled) return
               setSelected(i)
               emit('chosen', { index: i, value: opt })
             }}
@@ -185,6 +190,8 @@ export function ChoiceView({ spec, store, emit }: ViewProps) {
 export function ComponentView(props: ViewProps): React.ReactNode {
   const { spec } = props
   if (spec.visible === false) return null
+  // 基座 setVisible 命令的状态位（undefined = 可见）
+  if ((props.store.snapshot(spec.id).state as { __visible?: boolean } | null)?.__visible === false) return null
   switch (spec.type) {
     case 'staff':
       return <StaffView {...props} />
@@ -217,7 +224,9 @@ export function ComponentView(props: ViewProps): React.ReactNode {
 // ---------------------------------------------------------------------------
 
 export function SliderView({ spec, store, emit }: ViewProps) {
-  const { value } = useComponentState<SliderState>(store, spec.id)
+  const state = useComponentState<SliderState & { __enabled?: boolean }>(store, spec.id)
+  const value = state.value
+  const disabled = state.__enabled === false
   const p = (spec.props ?? {}) as Record<string, Json>
   const min = typeof p.min === 'number' ? p.min : 0
   const max = typeof p.max === 'number' ? p.max : 100
@@ -233,6 +242,7 @@ export function SliderView({ spec, store, emit }: ViewProps) {
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(e) => store.applyCommand(spec.id, '__set', { value: Number(e.target.value) })}
         onPointerUp={commit}
         onKeyUp={commit}
@@ -245,7 +255,9 @@ export function SliderView({ spec, store, emit }: ViewProps) {
 // ---------------------------------------------------------------------------
 
 export function InputView({ spec, store, emit }: ViewProps) {
-  const { value } = useComponentState<InputState>(store, spec.id)
+  const state = useComponentState<InputState & { __enabled?: boolean }>(store, spec.id)
+  const value = state.value
+  const disabled = state.__enabled === false
   const p = (spec.props ?? {}) as Record<string, Json>
   return (
     <input
@@ -254,6 +266,7 @@ export function InputView({ spec, store, emit }: ViewProps) {
       className="comp-input"
       placeholder={typeof p.placeholder === 'string' ? p.placeholder : ''}
       value={value}
+      disabled={disabled}
       onChange={(e) => store.applyCommand(spec.id, 'setValue', { value: e.target.value })}
       onKeyDown={(e) => {
         // 中文输入法组合态下按 Enter 是确认候选，不是提交

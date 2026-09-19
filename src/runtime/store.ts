@@ -5,6 +5,7 @@
 import type { ComponentInstance } from '../engine/level'
 import type { Json } from '../engine/expr'
 import {
+  BASE_COMMANDS,
   BUTTON_DEF,
   CHOICE_DEF,
   FINGERING_DEF,
@@ -133,6 +134,7 @@ export class ComponentStore {
   /**
    * 命令 → 组件状态变更。产生的效果经 effectSink 统一交执行器
    * （规则链路与视图直调两条路径都走这里，返回值仅供测试断言）。
+   * 基座命令（setVisible/setEnabled）由仓库统一实现，不进各组件 def。
    */
   applyCommand(id: string, command: string, args: Record<string, Json>): Effect[] {
     const def = this.defs.get(id)
@@ -140,12 +142,31 @@ export class ComponentStore {
     if (!def || state === undefined) {
       throw new Error(`命令目标不存在: ${id}.${command}`)
     }
+    // 基座命令仅对契约中未声明同名命令的组件生效（如 button 自带 setEnabled，以组件为准）
+    if (BASE_COMMANDS.has(command) && !(command in def.contract.commands)) {
+      const s = state as Record<string, Json>
+      const next: Record<string, Json> = { ...s }
+      if (command === 'setVisible') next.__visible = args.visible !== false
+      else next.__enabled = args.enabled !== false
+      this.states.set(id, next)
+      this.bump(id)
+      return []
+    }
     const { state: next, effects } = def.applyCommand(state as never, command, args)
     this.states.set(id, next)
     this.bump(id)
     const out = effects ?? []
     if (out.length > 0) this.effectSink?.(id, out)
     return out
+  }
+
+  /** 查询方法（逻辑 assign 右侧调用，如 v.x = input1.getValue()）；未实现时抛错 */
+  query(id: string, method: string, args: Json[]): Json {
+    const def = this.defs.get(id)
+    const state = this.states.get(id)
+    if (!def || state === undefined) throw new Error(`查询目标不存在: ${id}.${method}`)
+    if (!def.query) throw new Error(`组件 "${def.contract.type}" 不支持查询 "${method}"`)
+    return def.query(state as never, method, args)
   }
 
   /** 关卡重开：全部组件回到初始态 */

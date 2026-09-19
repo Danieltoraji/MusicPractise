@@ -3,6 +3,11 @@ import type { LevelDoc, Question } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { LevelSession, type SessionHost } from './levelSession'
 
+/** GraphEngine 的 dispatch 是 fire-and-forget async：排空微任务等待 drain 完成（fake timers 下也安全） */
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 50; i++) await Promise.resolve()
+}
+
 function makeDoc(overrides?: {
   questions?: Question[]
   rules?: LevelDoc['content']['logic']['rules']
@@ -61,7 +66,7 @@ function makeHost(): { host: SessionHost; rec: Recording } {
 }
 
 describe('LevelSession', () => {
-  it('start 触发 started→装载第 1 题→questionLoaded，绑定解析到组件', () => {
+  it('start 触发 started→装载第 1 题→questionLoaded，绑定解析到组件', async () => {
     const doc = makeDoc()
     const q1data = doc.content.questions[0].data as Record<string, Json>
     q1data.music = { notes: [{ midi: 60 }] }
@@ -75,33 +80,40 @@ describe('LevelSession', () => {
     expect(session.store.snapshot('choice1').state).toMatchObject({ options: ['A', 'B'] })
   })
 
-  it('判定规则：对错分支与计分', () => {
+  it('判定规则：对错分支与计分', async () => {
     const { host, rec } = makeHost()
     const session = new LevelSession(makeDoc(), host)
     session.start()
 
     session.dispatch('staff1.noteClicked', { midi: 60 }) // 错
+    await flush()
     expect(session.engine.vars.score).toBe(-1)
     session.dispatch('staff1.noteClicked', { midi: 64 }) // 对
+    await flush()
     expect(session.engine.vars.score).toBe(9)
 
     session.dispatch('nextBtn.clicked')
+    await flush()
     expect(rec.questions.at(-1)).toMatchObject({ index: 1, id: 'q2' })
   })
 
-  it('最后一题 next → 结算（flow.pass 求值）', () => {
+  it('最后一题 next → 结算（flow.pass 求值）', async () => {
     const { host, rec } = makeHost()
     const session = new LevelSession(makeDoc({ pass: 'v.score >= 20' }), host)
     session.start()
     session.dispatch('staff1.noteClicked', { midi: 64 })
+    await flush()
     session.dispatch('nextBtn.clicked')
+    await flush()
     session.dispatch('staff1.noteClicked', { midi: 71 })
+    await flush()
     session.dispatch('nextBtn.clicked')
+    await flush()
 
     expect(rec.finished).toEqual([{ score: 20, passed: true }])
   })
 
-  it('finish 幂等：on level.finished 规则再发 level.next 不会无限递归/重复结算', () => {
+  it('finish 幂等：on level.finished 规则再发 level.next 不会无限递归/重复结算', async () => {
     const rules: LevelDoc['content']['logic']['rules'] = [
       { id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'level.next' }] },
       // UGC 作者常见误写：结束后想自动进入下一关
@@ -111,23 +123,27 @@ describe('LevelSession', () => {
     const session = new LevelSession(makeDoc({ rules }), host)
     session.start()
     session.dispatch('nextBtn.clicked')
+    await flush()
     session.dispatch('nextBtn.clicked')
+    await flush()
 
     expect(rec.finished).toHaveLength(1)
   })
 
-  it('flow.pass 表达式抛错时降级为未通过，不中断结算', () => {
+  it('flow.pass 表达式抛错时降级为未通过，不中断结算', async () => {
     const { host, rec } = makeHost()
     const session = new LevelSession(makeDoc({ pass: 'v.score / 0 > 1' }), host)
     session.start()
     session.dispatch('nextBtn.clicked')
+    await flush()
     session.dispatch('nextBtn.clicked')
+    await flush()
     // 除零抛 ExprError → passed=false，但结算照常完成
     expect(rec.finished).toHaveLength(1)
     expect(rec.finished[0].passed).toBe(false)
   })
 
-  it('logicPatch：variables 覆盖 + appendRules 仅本题生效', () => {
+  it('logicPatch：variables 覆盖 + appendRules 仅本题生效', async () => {
     const questions: Question[] = [
       { id: 'q1', data: {}, scoring: { max: 10 } },
       {
@@ -146,26 +162,33 @@ describe('LevelSession', () => {
     session.start()
 
     session.dispatch('x.ping') // q1：无此规则
+    await flush()
     expect(session.engine.vars.score).toBe(0)
 
     session.dispatch('nextBtn.clicked')
+    await flush()
     expect(session.currentQuestion?.id).toBe('q2')
     expect(session.engine.vars.score).toBe(50) // variables 已覆盖
     session.dispatch('x.ping')
+    await flush()
     expect(session.engine.vars.score).toBe(51) // appendRules 生效
 
     session.dispatch('nextBtn.clicked')
+    await flush()
     expect(session.currentQuestion?.id).toBe('q3')
     session.dispatch('x.ping')
+    await flush()
     expect(session.engine.vars.score).toBe(51) // 换题后追加规则已移除
   })
 
-  it('restart 重置变量与组件状态并重新装载', () => {
+  it('restart 重置变量与组件状态并重新装载', async () => {
     const { host, rec } = makeHost()
     const session = new LevelSession(makeDoc(), host)
     session.start()
     session.dispatch('staff1.noteClicked', { midi: 64 })
+    await flush()
     session.dispatch('nextBtn.clicked')
+    await flush()
     session.restart()
 
     expect(session.engine.vars.score).toBe(0)
@@ -173,7 +196,7 @@ describe('LevelSession', () => {
     expect(rec.questions.at(-1)).toMatchObject({ index: 0, id: 'q1' })
   })
 
-  it('shuffle + count 抽题', () => {
+  it('shuffle + count 抽题', async () => {
     const questions: Question[] = [1, 2, 3, 4, 5].map((i) => ({
       id: `q${i}`,
       data: { n: i },
@@ -190,6 +213,7 @@ describe('LevelSession', () => {
       expect(session.currentQuestion?.id).toMatch(/^q[1-5]$/)
       seen.add(session.currentQuestion!.id)
       session.dispatch('nextBtn.clicked')
+      await flush()
     }
     expect(seen.size).toBe(3)
     expect(rec.finished).toHaveLength(1) // 抽完后结束
@@ -210,14 +234,15 @@ describe('LevelSession', () => {
       session.start()
       expect(session.engine.vars.fired).toBe(false)
 
-      vi.advanceTimersByTime(80)
+      await vi.advanceTimersByTimeAsync(80)
       expect(session.engine.vars.fired).toBe(true)
 
       // restart 会重置变量并重新 arm；随后立即 stop，tick 不应再发生
       session.restart()
       expect(session.engine.vars.fired).toBe(false)
       session.dispatch('x.stop')
-      vi.advanceTimersByTime(300)
+      await flush()
+      await vi.advanceTimersByTimeAsync(300)
       expect(session.engine.vars.fired).toBe(false)
       expect(session.store.snapshot('timer1').state).toMatchObject({ running: false })
     } finally {
@@ -237,19 +262,19 @@ describe('LevelSession', () => {
       const { host } = makeHost()
       const session = new LevelSession(doc, host)
       session.start()
-      vi.advanceTimersByTime(150)
+      await vi.advanceTimersByTimeAsync(150)
       const ticks = session.engine.vars.ticks as number
       expect(ticks).toBeGreaterThanOrEqual(2)
 
       session.dispose()
-      vi.advanceTimersByTime(200)
+      await vi.advanceTimersByTimeAsync(200)
       expect(session.engine.vars.ticks).toBe(ticks) // 不再增长
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('换题清理计时器：logicPatch arm 的重复计时器在换题后不再触发（P1 回归）', () => {
+  it('换题清理计时器：logicPatch arm 的重复计时器在换题后不再触发（P1 回归）', async () => {
     vi.useFakeTimers()
     try {
       const questions: Question[] = [
@@ -275,19 +300,20 @@ describe('LevelSession', () => {
       const { host } = makeHost()
       const session = new LevelSession(doc, host)
       session.start()
-      vi.advanceTimersByTime(60)
+      await vi.advanceTimersByTimeAsync(60)
       const before = session.engine.vars.ticks as number
       expect(before).toBeGreaterThanOrEqual(2)
 
       session.dispatch('nextBtn.clicked') // → q2：追加规则已移除，且换题强制清理计时器
-      vi.advanceTimersByTime(200)
+      await flush()
+      await vi.advanceTimersByTimeAsync(200)
       expect(session.engine.vars.ticks).toBe(before)
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('视图直调 applyCommand 的效果也经执行通道（strike 发声回归）', () => {
+  it('视图直调 applyCommand 的效果也经执行通道（strike 发声回归）', async () => {
     const doc = makeDoc()
     doc.content.components.push({ id: 'keys1', type: 'fingering' })
     const { host, rec } = makeHost()
@@ -299,7 +325,7 @@ describe('LevelSession', () => {
     ])
   })
 
-  it('未知组件引用被 lint 捕获（console.warn 不抛错）', () => {
+  it('未知组件引用被 lint 捕获（console.warn 不抛错）', async () => {
     const rules: LevelDoc['content']['logic']['rules'] = [
       { id: 'bad', on: 'ghost.noteClicked', do: [{ cmd: 'ghost.clear' }] },
     ]

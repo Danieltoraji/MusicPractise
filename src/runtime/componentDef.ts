@@ -18,8 +18,10 @@ export interface ContractDoc {
   category: 'music' | 'ui' | 'hidden'
   /** 事件名 → 负载说明 */
   events: Record<string, string>
-  /** 命令名 → 参数说明 */
+  /** 命令名 → 参数说明（写操作，可被逻辑调用） */
   commands: Record<string, string>
+  /** 查询方法名 → 返回值说明（读操作，assign 右侧调用，如 v.x = input1.getValue()） */
+  queries?: Record<string, string>
   /** 绑定槽位 → 值类型说明 */
   bindings?: Record<string, string>
   /** 可读状态（编辑器展示用；表达式 v1 经事件即可覆盖） */
@@ -33,7 +35,15 @@ export interface ComponentDef<S = unknown> {
   initialState(spec: ComponentInstance): S
   applyBinding(state: S, key: string, value: Json): S
   applyCommand(state: S, command: string, args: Record<string, Json>): { state: S; effects?: Effect[] }
+  /** 查询方法（contract.queries 中声明的方法在此实现）；未识别的方法名抛错 */
+  query?(state: S, method: string, args: Json[]): Json
 }
+
+/**
+ * 基座命令：所有实例继承、由 ComponentStore 统一实现（不进各组件 def）。
+ * 状态位 __visible / __enabled 存在实例状态上（undefined = 可见/可用），视图层读取合并。
+ */
+export const BASE_COMMANDS = new Set(['setVisible', 'setEnabled'])
 
 type Tone = 'info' | 'success' | 'error'
 
@@ -227,6 +237,7 @@ export const TIMER_DEF: ComponentDef<TimerState> = {
     events: { tick: '{ count: number }' },
     // __tick 为运行器内部命令（约定：双下划线前缀 = 内部，不承诺给 UGC）
     commands: { start: '{ ms: number, repeat?: boolean }', stop: '无参数' },
+    queries: { getCount: 'number（已触发的 tick 计数）' },
     state: { running: 'boolean', count: 'number', ms: 'number' },
   },
   initialState: () => ({ running: false, count: 0, ms: 0 }),
@@ -242,6 +253,10 @@ export const TIMER_DEF: ComponentDef<TimerState> = {
     if (cmd === '__tick') return { state: { ...s, count: typeof args.count === 'number' ? args.count : s.count + 1 } }
     return { state: s }
   },
+  query: (s, method) => {
+    if (method === 'getCount') return s.count
+    throw new Error(`timer 没有查询方法 "${method}"`)
+  },
 }
 
 export const SLIDER_DEF: ComponentDef<SliderState> = {
@@ -251,6 +266,7 @@ export const SLIDER_DEF: ComponentDef<SliderState> = {
     category: 'ui',
     events: { changed: '{ value: number }' },
     commands: { setValue: '{ value: number }' },
+    queries: { getValue: 'number（当前值）' },
     state: { value: 'number' },
   },
   initialState: (spec) => {
@@ -269,6 +285,10 @@ export const SLIDER_DEF: ComponentDef<SliderState> = {
     }
     return { state: s }
   },
+  query: (s, method) => {
+    if (method === 'getValue') return s.value
+    throw new Error(`slider 没有查询方法 "${method}"`)
+  },
 }
 
 export const INPUT_DEF: ComponentDef<InputState> = {
@@ -278,6 +298,7 @@ export const INPUT_DEF: ComponentDef<InputState> = {
     category: 'ui',
     events: { submitted: '{ value: string }' },
     commands: { setValue: '{ value: string }', clear: '无参数' },
+    queries: { getValue: 'string（当前输入值）' },
     state: { value: 'string' },
   },
   initialState: () => ({ value: '' }),
@@ -286,6 +307,10 @@ export const INPUT_DEF: ComponentDef<InputState> = {
     if (cmd === 'setValue') return { state: { ...s, value: str(args.value, s.value) } }
     if (cmd === 'clear') return { state: { ...s, value: '' } }
     return { state: s }
+  },
+  query: (s, method) => {
+    if (method === 'getValue') return s.value
+    throw new Error(`input 没有查询方法 "${method}"`)
   },
 }
 
