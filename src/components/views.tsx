@@ -211,7 +211,8 @@ export function SynthView({ spec, store }: ViewProps) {
   return (
     <div style={boxStyle(spec)} className={`comp-synth ${pulse ? 'is-playing' : ''}`}>
       <div className="synth-wave">{waveZh}</div>
-      <div className="synth-bars" aria-hidden>
+      <div className="synth-bars" aria-hidden key={playSeq}>
+        {/* key=playSeq：电平条随播放重挂载，CSS 动画每次 play 都重放（评审 P2-5） */}
         {bars.map((h, i) => (
           <span key={i} className={`synth-bar bar-${i}`} style={{ height: `${h * 100}%` }} />
         ))}

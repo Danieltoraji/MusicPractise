@@ -52,6 +52,8 @@ export interface PropFieldDef {
   type: 'string' | 'number' | 'boolean'
   /** 缺省值（未设置时组件运行时的 fallback） */
   fallback?: Json
+  /** 可选值清单（提供时 Inspector 渲染下拉而非自由输入，如合成器音色） */
+  options?: string[]
 }
 
 export interface ComponentDef<S = unknown> {
@@ -146,6 +148,12 @@ export const SYNTH_WAVE_ZH: Record<string, string> = {
 
 export function isSynthWave(v: unknown): v is SynthWave {
   return typeof v === 'string' && (SYNTH_WAVES as readonly string[]).includes(v)
+}
+
+/** 有限数字钳制：非有限（NaN/Infinity）或非数字返回 undefined（调用方回退缺省） */
+function clampNum(v: Json | undefined, lo: number, hi: number): number | undefined {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return undefined
+  return Math.min(hi, Math.max(lo, v))
 }
 
 export const LABEL_DEF: ComponentDef<LabelState> = {
@@ -471,7 +479,7 @@ export const SYNTH_DEF: ComponentDef<SynthState> = {
     },
     state: { wave: 'string', gain: 'number(0-1)', lastPlay: 'Json', playSeq: 'number' },
     propsFields: [
-      { key: 'wave', label: '音色（sine/triangle/square/sawtooth/fm/bell）', type: 'string', fallback: 'sawtooth' },
+      { key: 'wave', label: '音色', type: 'string', fallback: 'sawtooth', options: [...SYNTH_WAVES] },
       { key: 'gain', label: '音量（0-1）', type: 'number', fallback: 0.35 },
     ],
     propsDoc: '合成器为纯振荡器发声（无采样加载、即点即响）；play 未传 wave/gain 时用当前状态（props 或 setWave 设置的值）',
@@ -490,13 +498,14 @@ export const SYNTH_DEF: ComponentDef<SynthState> = {
     if (cmd === 'play') {
       const notes = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
       const wave = isSynthWave(args.wave) ? args.wave : s.wave
-      const gain = typeof args.gain === 'number' ? Math.min(1, Math.max(0, args.gain)) : s.gain
-      // tempo 钳到常规音乐区间（与 sound.play 同语义）；attack/release 秒，钳 0-2
-      const tempo = typeof args.tempo === 'number' ? Math.min(300, Math.max(20, args.tempo)) : undefined
-      const attack = typeof args.attack === 'number' ? Math.min(2, Math.max(0, args.attack)) : undefined
-      const release = typeof args.release === 'number' ? Math.min(2, Math.max(0, args.release)) : undefined
-      const cutoff = typeof args.cutoff === 'number' ? Math.min(12000, Math.max(0, args.cutoff)) : undefined
-      const mode = args.mode === 'seq' ? 'seq' : 'chord'
+      // Number.isFinite 守卫：逻辑表达式算出 NaN 时直达 AudioParam 会产生浏览器相关的坏行为（评审 P2-3）
+      const gain = clampNum(args.gain, 0, 1) ?? s.gain
+      // tempo 钳到常规音乐区间（与 sound.play 同语义）；attack/release 秒，release 下限 0.01 与引擎一致
+      const tempo = clampNum(args.tempo, 20, 300)
+      const attack = clampNum(args.attack, 0, 2)
+      const release = clampNum(args.release, 0.01, 2.5)
+      const cutoff = clampNum(args.cutoff, 0, 12000)
+      const mode = args.mode === 'seq' ? 'seq' : args.mode === 'chord' ? 'chord' : (console.warn('[synth] 未知播放模式，按 chord 处理'), 'chord')
       return {
         state: { ...s, wave, gain, lastPlay: Array.isArray(args.notes) ? (args.notes as unknown as Json) : null, playSeq: s.playSeq + 1 },
         effects: [{ type: 'audio.synth', notes, wave, tempo, mode, attack, release, gain, cutoff }],

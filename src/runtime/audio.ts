@@ -154,9 +154,11 @@ function synthVoice(c: AudioContext, midi: number, vel: number, t: number, dur: 
   const env = c.createGain()
   env.gain.setValueAtTime(0.0001, t)
   env.gain.linearRampToValueAtTime(peak, t + Math.max(0.001, p.attack))
-  // 可持续音色保持电平；钟/拨弦类自然衰减
+  // 可持续音色：setValue 在 holdEnd 保持电平（平顶 sustain），release 从 holdEnd 起算（评审 P1-1：
+  // 若把 setValue 放在 attack 尾，指数释放会从 attack 后即开始插值，长音尾部近乎无声）；
+  // 钟/拨弦类自然衰减：holdEnd 前完成指数衰减
   if (p.decay) env.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * 0.15), holdEnd)
-  else env.gain.setValueAtTime(peak, Math.min(t + p.attack + 0.001, holdEnd))
+  else env.gain.setValueAtTime(peak, holdEnd)
   env.gain.exponentialRampToValueAtTime(0.0001, end)
 
   let inNode: AudioNode = env
@@ -214,12 +216,12 @@ export function playSynth(notes: Note[], params: SynthParams): void {
     if (typeof n?.midi !== 'number') return
     const vel = typeof n.vel === 'number' ? Math.min(127, Math.max(1, Math.round(n.vel))) : 100
     if (params.mode === 'seq') {
-      const dur = Math.min(3, durToSeconds(n.dur ?? '4n', tempo))
+      const dur = Math.min(3.5, durToSeconds(n.dur ?? '4n', tempo))
       synthVoice(c, n.midi, vel, t, dur, { ...base, wave: params.wave, attack, release, gain, cutoff })
       t += dur
     } else {
-      const dur = Math.min(3, durToSeconds(n.dur ?? '4n', tempo) + 0.3)
-      synthVoice(c, n.midi, vel, t0 + i * 0.02, dur, { ...base, wave: params.wave, attack, release, gain, cutoff })
+      const dur = Math.min(3.5, durToSeconds(n.dur ?? '4n', tempo) + 0.5)
+      synthVoice(c, n.midi, vel, t0 + i * 0.025, dur, { ...base, wave: params.wave, attack, release, gain, cutoff })
     }
   })
 }
@@ -230,9 +232,17 @@ export function stopSynth(): void {
   const now = ctx.currentTime
   for (const v of synthVoices) {
     try {
-      v.gain.gain.cancelScheduledValues(now)
-      v.gain.gain.setValueAtTime(Math.max(0.0001, v.gain.gain.value || 0.0001), now)
-      v.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05)
+      const param = v.gain.gain
+      // 支持 cancelAndHoldAtTime 的浏览器保留当前电平做 50ms 淡出（评审 P2-1：
+      // 纯 cancel 会让 ramp 中途的声部电平弹回旧事件值，产生回跳/爆音）
+      if (typeof (param as unknown as { cancelAndHoldAtTime?: (t: number) => void }).cancelAndHoldAtTime === 'function') {
+        ;(param as unknown as { cancelAndHoldAtTime: (t: number) => void }).cancelAndHoldAtTime(now)
+        param.setValueAtTime(Math.max(0.0001, param.value || 0.0001), now)
+      } else {
+        param.cancelScheduledValues(now)
+        param.setValueAtTime(Math.max(0.0001, param.value || 0.0001), now)
+      }
+      param.exponentialRampToValueAtTime(0.0001, now + 0.05)
       v.oscs.forEach((o) => {
         try {
           o.stop(now + 0.08)

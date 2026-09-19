@@ -516,6 +516,21 @@ function Inspector({
           {contract.propsFields.map((field) => {
             const raw = (comp.props ?? {}) as Record<string, Json>
             const value = raw[field.key] ?? field.fallback
+            if (field.type === 'string' && field.options?.length) {
+              // 有可选值清单的字符串字段渲染下拉（如合成器音色），避免手拼错值静默回退
+              const known = field.options.includes(String(value))
+              return (
+                <label key={field.key} className="inspector-prop">
+                  {field.label}
+                  <select value={String(value ?? '')} onChange={(e) => onChange({ props: { ...raw, [field.key]: e.target.value } })}>
+                    {!known && <option value={String(value ?? '')}>{String(value ?? '') || '（未设置）'}</option>}
+                    {field.options.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+                </label>
+              )
+            }
             if (field.type === 'boolean') {
               return (
                 <label key={field.key} className="inspector-prop">

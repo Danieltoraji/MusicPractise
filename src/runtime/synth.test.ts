@@ -39,7 +39,7 @@ describe('SYNTH_DEF（合成器契约）', () => {
       cutoff: 99999,
       mode: 'loop',
     })
-    expect(r.effects![0]).toMatchObject({ tempo: 300, attack: 2, release: 0, gain: 1, cutoff: 12000, mode: 'chord' })
+    expect(r.effects![0]).toMatchObject({ tempo: 300, attack: 2, release: 0.01, gain: 1, cutoff: 12000, mode: 'chord' })
   })
 
   it('play：notes 非数组时效果仍产出但音符为空，lastPlay 记 null', () => {
