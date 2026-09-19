@@ -3,14 +3,15 @@
  * 组件类型与事件/命令枚举全部来自组件注册表契约（单一来源）。
  * 节点图编辑器为懒加载（@xyflow/react 不进主包）；代码页随 3-3 回归。
  */
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../library/db'
 import type { LibraryRecord } from '../library/db'
 import { loadLevelDoc } from '../library/validate'
 import { putResource } from '../library/db'
 import { ErrorBoundary } from '../library/ErrorBoundary'
-import { allContracts, getDef } from '../runtime/store'
+import { allContracts, ComponentStore, getDef } from '../runtime/store'
+import { ComponentView } from '../components/views'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentInstance, LevelDoc, Question } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { parseExpr, ExprError } from '../engine/expr'
@@ -63,6 +64,39 @@ export function EditorPage({ id }: Props) {
   const [saveErrors, setSaveErrors] = useState<string[]>([])
   const [lintWarnings, setLintWarnings] = useState<string[]>([])
   const [savedTip, setSavedTip] = useState('')
+  const [dirty, setDirty] = useState(false)
+
+  // dirty-guard：刷新/关闭前浏览器原生确认；站内 hash 跳转在捕获阶段确认，取消则回滚 hash
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
+  const prevHashRef = useRef(window.location.hash)
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent): void => {
+      if (!dirtyRef.current) return
+      e.preventDefault()
+    }
+    const onHashChangeCapture = (e: HashChangeEvent): void => {
+      if (!dirtyRef.current) {
+        prevHashRef.current = window.location.hash
+        return
+      }
+      const leave = window.confirm('有未保存的更改，离开将丢失。确定离开吗？')
+      if (leave) {
+        setDirty(false)
+        prevHashRef.current = window.location.hash
+        return
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      window.location.hash = prevHashRef.current // 回滚到离开前的路由
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    window.addEventListener('hashchange', onHashChangeCapture, true)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      window.removeEventListener('hashchange', onHashChangeCapture, true)
+    }
+  }, [])
 
   // 装载：new = 空白模板；否则取库内文档。
   // loadedIdRef 语义：同一关卡不重复装载（保护未保存编辑）；换 id（#/edit/A → #/edit/B）强制重装
@@ -76,9 +110,10 @@ export function EditorPage({ id }: Props) {
   }, [record, id])
   const selectedComp = doc?.content.components.find((c) => c.id === selected) ?? null
 
-  /** 编辑器内所有文档修改走这里：修改即清「已保存」提示 */
+  /** 编辑器内所有文档修改走这里：修改即标脏并清「已保存」提示 */
   const update = useCallback((next: LevelDoc) => {
     setSavedTip('')
+    setDirty(true)
     setDoc(next)
   }, [])
 
@@ -98,6 +133,7 @@ export function EditorPage({ id }: Props) {
     setSaveErrors([])
     setLintWarnings(result.lintWarnings)
     await putResource(result.doc as never)
+    setDirty(false)
     setSavedTip(`已保存（v${result.doc.version}）`)
     return true
   }, [doc])
@@ -113,14 +149,21 @@ export function EditorPage({ id }: Props) {
   return (
     <div className="page editor">
       <div className="editor-head">
-        <a href="#/library">← 资源库</a>
+        <a
+          href="#/library"
+          onClick={(e) => {
+            if (dirtyRef.current && !window.confirm('有未保存的更改，离开将丢失。确定离开吗？')) e.preventDefault()
+          }}
+        >
+          ← 资源库
+        </a>
         <input
           className="editor-title"
           value={String(doc.meta.title ?? '')}
           onChange={(e) => update(setMeta(doc, { title: e.target.value }))}
         />
         <button type="button" className="primary" onClick={() => save()}>
-          💾 保存
+          💾 保存{dirty ? ' *' : ''}
         </button>
         <button type="button" onClick={tryRun}>
           ▶ 试运行
@@ -239,6 +282,14 @@ function EditorCanvas({
 
   const palette = allContracts()
 
+  // 真组件预览：专用 store（组件初始态驱动），组件列表变化即重建。
+  // 预览层禁交互（pointer-events:none），事件类组件不会误发事件；visible=false 的组件以幽灵框呈现。
+  const previewStore = useMemo(() => {
+    const s = new ComponentStore()
+    s.init(doc.content.components.map((c) => ({ ...c, visible: true })))
+    return s
+  }, [doc.content.components])
+
   return (
     <div className="editor-canvas-layout">
       <div className="palette">
@@ -277,8 +328,10 @@ function EditorCanvas({
             onPointerCancel={onBoxPointerUp}
             title={`${comp.type} · ${comp.name ?? comp.id}`}
           >
+            <div className="editor-box-preview">
+              <ComponentView spec={{ ...comp, visible: true }} store={previewStore} emit={() => {}} />
+            </div>
             <span className="box-label">{comp.name ?? comp.id}</span>
-            <span className="box-type">{comp.type}</span>
           </div>
         ))}
         {doc.content.components.length === 0 && (
@@ -379,11 +432,61 @@ function Inspector({
         {num('高', 'h')}
       </div>
       {contract.propsDoc && <p className="muted props-doc">{contract.propsDoc}</p>}
-      <label>
-        props JSON
-        <textarea rows={4} value={propsText} onChange={(e) => applyProps(e.target.value)} />
-        {propsErr && <span className="tone-error">{propsErr}</span>}
-      </label>
+      {contract.propsFields && contract.propsFields.length > 0 && (
+        <div className="inspector-props">
+          <b>属性设置</b>
+          {contract.propsFields.map((field) => {
+            const raw = (comp.props ?? {}) as Record<string, Json>
+            const value = raw[field.key] ?? field.fallback
+            if (field.type === 'boolean') {
+              return (
+                <label key={field.key} className="inspector-prop">
+                  <input
+                    type="checkbox"
+                    checked={value !== false}
+                    onChange={(e) =>
+                      onChange({ props: { ...raw, [field.key]: e.target.checked } })
+                    }
+                  />{' '}
+                  {field.label}
+                </label>
+              )
+            }
+            if (field.type === 'number') {
+              return (
+                <label key={field.key} className="inspector-prop">
+                  {field.label}
+                  <input
+                    type="number"
+                    value={typeof value === 'number' ? value : ''}
+                    onChange={(e) => {
+                      const v = Number(e.target.value)
+                      if (Number.isFinite(v)) onChange({ props: { ...raw, [field.key]: v } })
+                    }}
+                  />
+                </label>
+              )
+            }
+            return (
+              <label key={field.key} className="inspector-prop">
+                {field.label}
+                <input
+                  value={typeof value === 'string' ? value : ''}
+                  onChange={(e) => onChange({ props: { ...raw, [field.key]: e.target.value } })}
+                />
+              </label>
+            )
+          })}
+        </div>
+      )}
+      <details>
+        <summary className="muted">props JSON（高级）</summary>
+        <label>
+          props JSON
+          <textarea rows={4} value={propsText} onChange={(e) => applyProps(e.target.value)} />
+          {propsErr && <span className="tone-error">{propsErr}</span>}
+        </label>
+      </details>
       {comp.bindings && (
         <label>
           bindings JSON

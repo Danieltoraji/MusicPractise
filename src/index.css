@@ -1570,3 +1570,42 @@ path.gedge-false {
   overflow: auto;
   tab-size: 2;
 }
+
+/* ---------- 画布预览与 Inspector 结构化 props（3-4） ---------- */
+
+.editor-box-preview {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* 预览禁交互：编辑交互全部由布局框接管 */
+  overflow: hidden;
+  border-radius: 6px;
+}
+.editor-box .comp-label,
+.editor-box .comp-button,
+.editor-box .comp-choice,
+.editor-box .comp-slider,
+.editor-box .comp-input {
+  font-size: 11px;
+}
+.inspector-props {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 12.5px;
+}
+.inspector-props > b {
+  font-size: 12px;
+  color: var(--muted);
+}
+.inspector-prop {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--ink);
+}
+.inspector-prop input[type='checkbox'] {
+  width: auto;
+}

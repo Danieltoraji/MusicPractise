@@ -26,8 +26,19 @@ export interface ContractDoc {
   bindings?: Record<string, string>
   /** 可读状态（编辑器展示用；表达式 v1 经事件即可覆盖） */
   state?: Record<string, string>
-  /** props 说明（自由文本；propsSchema 正式化在编辑器阶段） */
+  /** props 说明（自由文本） */
   propsDoc?: string
+  /** 结构化 props 字段（存在时编辑器 Inspector 渲染表单；未列出的 props 仍可经 JSON 视图设置） */
+  propsFields?: PropFieldDef[]
+}
+
+/** 结构化 props 字段定义（Inspector 表单驱动；JSON 视图仍可直改任意 props） */
+export interface PropFieldDef {
+  key: string
+  label: string
+  type: 'string' | 'number' | 'boolean'
+  /** 缺省值（未设置时组件运行时的 fallback） */
+  fallback?: Json
 }
 
 export interface ComponentDef<S = unknown> {
@@ -106,6 +117,7 @@ export const LABEL_DEF: ComponentDef<LabelState> = {
     category: 'ui',
     events: {},
     commands: { show: '{ text: string, tone?: "info"|"success"|"error" }' },
+    propsFields: [{ key: 'text', label: '文本', type: 'string', fallback: '' }],
     state: { text: 'string', tone: '"info"|"success"|"error"' },
   },
   initialState: (spec) => ({ text: str(spec.props && (spec.props as Record<string, Json>).text, ''), tone: 'info' }),
@@ -128,6 +140,10 @@ export const BUTTON_DEF: ComponentDef<ButtonState> = {
     category: 'ui',
     events: { clicked: '无负载' },
     commands: { setEnabled: '{ enabled: boolean }', setText: '{ text: string }' },
+    propsFields: [
+      { key: 'text', label: '按钮文字', type: 'string', fallback: '按钮' },
+      { key: 'enabled', label: '初始可用', type: 'boolean', fallback: true },
+    ],
     state: { text: 'string', enabled: 'boolean' },
   },
   initialState: (spec) => {
@@ -177,6 +193,7 @@ export const STAFF_DEF: ComponentDef<StaffState> = {
     category: 'music',
     events: { noteClicked: '{ midi: number, name: string }' },
     commands: { highlight: '{ target: number(midi), style: "correct"|"wrong" }', clear: '无参数' },
+    propsFields: [{ key: 'clickable', label: '音符可点击', type: 'boolean', fallback: true }],
     bindings: { music: 'MusicDoc' },
     state: { music: 'MusicDoc', highlights: 'Record<midi, "correct"|"wrong">' },
   },
@@ -268,6 +285,12 @@ export const SLIDER_DEF: ComponentDef<SliderState> = {
     events: { changed: '{ value: number }' },
     commands: { setValue: '{ value: number }' },
     queries: { getValue: 'number（当前值）' },
+    propsFields: [
+      { key: 'min', label: '最小值', type: 'number', fallback: 0 },
+      { key: 'max', label: '最大值', type: 'number', fallback: 100 },
+      { key: 'step', label: '步长', type: 'number', fallback: 1 },
+      { key: 'initial', label: '初始值（缺省取最小值）', type: 'number' },
+    ],
     state: { value: 'number' },
   },
   initialState: (spec) => {
@@ -300,6 +323,7 @@ export const INPUT_DEF: ComponentDef<InputState> = {
     events: { submitted: '{ value: string }' },
     commands: { setValue: '{ value: string }', clear: '无参数' },
     queries: { getValue: 'string（当前输入值）' },
+    propsFields: [{ key: 'placeholder', label: '占位文本', type: 'string', fallback: '' }],
     state: { value: 'string' },
   },
   initialState: () => ({ value: '' }),
@@ -322,7 +346,11 @@ export const FINGERING_DEF: ComponentDef<FingeringState> = {
     category: 'music',
     events: { keyClicked: '{ midi: number, name: string }' },
     commands: { highlight: '{ target: number(midi), style: "correct"|"wrong" }', clear: '无参数' },
-    propsDoc: 'props: { lowMidi: number, highMidi: number }（键盘音域，缺省 48..72）',
+    propsFields: [
+      { key: 'lowMidi', label: '最低音（midi）', type: 'number', fallback: 48 },
+      { key: 'highMidi', label: '最高音（midi）', type: 'number', fallback: 72 },
+    ],
+    propsDoc: '键盘音域由 props.lowMidi / props.highMidi 控制（Inspector 表单可改）',
     state: { highlights: 'Record<midi, "correct"|"wrong">' },
   },
   initialState: () => ({ highlights: {}, clearToken: 0 }),
@@ -353,7 +381,8 @@ export const RHYTHM_DEF: ComponentDef<RhythmState> = {
     },
     commands: { start: '{ bpm: number, beats?: number, countInBeats?: number }', stop: '无参数' },
     state: { running: 'boolean', beats: 'number', bpm: 'number', countIn: 'number', runId: 'number' },
-    propsDoc: 'props: { countInBeats?: number }（预备拍数量缺省值，start 参数可覆盖）',
+    propsFields: [{ key: 'countInBeats', label: '预备拍数量', type: 'number', fallback: 4 }],
+    propsDoc: '预备拍数量可被 start 命令的 countInBeats 参数覆盖',
   },
   initialState: (spec) => {
     const p = (spec.props ?? {}) as Record<string, Json>
