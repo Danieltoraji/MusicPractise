@@ -3,7 +3,7 @@
  * 本地草稿 + 失焦提交（与画布 Inspector/LinesField 模式一致，避免每键全图重算）；
  * 表达式输入带实时校验（checkExprText）；call/assign 的候选来自组件契约。
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { LevelDoc } from '../../engine/level'
 import { LEVEL_METHODS, type GNode, type LintIssue } from '../../engine/graphProgram'
 import { getDef } from '../../runtime/store'
@@ -42,14 +42,10 @@ function ExprInput(props: {
 }
 
 export function NodeInspector({ node, doc, issues, onPatch, onRemove }: Props) {
-  // 草稿按节点 id 键控重置；字符串字段可自由编辑，失焦或 select 变化时提交
-  const [draft, setDraft] = useState<Record<string, unknown>>({})
-  const nodeId = node?.id
-  useEffect(() => {
-    setDraft(node ? { ...node } : {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeId])
-
+  // 草稿 = node + 未提交覆盖层（按节点 id 键控），渲染期派生——
+  // 不用 useEffect 同步草稿，避免「切节点后的首渲染帧拿到上一个节点的草稿」
+  // 导致 assign 的 `'expr' in draft.value` 等字段读取崩溃（白屏级）。
+  const [overrides, setOverrides] = useState<Record<string, Record<string, unknown>>>({})
   if (!node) {
     return (
       <div className="ginsp">
@@ -59,15 +55,22 @@ export function NodeInspector({ node, doc, issues, onPatch, onRemove }: Props) {
     )
   }
 
+  const draft: Record<string, unknown> = { ...node, ...(overrides[node.id] ?? {}) }
   const set = (patch: Record<string, unknown>): void => {
-    setDraft((d) => ({ ...d, ...patch }))
+    setOverrides((o) => ({ ...o, [node.id]: { ...(o[node.id] ?? {}), ...patch } }))
   }
   const commit = (patch: Record<string, unknown>): void => {
     onPatch(patch as Partial<GNode>)
+    // 已提交的覆盖即与节点同步，清掉避免陈旧覆盖压过后续外部变更
+    setOverrides((o) => {
+      const rest = { ...(o[node.id] ?? {}) }
+      for (const key of Object.keys(patch)) delete rest[key]
+      return { ...o, [node.id]: rest }
+    })
   }
-  // 输入失焦：以草稿值提交（未改动时 updateNode 幂等）
+  // 输入失焦：以草稿值提交（与节点当前值相同则跳过）
   const blurCommit = (key: string): void => {
-    if (key in draft) commit({ [key]: draft[key] })
+    if (key in draft && draft[key] !== (node as unknown as Record<string, unknown>)[key]) commit({ [key]: draft[key] })
   }
 
   const comps = doc.content.components

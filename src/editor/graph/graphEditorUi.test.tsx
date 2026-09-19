@@ -86,6 +86,35 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     expect(added).toMatchObject({ target: 'level', method: 'next', args: [] })
   })
 
+  it('崩溃回归：先选中 call 节点再切 assign 节点，首帧不因旧草稿崩溃且表达式可见', () => {
+    // 回归背景：草稿曾用 useEffect 异步重置，切节点后的首渲染帧拿上一个节点的草稿，
+    // assign 的 `'expr' in draft.value` 读到 undefined 直接白屏
+    let doc = baseDoc()
+    doc = {
+      ...doc,
+      content: {
+        ...doc.content,
+        logic: {
+          ...doc.content.logic,
+          nodes: [
+            ...doc.content.logic.nodes,
+            { id: 'snd1', kind: 'call', target: 'sound1', method: 'play', args: [], x: 600, y: 0 },
+            { id: 'as2', kind: 'assign', target: 'score', value: { expr: '0' }, x: 900, y: 0 },
+          ],
+        },
+      },
+    }
+    const container = renderEl(<GraphEditor doc={doc} onChange={() => {}} />)
+    // 先点 call 节点（其草稿无 value 字段）
+    const callCard = [...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('sound1.play'))
+    act(() => callCard!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    // 立即切 assign 节点（渲染帧 1 就要安全）
+    const assignCard = [...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('v.score = 0'))
+    act(() => assignCard!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(container.textContent).toContain('属性 · assign')
+    expect(container.textContent).toContain('v.score = 0')
+  })
+
   it('Inspector 编辑 branch 条件并回写', () => {
     let doc = baseDoc()
     const onChange = vi.fn((next: LevelDoc) => {
