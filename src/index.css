@@ -862,41 +862,6 @@ a.level-row:hover {
   margin: 0 auto;
 }
 
-.vars-editor {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.vars-editor > b {
-  font-size: 13px;
-  color: var(--muted);
-}
-.var-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.var-row input {
-  padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 13px;
-  color: var(--ink);
-}
-.var-row input:first-child {
-  font-weight: 600;
-}
-.expr-err {
-  display: block;
-  color: var(--bad);
-  font-size: 12px;
-}
-
 /* ---------- 节奏 ---------- */
 
 .rhythm-controls {
@@ -1041,62 +1006,301 @@ a.level-row:hover {
   color: var(--ink);
 }
 
-/* ---------- 逻辑图谱 ---------- */
+/* ---------- 节点图编辑器 ---------- */
 
-.logic-graph {
+.graph-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.graph-toolbar-hint {
+  font-size: 12px;
+}
+.graph-lint-count {
+  margin-left: auto;
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 13px;
+}
+.graph-layout {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  min-height: 620px;
+}
+
+/* 左栏节点库 */
+.glib {
+  width: 200px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px;
+  overflow-y: auto;
+  max-height: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.glib-title,
+.ginsp .glib-title {
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.glib-group-head {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 4px;
+  border-bottom: 1px dashed var(--line);
+  padding-bottom: 2px;
+}
+.glib-empty {
+  font-size: 12px;
+}
+.glib-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.glib-item:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 画布 */
+.graph-canvas {
+  flex: 1;
+  min-width: 0;
+  height: 720px;
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
+  position: relative;
+  background: var(--panel);
 }
-.lg-node.lg-event {
-  background: #fff7ed;
-  border: 1.5px solid var(--warn);
-  color: #9a3412;
-  font-weight: 600;
+
+/* 节点信息卡 */
+.gnode {
+  position: relative;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 9px;
+  min-width: 200px;
+  max-width: 280px;
+  padding: 6px 12px 7px 16px;
   font-size: 12px;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.08);
+}
+.gnode.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgb(79 70 229 / 0.25);
+}
+.gnode.has-error {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 2px rgb(220 38 38 / 0.18);
+}
+.gnode-band {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  border-radius: 9px 0 0 9px;
+}
+.gnode-head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 4px;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
 }
-.lg-node.lg-rule {
-  background: #eef2ff;
-  border: 1.5px solid var(--accent);
-  color: #3730a3;
-  font-weight: 600;
-  font-size: 12px;
+.gnode-kind {
+  text-transform: none;
+}
+.gnode-badge {
+  color: var(--bad);
+  font-weight: 700;
+}
+.gnode-body {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 4px;
+  gap: 1px;
+  margin-top: 2px;
 }
-.lg-node.lg-action {
-  background: #eff6ff;
-  border: 1px solid #3b82f6;
-  color: #1e3a8a;
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  text-align: left;
-  padding: 4px 6px;
+.gnode-line {
+  font-family: Consolas, monospace;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.lg-node.lg-var {
-  background: #f0fdf4;
-  border: 1.5px solid var(--ok);
-  color: #14532d;
-  font-weight: 600;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
+
+/* 端口与真/假标签 */
+.react-flow__handle {
+  width: 10px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px solid #475569;
+  background: #f8fafc;
 }
-.lg-label-main {
-  font-weight: 600;
+.gport-true {
+  background: var(--ok) !important;
+  border-color: #15803d !important;
 }
-.lg-label-sub {
+.gport-false {
+  background: var(--bad) !important;
+  border-color: #b91c1c !important;
+}
+.gport-label {
+  position: absolute;
+  right: 14px;
   font-size: 10px;
-  opacity: 0.75;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* 执行边 */
+.gedge {
+  stroke: #64748b;
+  stroke-width: 1.6;
+}
+.gedge-true {
+  stroke: var(--ok);
+  stroke-width: 2;
+}
+.gedge-false {
+  stroke: var(--bad);
+  stroke-width: 2;
+}
+
+/* 右键菜单 */
+.gmenu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.gmenu {
+  position: absolute;
+  z-index: 41;
+  width: 250px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.16);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gmenu-filter {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+/* 右栏 Inspector */
+.ginsp {
+  width: 300px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px;
+  overflow-y: auto;
+  max-height: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.ginsp-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.ginsp-row input,
+.ginsp-row select,
+.ginsp-row textarea {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+.ginsp-expr {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ginsp-argline {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.ginsp-argline input {
+  flex: 1;
+  min-width: 0;
+}
+.ginsp-argdel {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  color: var(--bad);
+}
+.ginsp-modes {
+  display: flex;
+  gap: 6px;
+}
+.ginsp-modes button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ginsp-modes button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.ginsp-issues {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+.ginsp-meta {
+  font-size: 11.5px;
 }

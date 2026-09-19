@@ -1,9 +1,9 @@
 /**
- * 关卡编辑器：组件面板 / 画布拖放 / 属性检查器 / 题目编辑 / JSON 视图 / 保存与试运行。
+ * 关卡编辑器：组件面板 / 画布拖放 / 属性检查器 / 节点图（逻辑）/ 题目编辑 / JSON 视图 / 保存与试运行。
  * 组件类型与事件/命令枚举全部来自组件注册表契约（单一来源）。
- * 逻辑编辑面在 3-1 期间临时收敛为 JSON 页；节点图与代码页随 3-2/3-3 回归。
+ * 节点图编辑器为懒加载（@xyflow/react 不进主包）；代码页随 3-3 回归。
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../library/db'
 import type { LibraryRecord } from '../library/db'
@@ -23,7 +23,10 @@ import {
   updateQuestion,
 } from './docState'
 
-type Tab = 'canvas' | 'questions' | 'json'
+type Tab = 'canvas' | 'graph' | 'questions' | 'json'
+
+/** 节点图编辑器懒加载：@xyflow/react 体量较大，不进主包 */
+const GraphEditor = lazy(() => import('./graph/GraphEditor'))
 
 /** 表达式实时校验：语法错误返回消息，合法返回 null */
 export function checkExprText(text: string): string | null {
@@ -128,6 +131,7 @@ export function EditorPage({ id }: Props) {
       <div className="editor-tabs">
         {([
           ['canvas', '画布'],
+          ['graph', '节点图'],
           ['questions', '题目'],
           ['json', 'JSON'],
         ] as [Tab, string][]).map(([t, label]) => (
@@ -154,6 +158,12 @@ export function EditorPage({ id }: Props) {
             setSelected(null)
           }}
         />
+      )}
+
+      {tab === 'graph' && (
+        <Suspense fallback={<p className="muted">节点图加载中…</p>}>
+          <GraphEditor doc={doc} onChange={update} />
+        </Suspense>
       )}
 
       {tab === 'questions' && (
