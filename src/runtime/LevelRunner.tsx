@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { LevelDoc, TableRow } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { LevelSession } from './levelSession'
-import { getCtx, playNotes } from './audio'
+import { getCtx, playNotes, playSynth, stopSynth } from './audio'
 import { appendRunLog, clearRunLog } from './runLog'
 import { ComponentView } from '../components/views'
 
@@ -76,6 +76,17 @@ function RunnerCore({
         runEffects: (effects) => {
           for (const eff of effects) {
             if (eff.type === 'audio.play') playNotes(eff.notes, eff.tempo, eff.mode)
+            else if (eff.type === 'audio.synth')
+              playSynth(eff.notes, {
+                wave: eff.wave,
+                tempo: eff.tempo,
+                mode: eff.mode,
+                attack: eff.attack,
+                release: eff.release,
+                gain: eff.gain,
+                cutoff: eff.cutoff,
+              })
+            else if (eff.type === 'audio.synthStop') stopSynth()
           }
         },
         getNowSeconds: () => getCtx().currentTime,

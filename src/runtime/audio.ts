@@ -98,3 +98,151 @@ export function playClick(time: number, accent = false): () => void {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// 合成器声部（synth 组件用）：纯振荡器 + 包络，无采样加载、即点即响
+// ---------------------------------------------------------------------------
+
+export type SynthWave = 'sine' | 'triangle' | 'square' | 'sawtooth' | 'fm' | 'bell'
+
+export interface SynthParams {
+  wave: string
+  tempo?: number
+  mode?: 'chord' | 'seq'
+  /** 攻击/释放（秒）；音量 0-1；低通截止 Hz（0/缺省 = 不滤波） */
+  attack?: number
+  release?: number
+  gain?: number
+  cutoff?: number
+}
+
+/** 各音色的声部缺省：包络手感 + FM 调制参数（componentDef 的契约文档与此对应） */
+const SYNTH_VOICE_DEFAULTS: Record<
+  SynthWave,
+  { attack: number; release: number; gainMul: number; decay?: boolean; fmRatio?: number; fmIndex?: number }
+> = {
+  sine: { attack: 0.02, release: 0.2, gainMul: 1 },
+  triangle: { attack: 0.008, release: 0.18, gainMul: 0.9 },
+  square: { attack: 0.004, release: 0.1, gainMul: 0.5 },
+  sawtooth: { attack: 0.004, release: 0.12, gainMul: 0.55 },
+  fm: { attack: 0.004, release: 0.35, gainMul: 0.8, fmRatio: 2, fmIndex: 3 },
+  bell: { attack: 0.002, release: 0.9, gainMul: 0.65, decay: true, fmRatio: 3.5, fmIndex: 5 },
+}
+
+/** 已排程的合成器声部（stopSynth 静停 + 过期修剪） */
+const synthVoices: { oscs: OscillatorNode[]; gain: GainNode; until: number }[] = []
+
+function midiToFreq(midi: number): number {
+  return 440 * Math.pow(2, (midi - 69) / 12)
+}
+
+function pruneSynthVoices(c: AudioContext): void {
+  const now = c.currentTime
+  for (let i = synthVoices.length - 1; i >= 0; i--) {
+    if (synthVoices[i].until < now) synthVoices.splice(i, 1)
+  }
+}
+
+/** 生成单个声部：载波（FM 音色附加调制器）→ 可选低通 → 包络增益 → 输出 */
+function synthVoice(c: AudioContext, midi: number, vel: number, t: number, dur: number, p: Required<Omit<SynthParams, 'tempo' | 'mode' | 'cutoff'>> & { cutoff: number; fmRatio?: number; fmIndex?: number; decay?: boolean }): void {
+  const freq = midiToFreq(midi)
+  // velocity（1-127）映射到 0.5-1 的增益系数
+  const peak = Math.max(0.001, p.gain * (0.5 + 0.5 * (Math.min(127, Math.max(1, vel)) / 127)))
+  const holdEnd = Math.max(t + p.attack + 0.03, t + dur)
+  const end = holdEnd + p.release
+
+  const env = c.createGain()
+  env.gain.setValueAtTime(0.0001, t)
+  env.gain.linearRampToValueAtTime(peak, t + Math.max(0.001, p.attack))
+  // 可持续音色保持电平；钟/拨弦类自然衰减
+  if (p.decay) env.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * 0.15), holdEnd)
+  else env.gain.setValueAtTime(peak, Math.min(t + p.attack + 0.001, holdEnd))
+  env.gain.exponentialRampToValueAtTime(0.0001, end)
+
+  let inNode: AudioNode = env
+  if (p.cutoff > 0) {
+    const filter = c.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.value = Math.min(12000, Math.max(40, p.cutoff))
+    filter.connect(env)
+    inNode = filter
+  }
+  env.connect(c.destination)
+
+  const oscs: OscillatorNode[] = []
+  const carrier = c.createOscillator()
+  carrier.type = p.wave === 'fm' || p.wave === 'bell' ? 'sine' : (['sine', 'triangle', 'square', 'sawtooth'].includes(p.wave) ? (p.wave as OscillatorType) : 'sawtooth')
+  carrier.frequency.value = freq
+  if (p.fmRatio && p.fmIndex) {
+    const mod = c.createOscillator()
+    mod.type = 'sine'
+    mod.frequency.value = freq * p.fmRatio
+    const modGain = c.createGain()
+    // 调制指数随时间衰减：起音明亮、随音头变纯（电钢/钟的"叮"感来源）
+    modGain.gain.setValueAtTime(freq * p.fmIndex, t)
+    modGain.gain.exponentialRampToValueAtTime(freq * 0.2, holdEnd)
+    mod.connect(modGain).connect(carrier.frequency)
+    mod.start(t)
+    mod.stop(end + 0.05)
+    oscs.push(mod)
+  }
+  carrier.connect(inNode)
+  carrier.start(t)
+  carrier.stop(end + 0.05)
+  oscs.push(carrier)
+
+  synthVoices.push({ oscs, gain: env, until: end + 0.1 })
+}
+
+/**
+ * 合成器播放：与 playNotes 相同的 chord/seq 排程语义，声部为振荡器包络。
+ * wave 不认识时回退 sawtooth；音色缺省参数见 SYNTH_VOICE_DEFAULTS。
+ */
+export function playSynth(notes: Note[], params: SynthParams): void {
+  if (!Array.isArray(notes) || notes.length === 0) return
+  const c = getCtx()
+  const base = (SYNTH_VOICE_DEFAULTS as Record<string, (typeof SYNTH_VOICE_DEFAULTS)[SynthWave]>)[params.wave] ?? SYNTH_VOICE_DEFAULTS.sawtooth
+  const attack = Math.min(2, Math.max(0, params.attack ?? base.attack))
+  const release = Math.min(2.5, Math.max(0.01, params.release ?? base.release))
+  const gain = Math.min(1, Math.max(0, params.gain ?? 0.35)) * base.gainMul
+  const tempo = Math.min(300, Math.max(20, params.tempo ?? 90))
+  const cutoff = Math.min(12000, Math.max(0, params.cutoff ?? 0))
+  pruneSynthVoices(c)
+  const t0 = c.currentTime + 0.05
+  let t = t0
+  notes.forEach((n, i) => {
+    if (typeof n?.midi !== 'number') return
+    const vel = typeof n.vel === 'number' ? Math.min(127, Math.max(1, Math.round(n.vel))) : 100
+    if (params.mode === 'seq') {
+      const dur = Math.min(3, durToSeconds(n.dur ?? '4n', tempo))
+      synthVoice(c, n.midi, vel, t, dur, { ...base, wave: params.wave, attack, release, gain, cutoff })
+      t += dur
+    } else {
+      const dur = Math.min(3, durToSeconds(n.dur ?? '4n', tempo) + 0.3)
+      synthVoice(c, n.midi, vel, t0 + i * 0.02, dur, { ...base, wave: params.wave, attack, release, gain, cutoff })
+    }
+  })
+}
+
+/** 静停全部已排程/进行中的合成器声部（synth.stop 命令；换视图不自动调用——合成器与计时器同为逻辑侧资源） */
+export function stopSynth(): void {
+  if (!ctx) return
+  const now = ctx.currentTime
+  for (const v of synthVoices) {
+    try {
+      v.gain.gain.cancelScheduledValues(now)
+      v.gain.gain.setValueAtTime(Math.max(0.0001, v.gain.gain.value || 0.0001), now)
+      v.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05)
+      v.oscs.forEach((o) => {
+        try {
+          o.stop(now + 0.08)
+        } catch {
+          /* 已停止的节点忽略 */
+        }
+      })
+    } catch {
+      /* 已断开的节点忽略 */
+    }
+  }
+  synthVoices.length = 0
+}

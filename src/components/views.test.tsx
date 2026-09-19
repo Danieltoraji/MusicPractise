@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentInstance } from '../engine/level'
 import { ComponentStore } from '../runtime/store'
-import { ButtonView, ChoiceView, FingeringView, StaffView } from './views'
+import { ButtonView, ChoiceView, FingeringView, StaffView, SynthView } from './views'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -140,5 +140,20 @@ describe('组件视图（jsdom 冒烟）', () => {
       btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     expect(emit).toHaveBeenCalledWith('clicked')
+  })
+})
+
+describe('SynthView（合成器面板）', () => {
+  it('渲染音色名与音量；play 命令后出现播放态动画', () => {
+    const store = new ComponentStore()
+    const spec = { id: 'synth1', type: 'synth', layout: { x: 0, y: 0, w: 200, h: 90 }, props: { wave: 'bell' } } as ComponentInstance
+    store.init([spec])
+    const c = renderEl(<SynthView spec={spec} store={store} emit={() => {}} />)
+    expect(c.textContent).toContain('钟琴 · 空灵')
+    expect(c.textContent).toContain('音量 35%')
+    expect(c.querySelector('.comp-synth.is-playing')).toBeNull()
+    act(() => store.applyCommand('synth1', 'play', { notes: [{ midi: 60 }] }))
+    expect(c.querySelector('.comp-synth.is-playing')).toBeTruthy()
+    expect(c.textContent).toContain('1 音')
   })
 })

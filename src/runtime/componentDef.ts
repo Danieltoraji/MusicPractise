@@ -8,6 +8,19 @@ import type { Json } from '../engine/expr'
 
 export type Effect =
   | { type: 'audio.play'; notes: Note[]; tempo?: number; mode?: 'chord' | 'seq' }
+  | {
+      type: 'audio.synth'
+      notes: Note[]
+      wave: string
+      tempo?: number
+      mode?: 'chord' | 'seq'
+      /** 攻击/释放时间（秒）；音量 0-1；低通截止 Hz（0 = 不滤波） */
+      attack?: number
+      release?: number
+      gain?: number
+      cutoff?: number
+    }
+  | { type: 'audio.synthStop' }
   | { type: 'timer.start'; ms: number; repeat: boolean }
   | { type: 'timer.stop' }
   | { type: 'none' }
@@ -107,8 +120,33 @@ export interface TunerState {
   running: boolean
 }
 
+/** 合成器状态：当前音色/音量 + 播放痕迹（playSeq 驱动视图动画） */
+export interface SynthState {
+  wave: string
+  gain: number
+  lastPlay: Json | null
+  playSeq: number
+}
+
 const str = (v: Json | undefined, dflt: string): string => (typeof v === 'string' ? v : dflt)
 const bool = (v: Json | undefined, dflt: boolean): boolean => (typeof v === 'boolean' ? v : dflt)
+
+/** 合成器可选音色（波形/预置）；与 audio.ts 的 playSynth 实现一一对应 */
+export const SYNTH_WAVES = ['sine', 'triangle', 'square', 'sawtooth', 'fm', 'bell'] as const
+export type SynthWave = (typeof SYNTH_WAVES)[number]
+
+export const SYNTH_WAVE_ZH: Record<string, string> = {
+  sine: '正弦 · 柔和',
+  triangle: '三角 · 木琴',
+  square: '方波 · 芯片',
+  sawtooth: '锯齿 · 明亮',
+  fm: 'FM · 电钢',
+  bell: '钟琴 · 空灵',
+}
+
+export function isSynthWave(v: unknown): v is SynthWave {
+  return typeof v === 'string' && (SYNTH_WAVES as readonly string[]).includes(v)
+}
 
 export const LABEL_DEF: ComponentDef<LabelState> = {
   contract: {
@@ -416,6 +454,61 @@ export const TUNER_DEF: ComponentDef<TunerState> = {
   applyCommand: (s, cmd) => {
     if (cmd === 'start') return { state: { ...s, running: true } }
     if (cmd === 'stop') return { state: { ...s, running: false } }
+    return { state: s }
+  },
+}
+
+export const SYNTH_DEF: ComponentDef<SynthState> = {
+  contract: {
+    type: 'synth',
+    displayName: '合成器',
+    category: 'music',
+    events: {},
+    commands: {
+      play: '{ notes: Note[], wave?: string, tempo?: number, mode?: "chord"|"seq", attack?: number, release?: number, gain?: number, cutoff?: number }',
+      setWave: '{ wave: string }',
+      stop: '无参数（静停已排程的合成器音符）',
+    },
+    state: { wave: 'string', gain: 'number(0-1)', lastPlay: 'Json', playSeq: 'number' },
+    propsFields: [
+      { key: 'wave', label: '音色（sine/triangle/square/sawtooth/fm/bell）', type: 'string', fallback: 'sawtooth' },
+      { key: 'gain', label: '音量（0-1）', type: 'number', fallback: 0.35 },
+    ],
+    propsDoc: '合成器为纯振荡器发声（无采样加载、即点即响）；play 未传 wave/gain 时用当前状态（props 或 setWave 设置的值）',
+  },
+  initialState: (spec) => {
+    const p = (spec.props ?? {}) as Record<string, Json>
+    return {
+      wave: isSynthWave(p.wave) ? p.wave : 'sawtooth',
+      gain: typeof p.gain === 'number' ? Math.min(1, Math.max(0, p.gain)) : 0.35,
+      lastPlay: null,
+      playSeq: 0,
+    }
+  },
+  applyBinding: (s) => s,
+  applyCommand: (s, cmd, args) => {
+    if (cmd === 'play') {
+      const notes = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
+      const wave = isSynthWave(args.wave) ? args.wave : s.wave
+      const gain = typeof args.gain === 'number' ? Math.min(1, Math.max(0, args.gain)) : s.gain
+      // tempo 钳到常规音乐区间（与 sound.play 同语义）；attack/release 秒，钳 0-2
+      const tempo = typeof args.tempo === 'number' ? Math.min(300, Math.max(20, args.tempo)) : undefined
+      const attack = typeof args.attack === 'number' ? Math.min(2, Math.max(0, args.attack)) : undefined
+      const release = typeof args.release === 'number' ? Math.min(2, Math.max(0, args.release)) : undefined
+      const cutoff = typeof args.cutoff === 'number' ? Math.min(12000, Math.max(0, args.cutoff)) : undefined
+      const mode = args.mode === 'seq' ? 'seq' : 'chord'
+      return {
+        state: { ...s, wave, gain, lastPlay: Array.isArray(args.notes) ? (args.notes as unknown as Json) : null, playSeq: s.playSeq + 1 },
+        effects: [{ type: 'audio.synth', notes, wave, tempo, mode, attack, release, gain, cutoff }],
+      }
+    }
+    if (cmd === 'setWave') {
+      const wave = isSynthWave(args.wave) ? args.wave : s.wave
+      return { state: { ...s, wave } }
+    }
+    if (cmd === 'stop') {
+      return { state: { ...s, lastPlay: null }, effects: [{ type: 'audio.synthStop' }] }
+    }
     return { state: s }
   },
 }

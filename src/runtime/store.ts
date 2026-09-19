@@ -15,6 +15,7 @@ import {
   SLIDER_DEF,
   SOUND_DEF,
   STAFF_DEF,
+  SYNTH_DEF,
   TIMER_DEF,
   TUNER_DEF,
   type ComponentDef,
@@ -33,6 +34,7 @@ const DEFS: Record<string, ComponentDef<never>> = {
   fingering: FINGERING_DEF as ComponentDef<never>,
   rhythm: RHYTHM_DEF as ComponentDef<never>,
   tuner: TUNER_DEF as ComponentDef<never>,
+  synth: SYNTH_DEF as ComponentDef<never>,
 }
 
 /** 未知组件类型的占位 def：状态/命令全部 no-op，视图层渲染"组件缺失"占位框 */

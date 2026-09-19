@@ -7,7 +7,8 @@ import { Accidental, Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'v
 import { Note } from 'tonal'
 import type { ComponentInstance } from '../engine/level'
 import type { Json } from '../engine/expr'
-import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, RhythmState, SliderState, StaffState, TunerState } from '../runtime/componentDef'
+import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, RhythmState, SliderState, StaffState, SynthState, TunerState } from '../runtime/componentDef'
+import { SYNTH_WAVE_ZH } from '../runtime/componentDef'
 import type { ComponentStore } from '../runtime/store'
 import type { MusicDoc } from '../engine/level'
 
@@ -186,6 +187,41 @@ export function ChoiceView({ spec, store, emit }: ViewProps) {
 }
 
 // ---------------------------------------------------------------------------
+// 合成器：音色面板 + 播放电平动画（playSeq 变化触发一轮衰减动画）
+// ---------------------------------------------------------------------------
+
+export function SynthView({ spec, store }: ViewProps) {
+  const { wave, gain, lastPlay, playSeq } = useComponentState<SynthState & { __enabled?: boolean }>(store, spec.id)
+  const [pulse, setPulse] = useState(false)
+  const seqRef = useRef(playSeq)
+
+  useEffect(() => {
+    if (playSeq === seqRef.current) return
+    seqRef.current = playSeq
+    if (playSeq === 0) return
+    setPulse(true)
+    const timer = window.setTimeout(() => setPulse(false), 900)
+    return () => window.clearTimeout(timer)
+  }, [playSeq])
+
+  const waveZh = SYNTH_WAVE_ZH[wave] ?? wave
+  const notes = Array.isArray(lastPlay) ? (lastPlay as unknown as { midi: number }[]).length : 0
+  const bars = [0.55, 0.85, 1, 0.7, 0.4]
+
+  return (
+    <div style={boxStyle(spec)} className={`comp-synth ${pulse ? 'is-playing' : ''}`}>
+      <div className="synth-wave">{waveZh}</div>
+      <div className="synth-bars" aria-hidden>
+        {bars.map((h, i) => (
+          <span key={i} className={`synth-bar bar-${i}`} style={{ height: `${h * 100}%` }} />
+        ))}
+      </div>
+      <div className="synth-meta muted">{pulse ? `▶ ${notes} 音` : `音量 ${Math.round(gain * 100)}%`}</div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 
 export function ComponentView(props: ViewProps): React.ReactNode {
   const { spec } = props
@@ -215,6 +251,8 @@ export function ComponentView(props: ViewProps): React.ReactNode {
       return <RhythmView {...props} />
     case 'tuner':
       return <TunerView {...props} />
+    case 'synth':
+      return <SynthView {...props} />
     default:
       // 未知组件类型：降级为占位框而不是崩溃（docs §7 承诺）
       return (
