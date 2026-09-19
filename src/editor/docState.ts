@@ -47,13 +47,14 @@ export function blankLevelDoc(): LevelDoc {
   }
 }
 
-/** 以库内文档为底稿创建编辑副本：新 id、版本归零、标题加后缀；旧格式文档先迁移出 v3（评审 P1-1） */
+/** 以库内文档为底稿创建编辑副本：新 id、版本归零、标题加后缀（已有后缀不重复）；旧格式文档先迁移出 v3 */
 export function copyForEditing(doc: LevelDoc): LevelDoc {
   const migrated = migrateDocToV3(doc)
   const copy = structuredClone(migrated) as LevelDoc
   copy.id = newResourceId()
   copy.version = '0.1.0'
-  copy.meta = { ...copy.meta, title: `${String(copy.meta.title ?? '')}（副本）` }
+  const title = String(copy.meta.title ?? '')
+  copy.meta = { ...copy.meta, title: title.includes('（副本）') ? title : `${title}（副本）` }
   return copy
 }
 

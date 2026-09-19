@@ -18,6 +18,7 @@ import type { ComponentInstance, LevelDoc } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { parseExpr, ExprError } from '../engine/expr'
 import { migrateDocToV3 } from '../engine/migrateDoc'
+import { copyForEditing } from './docState'
 import {
   addComponent,
   addTableColumn,
@@ -142,29 +143,34 @@ export function EditorPage({ id }: Props) {
     setDoc(next)
   }, [])
 
-  const save = useCallback(async (): Promise<boolean> => {
-    if (!doc) return false
-    const result = loadLevelDoc(doc)
+  /** 保存：普通关卡覆盖原记录；内置示例不可覆盖（会被种子重写）——自动另存为用户副本并切换过去 */
+  const save = useCallback(async (): Promise<{ ok: boolean; savedId: string | null }> => {
+    if (!doc) return { ok: false, savedId: null }
+    const existing = await db.resources.get(doc.id)
+    const isBuiltIn = existing?.builtIn === 1
+    const target = isBuiltIn ? copyForEditing(doc) : doc
+    const result = loadLevelDoc(target)
     if (!result.ok) {
       setSaveErrors(result.errors)
-      return false
-    }
-    // 内置示例不可被编辑器覆盖保存（会让 builtIn 记录被翻成用户文档）
-    const existing = await db.resources.get(doc.id)
-    if (existing?.builtIn === 1) {
-      setSaveErrors(['内置示例不可直接覆盖保存——请在资源库对该关卡使用「编辑副本」获得可保存的副本'])
-      return false
+      return { ok: false, savedId: null }
     }
     setSaveErrors([])
     setLintWarnings(result.lintWarnings)
     await putResource(result.doc as never)
     setDirty(false)
-    setSavedTip(`已保存（v${result.doc.version}）`)
-    return true
+    if (isBuiltIn) {
+      setSavedTip('内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
+      setDoc(result.doc)
+      window.location.hash = `#/edit/${result.doc.id}` // 切到副本继续编辑（App 按 hash 重挂载）
+    } else {
+      setSavedTip(`已保存（v${result.doc.version}）`)
+    }
+    return { ok: true, savedId: result.doc.id }
   }, [doc])
 
   async function tryRun(): Promise<void> {
-    if ((await save()) && doc) window.location.hash = `#/level/${doc.id}`
+    const r = await save()
+    if (r.ok && r.savedId) window.location.hash = `#/level/${r.savedId}`
   }
 
   if (record === 'loading' || record === undefined || !doc) {

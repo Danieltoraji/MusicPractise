@@ -1,19 +1,36 @@
+/**
+ * 资源库：系列 = 文件夹（可展开：系列 ▸ 专题 ▸ 关卡），未被引用的资源归入「未整理」区。
+ * 关卡可直接编辑（内置示例保存时自动另存为副本）；支持标题搜索、导入导出、新建。
+ */
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useRef, useState } from 'react'
-import type { LibraryRecord, ResourceKind } from '../library/db'
+import { Fragment, useRef, useState } from 'react'
+import type { LibraryRecord } from '../library/db'
 import { db, deleteResource, putResource } from '../library/db'
 import { downloadBlob, exportResource, importFromFiles, type ImportReport } from '../library/io'
-import { copyForEditing, blankLevelDoc } from '../editor/docState'
-import type { LevelDoc } from '../engine/level'
+import { buildLibraryTree, filterTree, type LibraryTreeRow } from '../library/browse'
+import { blankLevelDoc } from '../editor/docState'
 
-const KIND_LABEL: Record<ResourceKind, string> = { series: '📚 系列', topic: '📂 专题', level: '🎯 关卡', instrument: '🎹 乐器' }
+const KIND_ICON: Record<string, string> = { series: '📚', topic: '📂', level: '🎯', instrument: '🎹' }
 
 export function LibraryPage() {
   const resources = useLiveQuery(() => db.resources.orderBy('importedAt').toArray(), [], undefined)
   const [report, setReport] = useState<ImportReport | null>(null)
   const [error, setError] = useState('')
   const [importing, setImporting] = useState(false)
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const fileInput = useRef<HTMLInputElement>(null)
+
+  const searching = query.trim() !== ''
+
+  const toggle = (id: string): void => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function handleImport(files: FileList | null): Promise<void> {
     if (!files || files.length === 0) return
@@ -44,6 +61,7 @@ export function LibraryPage() {
   }
 
   async function handleDelete(rec: LibraryRecord): Promise<void> {
+    if (!window.confirm(`删除「${rec.title}」？此操作不可撤销。`)) return
     setError('')
     try {
       await deleteResource(rec.id)
@@ -52,23 +70,10 @@ export function LibraryPage() {
     }
   }
 
-  /** 编辑副本：复制库内关卡为新文档并进入编辑器 */
-  async function handleEditCopy(rec: LibraryRecord): Promise<void> {
-    setError('')
-    try {
-      const copy = copyForEditing(rec.doc as unknown as LevelDoc)
-      await putResource(copy as never)
-      window.location.hash = `#/edit/${copy.id}`
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  /** 新建空白关卡并进入编辑器 */
   async function handleNew(): Promise<void> {
     setError('')
-    const doc = blankLevelDoc()
     try {
+      const doc = blankLevelDoc()
       await putResource(doc as never)
       window.location.hash = `#/edit/${doc.id}`
     } catch (e) {
@@ -76,12 +81,17 @@ export function LibraryPage() {
     }
   }
 
+  const rows = resources ?? []
+  const { series, loose } = buildLibraryTree(rows)
+  const visibleSeries = filterTree(series, query)
+  const visibleLoose = filterTree(loose, query)
+
   return (
     <div className="page">
       <h1>资源库</h1>
       <p className="muted">
-        所有内容（内置示例与导入的文档）都存放在浏览器本地库。支持导入 <code>.json</code> 单文档或{' '}
-        <code>.zip</code> 系列包；导出关卡为 JSON、系列为自包含 zip。
+        系列 = 文件夹：点开即可浏览其中的专题与关卡。关卡可直接编辑（内置示例的修改会自动另存为你的副本）。
+        支持 <code>.json</code> 单文档与 <code>.zip</code> 系列包导入。
       </p>
 
       <div className="library-actions">
@@ -98,6 +108,12 @@ export function LibraryPage() {
           multiple
           hidden
           onChange={(e) => void handleImport(e.target.files)}
+        />
+        <input
+          className="library-search"
+          value={query}
+          placeholder="🔍 按标题搜索…"
+          onChange={(e) => setQuery(e.target.value)}
         />
         <a className="button-like" href="#/">
           ← 返回首页
@@ -127,56 +143,120 @@ export function LibraryPage() {
 
       {resources === undefined ? (
         <p className="muted">资源库加载中…</p>
-      ) : resources.length === 0 ? (
+      ) : rows.length === 0 ? (
         <p className="muted">库是空的——导入或刷新页面以载入内置示例。</p>
+      ) : visibleSeries.length === 0 && visibleLoose.length === 0 ? (
+        <p className="muted">没有匹配「{query}」的资源。</p>
       ) : (
-        <table className="library-table">
-          <thead>
-            <tr>
-              <th>类型</th>
-              <th>标题</th>
-              <th>版本</th>
-              <th>来源</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {resources.map((rec) => (
-              <tr key={rec.id}>
-                <td>{KIND_LABEL[rec.kind] ?? rec.kind}</td>
-                <td>
-                  {rec.kind === 'level' ? <a href={`#/level/${rec.id}`}>{rec.title}</a> : rec.title}
-                  <span className="muted id-hint">{rec.id}</span>
-                </td>
-                <td>{rec.version}</td>
-                <td>{rec.builtIn ? '内置' : '导入'}</td>
-                <td className="row-actions">
-                  {rec.kind === 'level' && (
-                    <>
-                      <a href={`#/level/${rec.id}`}>试玩</a>
-                      <button
-                        type="button"
-                        className="link"
-                        onClick={() => void handleEditCopy(rec)}
-                      >
-                        编辑副本
-                      </button>
-                    </>
-                  )}
-                  <button type="button" className="link" onClick={() => void handleExport(rec)}>
-                    导出
-                  </button>
-                  {!rec.builtIn && (
-                    <button type="button" className="link danger" onClick={() => void handleDelete(rec)}>
-                      删除
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="lib-tree">
+          {visibleSeries.map((row) => (
+            <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} />
+          ))}
+          {visibleLoose.length > 0 && (
+            <>
+              <div className="lib-divider">未整理</div>
+              {visibleLoose.map((row) => (
+                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} />
+              ))}
+            </>
+          )}
+        </div>
       )}
     </div>
+  )
+}
+
+function TreeRow(props: {
+  row: LibraryTreeRow
+  depth: number
+  searching: boolean
+  expanded: Set<string>
+  onToggle: (id: string) => void
+  onExport: (rec: LibraryRecord) => Promise<void>
+  onDelete: (rec: LibraryRecord) => Promise<void>
+}): React.ReactNode {
+  const { row, depth, searching, expanded, onToggle } = props
+  const rec = row.rec
+  const isContainer = row.children !== undefined
+  const childCount = row.children?.length ?? 0
+  const open = searching || expanded.has(rec.id)
+
+  return (
+    <Fragment>
+      <div className={`lib-row${isContainer ? ' is-container' : ''}`} style={{ paddingLeft: 8 + depth * 20 }}>
+        {isContainer ? (
+          <button
+            type="button"
+            className="lib-twist"
+            title={open ? '收起' : '展开'}
+            onClick={() => onToggle(rec.id)}
+          >
+            {open ? '▾' : '▸'}
+          </button>
+        ) : (
+          <span className="lib-twist lib-leaf" aria-hidden>
+            ·
+          </span>
+        )}
+        <span className="lib-icon" aria-hidden>
+          {KIND_ICON[rec.kind] ?? '•'}
+        </span>
+        {rec.kind === 'level' ? (
+          <a className="lib-title" href={`#/level/${rec.id}`} title="试玩">
+            {rec.title}
+          </a>
+        ) : isContainer ? (
+          <button type="button" className="lib-title lib-title-btn" title={open ? '收起' : '像文件夹一样打开'} onClick={() => onToggle(rec.id)}>
+            {rec.title}
+            <span className="muted lib-count">
+              {rec.kind === 'series' ? `${childCount} 个专题` : `${childCount} 个关卡`}
+            </span>
+          </button>
+        ) : (
+          <span className="lib-title">{rec.title}</span>
+        )}
+        {rec.builtIn ? <span className="lib-badge">内置</span> : null}
+        <span className="muted id-hint">{rec.id}</span>
+        <span className="row-actions">
+          {rec.kind === 'level' && (
+            <>
+              <a href={`#/edit/${rec.id}`} title="直接编辑（内置示例保存时自动另存为副本）">
+                编辑
+              </a>
+              <a href={`#/level/${rec.id}`}>试玩</a>
+            </>
+          )}
+          <button type="button" className="link" onClick={() => void props.onExport(rec)}>
+            导出
+          </button>
+          {!rec.builtIn && (
+            <button type="button" className="link danger" onClick={() => void props.onDelete(rec)}>
+              删除
+            </button>
+          )}
+        </span>
+      </div>
+      {isContainer && open && childCount === 0 && (
+        <div className="lib-row lib-empty-child" style={{ paddingLeft: 8 + (depth + 1) * 20 }}>
+          （空）
+        </div>
+      )}
+      {isContainer && open && childCount > 0 && (
+        <div className="lib-children">
+          {row.children!.map((child) => (
+            <TreeRow
+              key={child.rec.id}
+              row={child}
+              depth={depth + 1}
+              searching={searching}
+              expanded={expanded}
+              onToggle={onToggle}
+              onExport={props.onExport}
+              onDelete={props.onDelete}
+            />
+          ))}
+        </div>
+      )}
+    </Fragment>
   )
 }
