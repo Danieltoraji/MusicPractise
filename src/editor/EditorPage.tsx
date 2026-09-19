@@ -46,11 +46,13 @@ interface Props {
 export function EditorPage({ id }: Props) {
   const record = useLiveQuery(async () => {
     if (id === 'new') return 'new'
-    const got = await db.resources.get(id)
-    if (got) return got
-    // ensureSeeded 与首次查询并发的瞬态 MISS：稍候重试一次再下结论
-    await new Promise((r) => setTimeout(r, 150))
-    return (await db.resources.get(id)) ?? null
+    let got = await db.resources.get(id)
+    if (!got) {
+      // 防御 ensureSeeded 与首次查询并发的理论窗口：短暂等待后重试一次
+      await new Promise((r) => setTimeout(r, 150))
+      got = await db.resources.get(id)
+    }
+    return got ?? null
   }, [id], 'loading')
   const [doc, setDoc] = useState<LevelDoc | null>(null)
   const [tab, setTab] = useState<Tab>('canvas')
