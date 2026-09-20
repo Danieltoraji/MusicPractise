@@ -139,7 +139,6 @@ export function EditorPage({ id }: Props) {
       loadedIdRef.current = null
     }
   }, [record, id])
-  const selectedComp = doc?.content.components.find((c) => c.id === selected) ?? null
 
   /** 编辑器内所有文档修改走这里：修改即标脏并清「已保存」提示 */
   const update = useCallback((next: LevelDoc) => {
@@ -234,7 +233,16 @@ export function EditorPage({ id }: Props) {
 
       <ErrorBoundary>
         {tab === 'canvas' && (
-          <EditorCanvas doc={doc} selected={selected} onSelect={setSelected} onChange={update} />
+          <EditorCanvas
+            doc={doc}
+            selected={selected}
+            onSelect={setSelected}
+            onChange={update}
+            onRemove={() => {
+              update(removeComponent(doc, selected ?? ''))
+              setSelected(null)
+            }}
+          />
         )}
 
         {tab === 'graph' && (
@@ -253,17 +261,6 @@ export function EditorPage({ id }: Props) {
 
         {tab === 'json' && <JsonTab doc={doc} onApply={update} />}
       </ErrorBoundary>
-      {tab === 'canvas' && selectedComp && (
-        <Inspector
-          doc={doc}
-          comp={selectedComp}
-          onChange={(patch) => update(updateComponent(doc, selectedComp.id, patch))}
-          onRemove={() => {
-            update(removeComponent(doc, selectedComp.id))
-            setSelected(null)
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -277,14 +274,17 @@ function EditorCanvas({
   selected,
   onSelect,
   onChange,
+  onRemove,
 }: {
   doc: LevelDoc
   selected: string | null
   onSelect: (id: string | null) => void
   onChange: (doc: LevelDoc) => void
+  onRemove: () => void
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: string; grabX: number; grabY: number; rect: DOMRect } | null>(null)
+  const resizeRef = useRef<{ id: string; startX: number; startY: number; w: number; h: number } | null>(null)
   // 当前编辑的视图（组件互斥渲染的编辑侧对应物；不随 doc 变化重置）
   const [view, setView] = useState(doc.content.views[0]?.id ?? 'main')
   const currentView = doc.content.views.some((v) => v.id === view) ? view : (doc.content.views[0]?.id ?? 'main')
@@ -295,6 +295,27 @@ function EditorCanvas({
     const rect = canvasRef.current!.getBoundingClientRect()
     const layout = comp.layout ?? { x: 0, y: 0, w: 120, h: 40 }
     dragRef.current = { id: comp.id, grabX: e.clientX - rect.left - layout.x, grabY: e.clientY - rect.top - layout.y, rect }
+  }
+
+  /** 右下角手柄拖拽调整尺寸（独立捕获路径，与移动互不干扰） */
+  function onResizeDown(e: React.PointerEvent, comp: ComponentInstance): void {
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    onSelect(comp.id)
+    resizeRef.current = { id: comp.id, startX: e.clientX, startY: e.clientY, w: comp.layout?.w ?? 120, h: comp.layout?.h ?? 40 }
+  }
+
+  function onResizeMove(e: React.PointerEvent, comp: ComponentInstance): void {
+    const rz = resizeRef.current
+    if (!rz || rz.id !== comp.id) return
+    const w = Math.max(40, Math.round((rz.w + (e.clientX - rz.startX)) / 2) * 2)
+    const h = Math.max(28, Math.round((rz.h + (e.clientY - rz.startY)) / 2) * 2)
+    const layout = comp.layout ?? { x: 0, y: 0, w: 120, h: 40 }
+    if (w !== layout.w || h !== layout.h) onChange(updateComponent(doc, comp.id, { layout: { ...layout, w, h } }))
+  }
+
+  function onResizeUp(): void {
+    resizeRef.current = null
   }
 
   function onBoxPointerMove(e: React.PointerEvent, comp: ComponentInstance): void {
@@ -324,6 +345,7 @@ function EditorCanvas({
     return s
   }, [doc.content.components])
 
+  const selectedComp = doc.content.components.find((c) => c.id === selected) ?? null
   const viewComps = doc.content.components.filter((c) => (c.view ?? doc.content.views[0]?.id) === currentView)
 
   return (
@@ -410,6 +432,14 @@ function EditorCanvas({
                 <ComponentView spec={{ ...comp, visible: true }} store={previewStore} emit={noopEmit} />
               </div>
               <span className="box-label">{comp.name ?? comp.id}</span>
+              <span
+                className="box-resize"
+                title="拖拽调整大小"
+                onPointerDown={(e) => onResizeDown(e, comp)}
+                onPointerMove={(e) => onResizeMove(e, comp)}
+                onPointerUp={onResizeUp}
+                onPointerCancel={onResizeUp}
+              />
             </div>
           ))}
           {viewComps.length === 0 && (
@@ -420,16 +450,19 @@ function EditorCanvas({
         </div>
       </div>
 
-      <InspectorHint />
+      {selectedComp && (
+        <Inspector
+          doc={doc}
+          comp={selectedComp}
+          onChange={(patch) => onChange(updateComponent(doc, selectedComp.id, patch))}
+          onRemove={() => {
+            onChange(removeComponent(doc, selectedComp.id))
+            onSelect(null)
+            onRemove()
+          }}
+        />
+      )}
     </div>
-  )
-}
-
-function InspectorHint() {
-  return (
-    <p className="muted" style={{ margin: '6px 2px' }}>
-      拖拽移动组件；选中后在右侧属性检查器编辑。未选中的点击落在画布空白处即取消选中。
-    </p>
   )
 }
 

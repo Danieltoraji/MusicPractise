@@ -72,7 +72,9 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     expect(container.textContent).toContain('v.score = v.score + 1')
     expect(container.textContent).toContain('当 关卡开始')
     expect(container.textContent).toContain('节点库')
-    expect(container.textContent).toContain('实例动作')
+    expect(container.textContent).toContain('组件动作')
+    expect(container.textContent).toContain('前往视图…') // palette 精简：通用单项
+    expect(container.textContent).toContain('事件') // 事件面板（取代事件组）
     expect(container.textContent).toContain('画布对照')
     expect(container.textContent).toContain('点击组件：高亮图中引用它的节点')
   })

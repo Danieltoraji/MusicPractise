@@ -51,13 +51,29 @@ export function friendlyEvent(event: string, comps?: CompInfo[]): string {
 
 const clip = (s: string, n = 22): string => (s.length > n ? `${s.slice(0, n)}…` : s)
 
+/** 摘要显示模式：en=默认（标识符为主）/ zh=结构动词全中文（变量、组件与方法名保留原文） */
+export type SummaryMode = 'en' | 'zh'
+
+/** 解析 views.goto 的目标视图 id（字符串或 {id:'…'} 形式） */
+function viewsGotoId(node: Extract<GNode, { kind: 'call' }>): string | null {
+  if (node.target !== 'views' || node.method !== 'goto') return null
+  const raw = (node.args[0] ?? '').trim()
+  return /^["']([^"']+)["']$/.exec(raw)?.[1] ?? /^\{\s*id\s*:\s*["']([^"']+)["']\s*\}$/.exec(raw)?.[1] ?? null
+}
+
 /** 参数摘要行（印卡用）：第一行主描述，后续行为参数明细 */
-export function summarizeNode(node: GNode, comps?: CompInfo[]): string[] {
+export function summarizeNode(node: GNode, comps?: CompInfo[], mode: SummaryMode = 'en'): string[] {
   switch (node.kind) {
     case 'on':
       return [`当 ${clip(friendlyEvent(node.event, comps), 30)}`]
     case 'call': {
-      const head = `${compLabel(comps, node.target)}·${node.method}`
+      const gotoId = viewsGotoId(node)
+      if (gotoId !== null) {
+        return mode === 'zh'
+          ? [`跳转到视图「${clip(gotoId, 18)}」`]
+          : [`views.goto "${clip(gotoId, 20)}"`]
+      }
+      const head = mode === 'zh' ? `调用 ${compLabel(comps, node.target)}·${node.method}` : `${compLabel(comps, node.target)}·${node.method}`
       const view = argsToArgView(node.args)
       if (view.mode === 'none') return [head]
       if (view.mode === 'object') {
@@ -70,7 +86,7 @@ export function summarizeNode(node: GNode, comps?: CompInfo[]): string[] {
         'expr' in node.value
           ? clip(node.value.expr)
           : `${compLabel(comps, node.value.call.target)}·${node.value.call.method}()`
-      return [`v.${node.target} = ${right}`]
+      return mode === 'zh' ? [`把 v.${node.target} 设为 ${right}`] : [`v.${node.target} = ${right}`]
     }
     case 'branch':
       return [`如果 ${clip(node.cond)}`]
@@ -80,7 +96,7 @@ export function summarizeNode(node: GNode, comps?: CompInfo[]): string[] {
       return [`等待 ${clip(node.ms)} 毫秒`]
     case 'emit': {
       const keys = Object.keys(node.payload ?? {})
-      return [`触发 ${clip(node.event, 24)}`, ...(keys.length ? [`{ ${keys.join(', ')} }`] : [])]
+      return [mode === 'zh' ? `发出内部事件 ${clip(node.event, 22)}` : `触发 ${clip(node.event, 24)}`, ...(keys.length ? [`{ ${keys.join(', ')} }`] : [])]
     }
     case 'comment':
       return [clip(node.text, 40)]

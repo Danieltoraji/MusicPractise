@@ -8,6 +8,9 @@ import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 import type { GNode } from '../../engine/graphProgram'
 import { summarizeNode, type CompInfo } from './summary'
 
+export type GraphTheme = 'dark' | 'light'
+export type SummaryMode = 'en' | 'zh'
+
 export interface GraphCardData extends Record<string, unknown> {
   node: GNode
   /** 该节点的 lint 消息（红框 + ⚠ + title 提示） */
@@ -16,25 +19,41 @@ export interface GraphCardData extends Record<string, unknown> {
   comps?: CompInfo[]
   /** 画布对照图点击高亮：该节点引用了焦点组件 */
   related?: boolean
+  /** 深色/浅色主题（分类色两套） */
+  theme?: GraphTheme
+  /** 摘要显示模式：en=默认（标识符为主）/ zh=全中文结构词 */
+  summaryMode?: SummaryMode
 }
 export type GraphCardNode = Node<GraphCardData, 'graphCard'>
 
-// 深色工作台主题下的高亮度分类色（色带 + 类型名共用；docs/22 千星风格）
-const KIND_META: Record<GNode['kind'], { color: string; label: string }> = {
-  on: { color: '#c4b5fd', label: '事件' },
-  call: { color: '#60a5fa', label: '动作' },
-  assign: { color: '#34d399', label: '赋值' },
-  emit: { color: '#fbbf24', label: '触发' },
-  branch: { color: '#fb923c', label: '分支' },
-  loop: { color: '#fb923c', label: '循环' },
-  wait: { color: '#fb923c', label: '等待' },
-  comment: { color: '#94a3b8', label: '注释' },
+// 分类色两套：深色工作台用高亮色，浅色主题用可读的原色
+const KIND_META: Record<GraphTheme, Record<GNode['kind'], { color: string; label: string }>> = {
+  dark: {
+    on: { color: '#c4b5fd', label: '事件' },
+    call: { color: '#60a5fa', label: '动作' },
+    assign: { color: '#34d399', label: '赋值' },
+    emit: { color: '#fbbf24', label: '触发' },
+    branch: { color: '#fb923c', label: '分支' },
+    loop: { color: '#fb923c', label: '循环' },
+    wait: { color: '#fb923c', label: '等待' },
+    comment: { color: '#94a3b8', label: '注释' },
+  },
+  light: {
+    on: { color: '#7c3aed', label: '事件' },
+    call: { color: '#2563eb', label: '动作' },
+    assign: { color: '#16a34a', label: '赋值' },
+    emit: { color: '#d97706', label: '触发' },
+    branch: { color: '#ea580c', label: '分支' },
+    loop: { color: '#ea580c', label: '循环' },
+    wait: { color: '#ea580c', label: '等待' },
+    comment: { color: '#6b7280', label: '注释' },
+  },
 }
 
 /** 模块级稳定注册（React Flow 要求 nodeTypes 引用稳定） */
 function GraphCard({ data, selected }: NodeProps<GraphCardNode>) {
   const node = data.node
-  const meta = KIND_META[node.kind]
+  const meta = (KIND_META[data.theme ?? 'dark'])[node.kind]
   const errors = data.errors ?? []
   const dual = node.kind === 'branch' || node.kind === 'loop'
   return (
@@ -48,7 +67,7 @@ function GraphCard({ data, selected }: NodeProps<GraphCardNode>) {
         {errors.length > 0 && <span className="gnode-badge" title={errors[0]}>⚠</span>}
       </div>
       <div className="gnode-body">
-        {summarizeNode(node, data.comps).map((line, i) => (
+        {summarizeNode(node, data.comps, data.summaryMode ?? 'en').map((line, i) => (
           <div key={i} className="gnode-line">{line}</div>
         ))}
       </div>

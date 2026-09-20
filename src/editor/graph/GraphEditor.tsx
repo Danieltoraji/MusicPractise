@@ -37,13 +37,13 @@ import {
   updateNode,
   type GraphProgram,
 } from '../../engine/graphProgram'
-import { buildPalette, buildTemplates } from './palette'
+import { buildEventGroups, buildPalette, buildTemplates } from './palette'
 import { NODE_H, NODE_W, arrangeLayout, dagrePositions } from './layout'
 import { applyNodeChangesToProgram, portFromHandle } from './changes'
 import { applyTemplate } from './applyTemplate'
 import { generateScript } from '../../engine/script'
-import { graphCardNodeTypes, type GraphCardData } from './nodeTypes'
-import { NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
+import { graphCardNodeTypes, type GraphCardData, type GraphTheme, type SummaryMode } from './nodeTypes'
+import { EventsPanel, NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
 import { NodeInspector } from './NodeInspector'
 import { VariablesPanel } from './VariablesPanel'
 import { CanvasMap } from './CanvasMap'
@@ -59,6 +59,25 @@ const NO_POSITIONS = new Map<string, { x: number; y: number }>()
 function GraphEditorInner({ doc, onChange }: Props) {
   const program = doc.content.logic
   const rf = useReactFlow()
+  // 深色工作台 / 浅色主题，与节点摘要中英文显示模式（均记忆在 localStorage）
+  const [theme, setTheme] = useState<GraphTheme>(() => (localStorage.getItem('graph-theme') === 'light' ? 'light' : 'dark'))
+  const [summaryMode, setSummaryMode] = useState<SummaryMode>(() =>
+    localStorage.getItem('graph-summary-mode') === 'zh' ? 'zh' : 'en',
+  )
+  const toggleTheme = (): void => {
+    setTheme((t) => {
+      const next: GraphTheme = t === 'dark' ? 'light' : 'dark'
+      localStorage.setItem('graph-theme', next)
+      return next
+    })
+  }
+  const toggleSummary = (): void => {
+    setSummaryMode((m) => {
+      const next: SummaryMode = m === 'zh' ? 'en' : 'zh'
+      localStorage.setItem('graph-summary-mode', next)
+      return next
+    })
+  }
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
@@ -128,6 +147,14 @@ function GraphEditorInner({ doc, onChange }: Props) {
     [doc, onChange],
   )
 
+  const eventGroups = useMemo(() => buildEventGroups(doc), [doc])
+  const addOnNode = useCallback(
+    (event: string): void => {
+      apply((prog) => addNode(prog, { kind: 'on', event, id: newNodeId(prog) } as GNode))
+    },
+    [apply],
+  )
+
   const hasMissing = useMemo(() => program.nodes.some((n) => n.x === undefined || n.y === undefined), [program])
   const fallbackPos = useMemo(() => (hasMissing ? dagrePositions(program) : NO_POSITIONS), [program, hasMissing])
 
@@ -146,7 +173,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
       const position = { x: base?.x ?? 0, y: base?.y ?? 0 }
       const errors = issuesByNode.get(node.id)
       const related = relatedIds.has(node.id)
-      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}`
+      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}|${theme}|${summaryMode}`
       const prev = prevMap.get(node.id)
       if (prev && prevSig.get(node.id) === signature) {
         nextMap.set(node.id, prev)
@@ -157,7 +184,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
         id: node.id,
         type: 'graphCard',
         position,
-        data: { node, errors, comps: compsInfo, related },
+        data: { node, errors, comps: compsInfo, related, theme, summaryMode },
         width: NODE_W,
         height: NODE_H,
         // 预置 measured：节点尺寸固定，首帧即可拖拽（否则 RF 拖拽检查报 #015）
@@ -295,7 +322,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
   const errorCount = runLog.filter((e) => e.kind === 'error').length
 
   return (
-    <div className="graph-editor">
+    <div className={`graph-editor ge-${theme}`}>
       <div className="graph-toolbar">
         <button type="button" onClick={() => apply((prog) => arrangeLayout(prog, 'all'))} title="按执行层级自动重排全部节点">
           整理布局
@@ -323,6 +350,21 @@ function GraphEditorInner({ doc, onChange }: Props) {
           title="角落显示关卡画布缩略图，点击组件高亮相关节点"
         >
           画布对照
+        </button>
+        <button
+          type="button"
+          className={summaryMode === 'zh' ? 'active' : ''}
+          title={summaryMode === 'zh' ? '节点摘要：中文模式（点击切回默认）' : '节点摘要：默认（点击切换为全中文）'}
+          onClick={toggleSummary}
+        >
+          {summaryMode === 'zh' ? '中' : 'A'}
+        </button>
+        <button
+          type="button"
+          title={theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'}
+          onClick={toggleTheme}
+        >
+          {theme === 'dark' ? '☀ 浅色' : '🌙 深色'}
         </button>
         <button
           type="button"
@@ -375,6 +417,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
             onPick={(item) => addFromPalette(item)}
             onPickTemplate={(tpl) => addTemplate(tpl)}
           />
+          <EventsPanel groups={eventGroups} onPick={addOnNode} />
           <VariablesPanel
             prog={program}
             onSet={(name, value) => apply((prog) => setGraphVariable(prog, name, value))}
@@ -409,7 +452,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
             deleteKeyCode={['Backspace', 'Delete']}
             fitView
             minZoom={0.2}
-            colorMode="dark"
+            colorMode={theme}
             proOptions={{ hideAttribution: true }}
           >
             <Background variant={BackgroundVariant.Dots} gap={26} size={1.6} color="#26355a" />

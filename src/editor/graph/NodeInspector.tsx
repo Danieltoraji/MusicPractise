@@ -554,6 +554,7 @@ function EmitNodeEditor(props: {
       </label>
       <div className="ginsp-row">
         负载（可选）
+        <div className="emit-payload">
         {entries.map(([k, v], i) => (
           <div key={`${k}-${i}`} className="ginsp-argline">
             <input
@@ -597,17 +598,18 @@ function EmitNodeEditor(props: {
             </button>
           </div>
         ))}
-        <button
-          type="button"
-          onClick={() => {
-            const base = { ...payload }
-            let i = 1
-            while (`key${i}` in base) i++
-            write({ ...base, [`key${i}`]: '""' })
-          }}
-        >
-          + 负载项
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              const base = { ...payload }
+              let i = 1
+              while (`key${i}` in base) i++
+              write({ ...base, [`key${i}`]: '""' })
+            }}
+          >
+            + 负载项
+          </button>
+        </div>
       </div>
     </>
   )

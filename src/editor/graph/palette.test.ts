@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPalette, buildTemplates } from './palette'
+import { buildEventGroups, buildPalette, buildTemplates } from './palette'
 import { applyTemplate } from './applyTemplate'
 import { arrangeLayout, dagrePositions } from './layout'
 import { blankGraphProgram, addNode, connect, isGraphProgram, lintGraphProgram, removeGraphVariable } from '../../engine/graphProgram'
@@ -22,36 +22,59 @@ const doc = (components: { id: string; type: string; name?: string }[], variable
     },
   }) as unknown as LevelDoc
 
-describe('buildPalette（节点库候选）', () => {
-  it('事件组：生命周期 + 契约事件；动作组：过滤内部命令', () => {
+describe('buildPalette（节点库候选，精简后）', () => {
+  it('动作/视图收敛为通用单项；关卡组完整；事件不再进节点库', () => {
     const groups = buildPalette(doc([{ id: 'sound1', type: 'sound' }, { id: 'timer1', type: 'timer' }]))
     const byId = Object.fromEntries(groups.map((g) => [g.id, g]))
-    const evtKeys = byId.event.items.map((i) => i.key)
-    expect(evtKeys).toContain('evt-level.started')
-    expect(evtKeys).toContain('evt-timer1.tick')
-    // sound 契约没有事件，不应出现
-    expect(evtKeys.filter((k) => k.startsWith('evt-sound1.'))).toEqual([])
-    const actKeys = byId.action.items.map((i) => i.key)
-    expect(actKeys).toContain('act-sound1.play')
-    expect(actKeys.filter((k) => k.includes('__'))).toEqual([])
+    expect(byId.event).toBeUndefined() // 事件由「事件」面板提供
+    const act = byId.action.items
+    expect(act).toHaveLength(1)
+    expect(act[0].key).toBe('act-generic')
+    // 落图默认指向第一个组件的第一个公开命令（无 __ 内部命令）
+    const shape = act[0].make() as { kind: 'call'; target: string; method: string }
+    expect(shape.target).toBe('sound1')
+    expect(shape.method).toBe('play')
+    expect(byId.view.items).toHaveLength(1)
+    expect(byId.view.items[0].key).toBe('view-goto-generic')
     expect(byId.level.items.map((i) => i.key)).toEqual(['lvl-next', 'lvl-restart', 'lvl-finish'])
   })
 
   it('make 产出合法节点形状（补 id 后过 addNode）', () => {
     const groups = buildPalette(doc([{ id: 'staff1', type: 'staff' }]))
-    const item = groups.find((g) => g.id === 'action')!.items.find((i) => i.key === 'act-staff1.highlight')!
+    const item = groups.find((g) => g.id === 'action')!.items[0]
     const shape = item.make({ x: 10, y: 20 })
     const prog = addNode(blankGraphProgram(), { ...shape, id: 'n1' } as never)
     expect(isGraphProgram(prog)).toBe(true)
-    expect(prog.nodes[0]).toMatchObject({ kind: 'call', target: 'staff1', method: 'highlight', x: 10, y: 20 })
+    expect(prog.nodes[0]).toMatchObject({ kind: 'call', target: 'staff1', x: 10, y: 20 })
   })
 
-  it('变量赋值组按已声明变量生成；无组件时事件组只剩生命周期', () => {
+  it('变量赋值组按已声明变量生成；无组件时组件动作落 level.next', () => {
     const groups = buildPalette(doc([], { score: 0, streak: 0 }))
     const varGroup = groups.find((g) => g.id === 'variable')!
     expect(varGroup.items.map((i) => i.label)).toEqual(['v.score = …', 'v.streak = …'])
-    const evtGroup = groups.find((g) => g.id === 'event')!
-    expect(evtGroup.items).toHaveLength(3)
+    const act = groups.find((g) => g.id === 'action')!.items[0].make()
+    expect(act).toMatchObject({ kind: 'call', target: 'level', method: 'next' })
+  })
+})
+
+describe('buildEventGroups（事件面板候选）', () => {
+  it('生命周期 + 组件事件 + 内部事件三组', () => {
+    let d = doc([{ id: 'staff1', type: 'staff' }])
+    d = {
+      ...d,
+      content: {
+        ...d.content,
+        logic: {
+          ...d.content.logic,
+          nodes: [...d.content.logic.nodes, { id: 'e1', kind: 'on', event: 'app:burst' }],
+        },
+      },
+    } as typeof d
+    const groups = buildEventGroups(d)
+    const byName = Object.fromEntries(groups.map((g) => [g.group, g.items]))
+    expect(byName['关卡与视图']?.map((i) => i.value)).toEqual(['level.started', 'level.questionLoaded', 'level.finished', 'view.entered'])
+    expect(byName['组件事件']?.map((i) => i.value)).toEqual(['staff1.noteClicked'])
+    expect(byName['内部事件']?.map((i) => i.value)).toEqual(['app:burst'])
   })
 })
 

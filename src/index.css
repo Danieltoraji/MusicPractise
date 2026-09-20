@@ -1932,9 +1932,9 @@ path.gedge-false {
   color: #94a3b8;
 }
 
-/* ---------- 节点图 · 千星深色工作台主题（作用域仅 .graph-editor 子树） ---------- */
+/* ---------- 节点图 · 千星深色工作台主题（深色 = .graph-editor.ge-dark；浅色走基础规则） ---------- */
 
-.graph-editor {
+.graph-editor.ge-dark {
   /* 深色工作台色板：深海蓝底 + 青色选中 + 金色模板（千星奇域风格） */
   --ge-bg0: #0b1120;
   --ge-bg1: #131e36;
@@ -1958,132 +1958,132 @@ path.gedge-false {
 }
 
 /* 画布区扩容：工作台占满视口剩余高度，画布随行自适应拉伸 */
-.graph-editor .graph-layout {
+.ge-dark .graph-layout {
   flex: 1;
   min-height: 0;
 }
-.graph-editor .graph-canvas {
+.ge-dark .graph-canvas {
   height: auto;
   border-color: var(--ge-line);
   background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0));
 }
-.graph-editor .glib,
-.graph-editor .ginsp {
+.ge-dark .glib,
+.ge-dark .ginsp {
   max-height: none;
   height: auto;
   align-self: stretch;
   border-color: var(--ge-line);
   background: var(--ge-panel);
 }
-.graph-editor .ginsp {
+.ge-dark .ginsp {
   overflow-y: auto;
 }
 
 /* 面板通用：深色玻璃质感 */
-.graph-editor .graph-toolbar {
+.ge-dark .graph-toolbar {
   background: linear-gradient(180deg, var(--ge-panel-2), var(--ge-panel));
   border: 1px solid var(--ge-line);
   border-radius: 10px;
   padding: 6px 10px;
 }
-.graph-editor button {
+.ge-dark button {
   color: var(--ge-ink);
 }
-.graph-editor .graph-toolbar button,
-.graph-editor .graph-log-head button,
-.graph-editor .call-args-actions button,
-.graph-editor .ginsp button:not(.danger):not(.ginsp-argdel),
-.graph-editor .gvar-row button,
-.graph-editor .gvar-add button,
-.graph-editor .glib button {
+.ge-dark .graph-toolbar button,
+.ge-dark .graph-log-head button,
+.ge-dark .call-args-actions button,
+.ge-dark .ginsp button:not(.danger):not(.ginsp-argdel),
+.ge-dark .gvar-row button,
+.ge-dark .gvar-add button,
+.ge-dark .glib button {
   background: var(--ge-panel-2);
   border: 1px solid var(--ge-line);
   color: var(--ge-ink);
   border-radius: 7px;
 }
-.graph-editor .graph-toolbar button:hover,
-.graph-editor .graph-log-head button:hover,
-.graph-editor .ginsp button:not(.danger):not(.ginsp-argdel):hover,
-.graph-editor .glib button:hover {
+.ge-dark .graph-toolbar button:hover,
+.ge-dark .graph-log-head button:hover,
+.ge-dark .ginsp button:not(.danger):not(.ginsp-argdel):hover,
+.ge-dark .glib button:hover {
   border-color: var(--ge-accent);
   color: var(--ge-accent);
 }
-.graph-editor .graph-toolbar button.active,
-.graph-editor .ginsp-modes button.active {
+.ge-dark .graph-toolbar button.active,
+.ge-dark .ginsp-modes button.active {
   border-color: var(--ge-accent);
   color: var(--ge-accent);
   background: rgba(56, 189, 248, 0.1);
 }
 /* 特异性补齐：:not(x):not(y) 通用规则 (0,4,1) 压过模式选中态——此处在其后以同级特异性夺回（评审 P1-1） */
-.graph-editor .ginsp .ginsp-modes button.active {
+.ge-dark .ginsp .ginsp-modes button.active {
   border-color: var(--ge-accent);
   color: var(--ge-accent);
   background: rgba(56, 189, 248, 0.12);
 }
-.graph-editor .graph-toolbar button.danger,
-.graph-editor .ginsp button.danger {
+.ge-dark .graph-toolbar button.danger,
+.ge-dark .ginsp button.danger {
   color: var(--ge-bad);
   border-color: rgba(248, 113, 113, 0.4);
   background: rgba(248, 113, 113, 0.06);
 }
-.graph-editor .ginsp-argdel {
+.ge-dark .ginsp-argdel {
   background: var(--ge-panel-2);
   border: 1px solid var(--ge-line);
   color: var(--ge-bad);
 }
-.graph-editor .graph-toolbar-hint,
-.graph-editor .muted {
+.ge-dark .graph-toolbar-hint,
+.ge-dark .muted {
   color: var(--ge-muted);
 }
-.graph-editor .graph-lint-count {
+.ge-dark .graph-lint-count {
   color: var(--ge-warn, #fbbf24);
 }
-.graph-editor .graph-toolbar button.graph-lint-count {
+.ge-dark .graph-toolbar button.graph-lint-count {
   color: var(--ge-warn, #fbbf24);
   border-color: rgba(251, 191, 36, 0.45);
   background: rgba(251, 191, 36, 0.07);
 }
 
 /* 输入控件 */
-.graph-editor input,
-.graph-editor select,
-.graph-editor textarea {
+.ge-dark input,
+.ge-dark select,
+.ge-dark textarea {
   background: #0f1830;
   border: 1px solid var(--ge-line);
   color: var(--ge-ink);
 }
-.graph-editor input::placeholder,
-.graph-editor textarea::placeholder {
+.ge-dark input::placeholder,
+.ge-dark textarea::placeholder {
   color: #7286ad;
 }
-.graph-editor label {
+.ge-dark label {
   color: var(--ge-muted);
 }
 
 /* 左栏节点库 */
-.graph-editor .glib-title {
+.ge-dark .glib-title {
   color: var(--ge-ink);
 }
-.graph-editor .glib-group-head {
+.ge-dark .glib-group-head {
   color: var(--ge-muted);
   border-bottom-color: var(--ge-line-soft);
 }
-.graph-editor .glib-item {
+.ge-dark .glib-item {
   background: var(--ge-panel-2);
   border-color: var(--ge-line);
   color: #c9d6ef;
 }
-.graph-editor .glib-item:hover {
+.ge-dark .glib-item:hover {
   border-color: var(--ge-accent);
   color: var(--ge-accent);
   background: rgba(56, 189, 248, 0.08);
 }
-.graph-editor .glib-item-tpl {
+.ge-dark .glib-item-tpl {
   color: var(--ge-gold);
 }
 
 /* 节点信息卡：深空卡片 + 分类色带 + 选中辉光 */
-.graph-editor .gnode {
+.ge-dark .gnode {
   background: linear-gradient(165deg, #26355c 0%, #1b2745 100%);
   border: 1px solid #41598c;
   border-radius: 12px;
@@ -2091,29 +2091,29 @@ path.gedge-false {
   box-shadow: 0 4px 16px rgb(3 8 20 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.05);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
-.graph-editor .gnode-line {
+.ge-dark .gnode-line {
   color: #c6d4ee;
 }
-.graph-editor .gnode.is-selected {
+.ge-dark .gnode.is-selected {
   border-color: var(--ge-accent);
   box-shadow:
     0 0 0 2px rgb(56 189 248 / 0.35),
     0 0 22px rgb(56 189 248 / 0.28),
     0 4px 16px rgb(3 8 20 / 0.5);
 }
-.graph-editor .gnode.has-error {
+.ge-dark .gnode.has-error {
   border-color: var(--ge-bad);
   box-shadow:
     0 0 0 2px rgb(248 113 113 / 0.3),
     0 0 18px rgb(248 113 113 / 0.22);
 }
-.graph-editor .gnode.is-related {
+.ge-dark .gnode.is-related {
   outline: 2px dashed #22d3ee;
   box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.16);
 }
 
 /* 端口：圆形彩色触点 */
-.graph-canvas .react-flow__handle {
+.ge-dark .graph-canvas .react-flow__handle {
   width: 11px;
   height: 11px;
   border-radius: 50%;
@@ -2121,126 +2121,122 @@ path.gedge-false {
   border: 2px solid #55688f;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
-.graph-canvas .react-flow__handle:hover {
-  transform: scale(1.35);
-  box-shadow: 0 0 10px rgb(56 189 248 / 0.5);
-}
-.graph-canvas .gport-true {
+.ge-dark .graph-canvas .gport-true {
   background: var(--ge-ok) !important;
   border-color: #0b1120 !important;
 }
-.graph-canvas .gport-false {
+.ge-dark .graph-canvas .gport-false {
   background: var(--ge-bad) !important;
   border-color: #0b1120 !important;
 }
-.graph-canvas .gport-label {
+.ge-dark .graph-canvas .gport-label {
   color: var(--ge-muted);
 }
 
 /* 执行边：深底高亮描线 + 选中辉光 */
-.graph-canvas .gedge .react-flow__edge-path,
-.graph-canvas path.gedge {
+.ge-dark .graph-canvas .gedge .react-flow__edge-path,
+.ge-dark .graph-canvas path.gedge {
   stroke: #5b6f96;
   stroke-width: 2;
 }
-.graph-canvas .gedge-true .react-flow__edge-path,
-.graph-canvas path.gedge-true {
+.ge-dark .graph-canvas .gedge-true .react-flow__edge-path,
+.ge-dark .graph-canvas path.gedge-true {
   stroke: var(--ge-ok);
 }
-.graph-canvas .gedge-false .react-flow__edge-path,
-.graph-canvas path.gedge-false {
+.ge-dark .graph-canvas .gedge-false .react-flow__edge-path,
+.ge-dark .graph-canvas path.gedge-false {
   stroke: var(--ge-bad);
 }
-.graph-canvas .react-flow__edge.selected .react-flow__edge-path {
+.ge-dark .graph-canvas .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--ge-accent);
   filter: drop-shadow(0 0 4px rgb(56 189 248 / 0.65));
 }
-.graph-canvas .react-flow__minimap {
+.ge-dark .graph-canvas .react-flow__minimap {
   background: #101a30;
   border: 1px solid var(--ge-line);
   border-radius: 8px;
 }
-.graph-canvas .react-flow__controls {
+.ge-dark .graph-canvas .react-flow__controls {
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--ge-line);
 }
 
 /* 右键菜单 / 问题列表 / 日志 / 对照图 */
-.graph-editor .gmenu {
+.ge-dark .gmenu {
   background: var(--ge-panel);
   border-color: var(--ge-line);
   box-shadow: 0 12px 32px rgb(3 8 20 / 0.6);
 }
-.graph-editor .graph-issues {
+.ge-dark .graph-issues {
   background: rgba(251, 191, 36, 0.06);
   border-color: rgba(251, 191, 36, 0.45);
 }
-.graph-editor .graph-issue:hover {
+.ge-dark .graph-issue:hover {
   background: rgba(251, 191, 36, 0.1);
 }
-.graph-editor .graph-issue {
+.ge-dark .graph-issue {
   color: var(--ge-ink);
 }
-.graph-editor .graph-log,
-.graph-editor .gvars {
+.ge-dark .graph-log,
+.ge-dark .gvars {
   background: var(--ge-panel);
   border-color: var(--ge-line);
 }
-.graph-editor .graph-log-entry {
+.ge-dark .graph-log-entry {
   color: #c6d4ee;
 }
-.graph-editor .graph-log-entry:hover {
+.ge-dark .graph-log-entry:hover {
   background: rgba(56, 189, 248, 0.07);
 }
-.graph-editor .graph-script-head button {
+.ge-dark .graph-script-head button {
   background: var(--ge-panel-2);
   border: 1px solid var(--ge-line);
   color: var(--ge-ink);
   border-radius: 7px;
 }
-.graph-editor .editor-errors {
+.ge-dark .editor-errors {
   background: rgba(248, 113, 113, 0.08);
   border-color: rgba(248, 113, 113, 0.4);
   color: #fca5a5;
 }
-.graph-editor .graph-log-entry.has-node:hover {
+.ge-dark .graph-log-entry.has-node:hover {
   border-color: var(--ge-accent);
 }
-.graph-editor .graph-log-kind.command {
+.ge-dark .graph-log-kind.command {
   color: #9fb0d0;
 }
-.graph-editor .graph-log-node {
+.ge-dark .graph-log-node {
   color: #7cc7f7;
 }
-.graph-editor .graph-issue-code {
+.ge-dark .graph-issue-code {
   color: var(--ge-warn, #fbbf24);
 }
-.graph-editor .canvas-map {
+.ge-dark .canvas-map {
   background: rgba(16, 26, 48, 0.94);
   border-color: var(--ge-line);
   backdrop-filter: blur(6px);
 }
-.graph-editor .canvas-map-body {
+.ge-dark .canvas-map-body {
   border-color: var(--ge-line);
 }
-.graph-editor .canvas-map-box {
+.ge-dark .canvas-map-box {
   background: rgba(56, 72, 110, 0.55);
 }
-.graph-editor .canvas-map-box span {
+.ge-dark .canvas-map-box span {
   color: #dbe4f5;
 }
-.graph-editor .canvas-map-box.is-focus {
+.ge-dark .canvas-map-box.is-focus {
   outline-color: var(--ge-accent);
   background: rgba(56, 189, 248, 0.22);
 }
 
-.graph-canvas .react-flow__controls-button {
+.ge-dark .graph-canvas .react-flow__controls-button {
   background: #16213a;
   border-color: var(--ge-line);
   color: var(--ge-ink);
 }
-.graph-canvas .react-flow__controls-button:hover {
+.ge-dark .graph-canvas .react-flow__controls-button:hover {
   background: #1d2a47;
 }
 
@@ -2368,6 +2364,7 @@ a.lib-title:hover {
   color: var(--ink);
 }
 
+
 /* 触屏无 hover：行操作常显（评审 P1-2） */
 @media (hover: none) {
   .lib-row .row-actions {
@@ -2380,4 +2377,75 @@ a.lib-title:hover {
   height: 100vh;
   padding: 10px;
   border-radius: 0;
+}
+
+/* ---------- 编辑器画布：右栏属性 + 组件缩放手柄 + 事件面板（3-6） ---------- */
+
+/* 三栏布局：组件面板 | 画布 | 属性检查器（右侧） */
+.editor-canvas-layout {
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+.editor-canvas-layout > .inspector {
+  width: 290px;
+  flex: none;
+  align-self: stretch;
+  max-height: none;
+}
+.editor-canvas-layout > .inspector,
+.editor-canvas-layout > .palette {
+  max-height: none;
+}
+.box-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  border-right: 3px solid var(--accent);
+  border-bottom: 3px solid var(--accent);
+  border-radius: 0 0 8px 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.editor-box:hover .box-resize,
+.editor-box.is-selected .box-resize {
+  opacity: 1;
+}
+
+/* 事件面板（与变量面板同风格） */
+.gevents {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.gevents .glib-group-head {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* emit 负载：两列表格化（键 | 值） */
+.emit-payload {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.emit-payload .ginsp-argline {
+  display: grid;
+  grid-template-columns: 96px 1fr 26px;
+  align-items: center;
+  gap: 6px;
+}
+.emit-payload .ginsp-payload-key {
+  font-family: Consolas, monospace;
+  font-size: 12px;
 }

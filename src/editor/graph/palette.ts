@@ -8,7 +8,54 @@ import type { Json } from '../../engine/expr'
 import type { GNode } from '../../engine/graphProgram'
 import { allContracts } from '../../runtime/store'
 
-export type PaletteGroupId = 'event' | 'action' | 'level' | 'view' | 'variable' | 'flow'
+export type PaletteGroupId = 'action' | 'level' | 'view' | 'variable' | 'flow'
+
+/** 事件候选组（事件面板与 Inspector 事件下拉共用） */
+export interface EventGroup {
+  group: string
+  items: { value: string; label: string; desc?: string }[]
+}
+
+const LEVEL_EVENTS: EventGroup['items'] = [
+  { value: 'level.started', label: '关卡开始', desc: 'level.started——进入关卡后触发一次' },
+  { value: 'level.questionLoaded', label: '题目载入', desc: 'level.questionLoaded——每行数据装载后触发（payload: index/total/row）' },
+  { value: 'level.finished', label: '关卡结算', desc: 'level.finished——结算时触发（payload: score/passed）' },
+  { value: 'view.entered', label: '进入视图', desc: 'view.entered——切换视图后触发（payload: view）' },
+]
+
+/** 从关卡文档构造事件候选：生命周期 + 组件事件 + 已出现的内部事件 */
+export function buildEventGroups(doc: LevelDoc): EventGroup[] {
+  const comps = doc.content.components
+  const contracts = new Map(allContracts().map((c) => [c.type, c]))
+  const compItems: EventGroup['items'] = []
+  for (const comp of comps) {
+    const contract = contracts.get(comp.type)
+    if (!contract) continue
+    for (const [event, payloadDoc] of Object.entries(contract.events)) {
+      const name = comp.name?.trim() || comp.id
+      compItems.push({
+        value: `${comp.id}.${event}`,
+        label: `${name} · ${event}`,
+        desc: `${comp.id}.${event}${payloadDoc ? `（${payloadDoc}）` : ''}`,
+      })
+    }
+  }
+  const internal = [
+    ...new Set(
+      doc.content.logic.nodes.flatMap((n) =>
+        n.kind === 'on' && n.event.includes(':')
+          ? [n.event]
+          : n.kind === 'emit' && n.event.includes(':')
+            ? [n.event]
+            : [],
+      ),
+    ),
+  ]
+  const groups: EventGroup[] = [{ group: '关卡与视图', items: LEVEL_EVENTS }]
+  if (compItems.length > 0) groups.push({ group: '组件事件', items: compItems })
+  if (internal.length > 0) groups.push({ group: '内部事件', items: internal.map((e) => ({ value: e, label: e })) })
+  return groups
+}
 
 /** 分布式 Omit：保留 union 各成员的特定字段（普通 Omit 会塌缩成交集） */
 type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never
@@ -112,57 +159,29 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
   const contracts = new Map(allContracts().map((c) => [c.type, c]))
   const comps = doc.content.components
 
-  // 事件组：生命周期 + 每实例事件
-  const eventItems: PaletteItem[] = [
+  // 事件不再进节点库：由左栏「事件」面板提供（buildEventGroups）
+
+  // 实例动作收敛为通用入口：落一个组件动作节点，实例/命令在右侧 Inspector 选择
+  const firstComp = comps[0]
+  const firstCmd = (() => {
+    if (!firstComp) return 'next'
+    const ct = contracts.get(firstComp.type)
+    return Object.keys(ct?.commands ?? {}).find((m) => !m.startsWith('__')) ?? 'setVisible'
+  })()
+  const actionItems: PaletteItem[] = [
     {
-      key: 'evt-level.started',
-      label: '关卡开始',
-      desc: 'level.started——进入关卡后触发一次',
-      make: (pos) => ({ kind: 'on', event: 'level.started', ...at(pos) }),
-    },
-    {
-      key: 'evt-level.questionLoaded',
-      label: '题目装载',
-      desc: 'level.questionLoaded——每道题装载后触发（payload: index/total）',
-      make: (pos) => ({ kind: 'on', event: 'level.questionLoaded', ...at(pos) }),
-    },
-    {
-      key: 'evt-level.finished',
-      label: '关卡结算',
-      desc: 'level.finished——结算时触发（payload: score/passed）',
-      make: (pos) => ({ kind: 'on', event: 'level.finished', ...at(pos) }),
+      key: 'act-generic',
+      label: '组件动作…',
+      desc: '调用组件实例的命令——添加后在右侧选择实例与命令',
+      make: (pos) => ({
+        kind: 'call',
+        target: firstComp?.id ?? 'level',
+        method: firstComp ? firstCmd : 'next',
+        args: [],
+        ...at(pos),
+      }),
     },
   ]
-  for (const comp of comps) {
-    const contract = contracts.get(comp.type)
-    if (!contract) continue
-    for (const [event, payloadDoc] of Object.entries(contract.events)) {
-      const name = comp.name?.trim() || comp.id
-      eventItems.push({
-        key: `evt-${comp.id}.${event}`,
-        label: `${name} · ${event}`,
-        desc: `${comp.id}.${event}${payloadDoc ? `（${payloadDoc}）` : ''}`,
-        make: (pos) => ({ kind: 'on', event: `${comp.id}.${event}`, ...at(pos) }),
-      })
-    }
-  }
-
-  // 实例动作组：每实例 × 契约命令（过滤 __ 内部命令）
-  const actionItems: PaletteItem[] = []
-  for (const comp of comps) {
-    const contract = contracts.get(comp.type)
-    if (!contract) continue
-    const name = comp.name?.trim() || comp.id
-    for (const [cmd, argDoc] of Object.entries(contract.commands)) {
-      if (cmd.startsWith('__')) continue
-      actionItems.push({
-        key: `act-${comp.id}.${cmd}`,
-        label: `${name} · ${cmd}`,
-        desc: `${comp.id}.${cmd}${argDoc ? `——参数 ${argDoc}` : ''}`,
-        make: (pos) => ({ kind: 'call', target: comp.id, method: cmd, args: [], ...at(pos) }),
-      })
-    }
-  }
 
   // level 伪实例动作
   const levelItems: PaletteItem[] = [
@@ -171,14 +190,16 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
     { key: 'lvl-finish', label: '结算关卡', desc: 'level.finish——主动结算，可传 { passed: false } 强制未通过', make: (pos) => ({ kind: 'call', target: 'level', method: 'finish', args: [], ...at(pos) }) },
   ]
 
-  // 视图组（v3）：每个视图一个「前往视图」；进入视图会派发 view.entered
+  // 视图组收敛为通用入口：目标视图在右侧 Inspector 选择
   const views = doc.content.views?.length ? doc.content.views : [{ id: 'main', name: '主视图' }]
-  const viewItems: PaletteItem[] = views.map((v) => ({
-    key: `view-goto-${v.id}`,
-    label: `前往 ${v.name || v.id}`,
-    desc: `views.goto("${v.id}")——切换到视图后派发 view.entered（payload: view）`,
-    make: (pos) => ({ kind: 'call', target: 'views', method: 'goto', args: [`"${v.id}"`], ...at(pos) }),
-  }))
+  const viewItems: PaletteItem[] = [
+    {
+      key: 'view-goto-generic',
+      label: '前往视图…',
+      desc: 'views.goto——切换视图并派发 view.entered；目标视图在右侧选择',
+      make: (pos) => ({ kind: 'call', target: 'views', method: 'goto', args: [`"${views[0].id}"`], ...at(pos) }),
+    },
+  ]
 
   // 变量赋值组：按已声明变量
   const variableItems: PaletteItem[] = Object.keys(doc.content.logic.variables ?? {}).map((name) => ({
@@ -199,8 +220,7 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
   ]
 
   return [
-    { id: 'event', label: '事件', hint: '执行流的唯一起点', items: eventItems },
-    { id: 'action', label: '实例动作', hint: '调用组件命令', items: actionItems },
+    { id: 'action', label: '组件动作', hint: '调用组件实例的命令（实例与命令在右侧选择）', items: actionItems },
     { id: 'level', label: '关卡', hint: 'level 伪实例的方法', items: levelItems },
     { id: 'view', label: '视图', hint: 'views 伪实例的方法（互斥视图切换）', items: viewItems },
     { id: 'variable', label: '变量赋值', hint: '给已声明变量赋值', items: variableItems },
