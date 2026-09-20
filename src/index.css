@@ -2194,7 +2194,8 @@ path.gedge-false {
   color: var(--ge-ink);
 }
 .ge-dark .graph-log,
-.ge-dark .gvars {
+.ge-dark .gvars,
+.ge-dark .gevents {
   background: var(--ge-panel);
   border-color: var(--ge-line);
 }
