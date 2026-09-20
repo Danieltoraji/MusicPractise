@@ -1,0 +1,61 @@
+# GitHub Pages 自动部署：push 到 main（或手动触发）→ 测试 → 构建 → 发布。
+#
+# 首次启用需在仓库设置一次：Settings → Pages → Build and deployment →
+# Source 选择「GitHub Actions」。此后每次 push main 自动部署。
+#
+# 项目使用 hash 路由（#/library），天然适配 Pages 的子路径部署；
+# 构建时以 --base=/MusicPractise/ 指定资源前缀，本地开发不受影响。
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Pages 部署需要的最小权限；并发组保证旧的部署在途时新推送只会部署最后一次
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 测试（vitest 全量）
+        run: npm test
+
+      - name: 构建（Pages 子路径 base）
+        run: npm run build
+        env:
+          VITE_BASE: /MusicPractise/
+
+      - name: 禁用 Jekyll（跳过 Pages 的冗余处理）
+        run: touch dist/.nojekyll
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
