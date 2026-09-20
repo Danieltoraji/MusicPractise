@@ -35,6 +35,22 @@ body {
 /* 编辑器需要更宽的工作区 */
 .app:has(.editor) {
   max-width: 1360px;
+  padding-bottom: 16px;
+}
+/* 节点图页：app 以 100vh 定高作为高度链锚点（min-height 不定高会让 flex-basis:0%
+   按规范回落 content，节点库整高把画布行撑出视口），工作台占满剩余视口；
+   小窗口时布局行 min-height 兜底、超出部分由页面滚动 */
+.app:has(.editor):has(.graph-editor) {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+/* 高度链中间层：main 不接链会以内容高度撑破 app（flex 0 1 auto） */
+.app:has(.graph-editor) > main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .topbar {
@@ -538,6 +554,14 @@ a.level-row:hover {
 
 /* ---------- 关卡编辑器 ---------- */
 
+/* 编辑页纵向 flex：子内容自然高，节点图工作台 flex:1 占满剩余视口（高度链的起点） */
+.page.editor {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
 .editor-head {
   display: flex;
   gap: 10px;
@@ -578,7 +602,8 @@ a.level-row:hover {
 .editor-tabs {
   display: flex;
   gap: 8px;
-  margin: 12px 0;
+  /* 编辑页为 flex 列后相邻 margin 不再折叠：上边距归 0，间距交给 editor-head 的下边距 */
+  margin: 0 0 12px;
 }
 .editor-tabs button.active {
   background: var(--accent);
@@ -1019,6 +1044,8 @@ a.level-row:hover {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
 }
 .graph-toolbar {
   display: flex;
@@ -1040,6 +1067,7 @@ a.level-row:hover {
   gap: 10px;
   align-items: stretch;
   min-height: 620px;
+  flex: 1;
 }
 .graph-left {
   width: 200px;
@@ -1112,11 +1140,11 @@ a.level-row:hover {
   color: var(--accent);
 }
 
-/* 画布 */
+/* 画布：随工作台拉伸充满（min-height 只兜小窗口的底），不再固定 720px */
 .graph-canvas {
   flex: 1;
   min-width: 0;
-  height: 720px;
+  min-height: 620px;
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
@@ -1260,7 +1288,7 @@ path.gedge-false {
   background: var(--panel);
   padding: 10px;
   overflow-y: auto;
-  max-height: 720px;
+  max-height: none; /* 高度由布局行拉伸决定，内部滚动 */
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1949,34 +1977,21 @@ path.gedge-false {
   --ge-ok: #34d399;
   --ge-bad: #f87171;
 
-  height: calc(100vh - 158px);
-  min-height: 620px;
   color: var(--ge-ink); /* 子树默认文字色：未显式设色的面板标题/菜单分组全部可读 */
   background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0)); /* 工作台深底（P0：问题列表等根级元素不可透出浅色 body） */
   border-radius: 12px;
   padding: 8px;
 }
 
-/* 画布区扩容：工作台占满视口剩余高度，画布随行自适应拉伸 */
-.ge-dark .graph-layout {
-  flex: 1;
-  min-height: 0;
-}
+/* 深色面板拉伸语义与基础规则一致（高度链见 .graph-canvas），此处只覆写配色 */
 .ge-dark .graph-canvas {
-  height: auto;
   border-color: var(--ge-line);
   background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0));
 }
 .ge-dark .glib,
 .ge-dark .ginsp {
-  max-height: none;
-  height: auto;
-  align-self: stretch;
   border-color: var(--ge-line);
   background: var(--ge-panel);
-}
-.ge-dark .ginsp {
-  overflow-y: auto;
 }
 
 /* 面板通用：深色玻璃质感 */
