@@ -5,7 +5,7 @@
  * 拖动跟手：拖动中间帧走 transient 状态（不进 doc），落点一次性 moveNode 持久化。
  * 默认导出（React.lazy 懒加载 @xyflow/react，不进主包）。
  */
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -147,6 +147,14 @@ function GraphEditorInner({ doc, onChange }: Props) {
     [doc, onChange],
   )
 
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const sync = (): void => {
+      rootRef.current?.classList.toggle('is-fullscreen', document.fullscreenElement != null)
+    }
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
   const eventGroups = useMemo(() => buildEventGroups(doc), [doc])
   const addOnNode = useCallback(
     (event: string): void => {
@@ -322,7 +330,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
   const errorCount = runLog.filter((e) => e.kind === 'error').length
 
   return (
-    <div className={`graph-editor ge-${theme}`}>
+    <div ref={rootRef} className={`graph-editor ge-${theme}`}>
       <div className="graph-toolbar">
         <button type="button" onClick={() => apply((prog) => arrangeLayout(prog, 'all'))} title="按执行层级自动重排全部节点">
           整理布局
@@ -370,9 +378,8 @@ function GraphEditorInner({ doc, onChange }: Props) {
           type="button"
           title="全屏运行工作台（Esc 退出）"
           onClick={() => {
-            const el = document.querySelector('.graph-editor')
             if (document.fullscreenElement) void document.exitFullscreen()
-            else void el?.requestFullscreen()
+            else void rootRef.current?.requestFullscreen()
           }}
         >
           ⛶ 全屏

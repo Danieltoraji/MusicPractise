@@ -2373,10 +2373,18 @@ a.lib-title:hover {
 }
 
 /* 节点图工作台全屏态（工具条「⛶ 全屏」切换） */
-.graph-editor:fullscreen {
+.graph-editor.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  width: 100vw;
   height: 100vh;
   padding: 10px;
   border-radius: 0;
+  background: #fff;
+}
+.ge-dark.is-fullscreen {
+  background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0));
 }
 
 /* ---------- 编辑器画布：右栏属性 + 组件缩放手柄 + 事件面板（3-6） ---------- */
@@ -2387,12 +2395,21 @@ a.lib-title:hover {
   align-items: stretch;
 }
 .editor-canvas-layout > .inspector {
-  width: 290px;
+  width: 300px;
+  box-sizing: border-box;
+  min-width: 0;
   flex: none;
   align-self: stretch;
   max-height: none;
+  overflow-y: auto;
 }
-.editor-canvas-layout > .inspector,
+.editor-canvas-layout .inspector input,
+.editor-canvas-layout .inspector select,
+.editor-canvas-layout .inspector textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
 .editor-canvas-layout > .palette {
   max-height: none;
 }
