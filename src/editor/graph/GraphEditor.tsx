@@ -160,6 +160,8 @@ function GraphEditorInner({ doc, onChange }: Props) {
         data: { node, errors, comps: compsInfo, related },
         width: NODE_W,
         height: NODE_H,
+        // 预置 measured：节点尺寸固定，首帧即可拖拽（否则 RF 拖拽检查报 #015）
+        measured: { width: NODE_W, height: NODE_H },
       }
       nextMap.set(node.id, created)
       nextSig.set(node.id, signature)
@@ -211,6 +213,18 @@ function GraphEditorInner({ doc, onChange }: Props) {
           }
           return next
         })
+      }
+      // dimensions（RF DOM 测量回传）：合并进缓存的视图节点（视图态，不落 program），
+      // 否则 store 缺 measured，拖拽时报 #015
+      const dims = changes.filter((c) => c.type === 'dimensions')
+      if (dims.length > 0) {
+        for (const c of dims) {
+          if (c.type !== 'dimensions') continue
+          const cached = nodeCacheRef.current.map.get(c.id)
+          if (cached) {
+            cached.measured = { width: c.dimensions?.width ?? NODE_W, height: c.dimensions?.height ?? NODE_H }
+          }
+        }
       }
       const settle = changes.filter((c) => (c.type === 'position' && c.dragging === false) || c.type === 'remove')
       if (settle.length === 0) return
@@ -309,6 +323,17 @@ function GraphEditorInner({ doc, onChange }: Props) {
           title="角落显示关卡画布缩略图，点击组件高亮相关节点"
         >
           画布对照
+        </button>
+        <button
+          type="button"
+          title="全屏运行工作台（Esc 退出）"
+          onClick={() => {
+            const el = document.querySelector('.graph-editor')
+            if (document.fullscreenElement) void document.exitFullscreen()
+            else void el?.requestFullscreen()
+          }}
+        >
+          ⛶ 全屏
         </button>
         <span className="muted graph-toolbar-hint">
           右键画布空白加节点 · 拖端口连线（真/假出口）· 双击连线断开 · Delete 删除选中节点

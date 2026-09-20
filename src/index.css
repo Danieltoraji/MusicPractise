@@ -600,6 +600,13 @@ a.level-row:hover {
   flex: 1 1 0%;
   min-width: 0;
 }
+/* v3 视图条引入 .canvas-main 包裹后：画布是纵向 flex 的子项，
+   必须自带最小高度（此前 flex-basis 0% 把画布压成 16px，组件全部「消失」） */
+.editor-canvas-layout .canvas-main .editor-canvas {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 560px;
+}
 .palette {
   width: 170px;
   flex: none;
@@ -1958,11 +1965,7 @@ path.gedge-false {
 .graph-editor .graph-canvas {
   height: auto;
   border-color: var(--ge-line);
-  background:
-    radial-gradient(1100px 500px at 70% -10%, rgba(59, 130, 246, 0.1), transparent 60%),
-    radial-gradient(900px 480px at 10% 110%, rgba(99, 102, 241, 0.08), transparent 60%),
-    linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0));
-  box-shadow: inset 0 0 60px rgb(3 8 20 / 0.55);
+  background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0));
 }
 .graph-editor .glib,
 .graph-editor .ginsp {
@@ -2370,4 +2373,11 @@ a.lib-title:hover {
   .lib-row .row-actions {
     display: inline-flex;
   }
+}
+
+/* 节点图工作台全屏态（工具条「⛶ 全屏」切换） */
+.graph-editor:fullscreen {
+  height: 100vh;
+  padding: 10px;
+  border-radius: 0;
 }
