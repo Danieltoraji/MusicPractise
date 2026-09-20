@@ -150,29 +150,33 @@ export function EditorPage({ id }: Props) {
   const savingRef = useRef(false)
   /** 保存：普通关卡覆盖原记录；内置示例不可覆盖（会被种子重写）——自动另存为用户副本并切换过去 */
   const save = useCallback(async (): Promise<{ ok: boolean; savedId: string | null }> => {
-    if (!doc || savingRef.current) return { ok: false, savedId: null } // 防重入：快速双击不产生双副本（评审 P2-4）
+    if (!doc || savingRef.current) return { ok: false, savedId: null } // 防重入：异步保存期间快速双击不产生双副本（评审 P2-4）
     savingRef.current = true
-    const existing = await db.resources.get(doc.id)
-    const isBuiltIn = existing?.builtIn === 1
-    const target = isBuiltIn ? copyForEditing(doc) : doc
-    const result = loadLevelDoc(target)
-    if (!result.ok) {
-      setSaveErrors(result.errors)
-      return { ok: false, savedId: null }
+    try {
+      const existing = await db.resources.get(doc.id)
+      const isBuiltIn = existing?.builtIn === 1
+      const target = isBuiltIn ? copyForEditing(doc) : doc
+      const result = loadLevelDoc(target)
+      if (!result.ok) {
+        setSaveErrors(result.errors)
+        return { ok: false, savedId: null }
+      }
+      setSaveErrors([])
+      setLintWarnings(result.lintWarnings)
+      await putResource(result.doc as never)
+      setDirty(false)
+      dirtyRef.current = false // 显式同步：不依赖「React 调度先于 hashchange 任务」的时序假设（评审 P2-1）
+      if (isBuiltIn) {
+        sessionStorage.setItem('edit-notice', '内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
+        setDoc(result.doc)
+        window.location.hash = `#/edit/${result.doc.id}` // 切到副本继续编辑（App 按 hash 重挂载）
+      } else {
+        setSavedTip(`已保存（v${result.doc.version}）`)
+      }
+      return { ok: true, savedId: result.doc.id }
+    } finally {
+      savingRef.current = false // 保存结束后必须释放，否则本次挂载内保存/试运行永久失效
     }
-    setSaveErrors([])
-    setLintWarnings(result.lintWarnings)
-    await putResource(result.doc as never)
-    setDirty(false)
-    dirtyRef.current = false // 显式同步：不依赖「React 调度先于 hashchange 任务」的时序假设（评审 P2-1）
-    if (isBuiltIn) {
-      sessionStorage.setItem('edit-notice', '内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
-      setDoc(result.doc)
-      window.location.hash = `#/edit/${result.doc.id}` // 切到副本继续编辑（App 按 hash 重挂载）
-    } else {
-      setSavedTip(`已保存（v${result.doc.version}）`)
-    }
-    return { ok: true, savedId: result.doc.id }
   }, [doc])
 
   async function tryRun(): Promise<void> {

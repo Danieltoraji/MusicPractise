@@ -460,7 +460,6 @@ function GraphEditorInner({ doc, onChange }: Props) {
             fitView
             minZoom={0.2}
             colorMode={theme}
-            proOptions={{ hideAttribution: true }}
           >
             <Background variant={BackgroundVariant.Dots} gap={26} size={1.6} color="#26355a" />
           <MiniMap pannable zoomable nodeColor="#41598c" nodeStrokeColor="#6f86b8" />
