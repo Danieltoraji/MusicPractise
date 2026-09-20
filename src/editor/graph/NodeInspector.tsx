@@ -11,7 +11,9 @@ import { LEVEL_METHODS, type GNode, type LintIssue } from '../../engine/graphPro
 import { BASE_COMMANDS, type ContractDoc } from '../../runtime/componentDef'
 import { getDef } from '../../runtime/store'
 import { parseCommandParams, exprToOperand, type BridgeCtx, type Operand } from './exprBridge'
+import { buildEventGroups } from './palette'
 import { CallArgsEditor, ConditionBuilder, OperandBody, OperandPicker, QueryCallEditor, defaultOperandExprFor } from './controls'
+import { PlayArgsEditor } from './PlayArgsEditor'
 
 interface Props {
   node: GNode | undefined
@@ -72,7 +74,7 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
   }
   const ctx: BridgeCtx = { varNames, refPaths }
 
-  // on 事件候选：生命周期 / 组件事件 / 已出现的内部事件
+  // on 事件候选：与「事件」面板共享同一数据源（buildEventGroups）
   const internalEvents = [
     ...new Set(
       program.nodes.flatMap((n) =>
@@ -84,27 +86,7 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
       ),
     ),
   ]
-  const eventGroups: { group: string; items: { value: string; label: string }[] }[] = [
-    {
-      group: '关卡',
-      items: [
-        { value: 'level.started', label: '关卡开始' },
-        { value: 'level.questionLoaded', label: '题目载入' },
-        { value: 'level.finished', label: '关卡结算' },
-      ],
-    },
-    {
-      group: '组件事件',
-      items: comps.flatMap((c) => {
-        const ct = contractOf(c.type)
-        return Object.keys(ct?.events ?? {}).map((tail) => ({
-          value: `${c.id}.${tail}`,
-          label: `${c.name || c.id} · ${tail}`,
-        }))
-      }),
-    },
-    ...(internalEvents.length > 0 ? [{ group: '内部事件', items: internalEvents.map((e) => ({ value: e, label: e })) }] : []),
-  ]
+  const eventGroups = buildEventGroups(doc)
 
   // call 方法候选（契约命令 + 基座命令；level 用 facade 方法）
   const methodOptions = (target: string): { name: string; doc?: string }[] => {
@@ -260,6 +242,9 @@ function CallNodeEditor(props: {
   // views.goto 特化：参数不是通用键值对，而是视图下拉（低代码：不手写 id）
   const isViewsGoto = node.target === 'views' && node.method === 'goto'
   const gotoId = isViewsGoto ? /^["'](.+)["']$/.exec((node.args[0] ?? '').trim())?.[1] ?? '' : ''
+  // sound/synth 的 play：音符可视化编辑（音名/频率选择，不再手写 [{midi:..}]）
+  const compTypeOfTarget = comps.find((c) => c.id === node.target)?.type
+  const isPlayCall = (compTypeOfTarget === 'sound' || compTypeOfTarget === 'synth') && node.method === 'play'
 
   return (
     <>
@@ -314,7 +299,14 @@ function CallNodeEditor(props: {
       </label>
       <div className="ginsp-row">
         参数
-        {isViewsGoto ? (
+        {isPlayCall ? (
+          <PlayArgsEditor
+            args={node.args}
+            kind={compTypeOfTarget as 'sound' | 'synth'}
+            ctx={props.ctx}
+            onChange={(args) => props.onPatch({ args } as unknown as Partial<GNode>)}
+          />
+        ) : isViewsGoto ? (
           <label className="ginsp-row">
             目标视图
             <select

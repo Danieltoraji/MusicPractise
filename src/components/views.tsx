@@ -7,7 +7,7 @@ import { Accidental, Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'v
 import { Note } from 'tonal'
 import type { ComponentInstance } from '../engine/level'
 import type { Json } from '../engine/expr'
-import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, RhythmState, SliderState, StaffState, SynthState, TunerState } from '../runtime/componentDef'
+import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, RhythmState, SliderState, SoundState, StaffState, SynthState, TunerState } from '../runtime/componentDef'
 import { SYNTH_WAVE_ZH } from '../runtime/componentDef'
 import type { ComponentStore } from '../runtime/store'
 import type { MusicDoc } from '../engine/level'
@@ -223,6 +223,32 @@ export function SynthView({ spec, store }: ViewProps) {
 }
 
 // ---------------------------------------------------------------------------
+// 发声器（sound）：采样钢琴播放面板（lastPlay 变化触发播放脉冲）
+// ---------------------------------------------------------------------------
+
+export function SoundView({ spec, store }: ViewProps) {
+  const { lastPlay } = useComponentState<SoundState & { __enabled?: boolean }>(store, spec.id)
+  const [pulse, setPulse] = useState(false)
+
+  useEffect(() => {
+    if (!lastPlay) return
+    setPulse(true)
+    const timer = window.setTimeout(() => setPulse(false), 700)
+    return () => window.clearTimeout(timer)
+  }, [lastPlay])
+
+  const count = Array.isArray(lastPlay) ? (lastPlay as unknown[]).length : 0
+
+  return (
+    <div style={boxStyle(spec)} className={`comp-sound ${pulse ? 'is-playing' : ''}`}>
+      <div className="sound-icon">🔊</div>
+      <div className="sound-name">采样音色 · 钢琴</div>
+      <div className="sound-meta muted">{pulse ? `▶ ${count} 音` : '就绪'}</div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 
 export function ComponentView(props: ViewProps): React.ReactNode {
   const { spec } = props
@@ -254,6 +280,8 @@ export function ComponentView(props: ViewProps): React.ReactNode {
       return <TunerView {...props} />
     case 'synth':
       return <SynthView {...props} />
+    case 'sound':
+      return <SoundView {...props} />
     default:
       // 未知组件类型：降级为占位框而不是崩溃（docs §7 承诺）
       return (

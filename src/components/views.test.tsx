@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentInstance } from '../engine/level'
 import { ComponentStore } from '../runtime/store'
-import { ButtonView, ChoiceView, FingeringView, StaffView, SynthView } from './views'
+import { ButtonView, ChoiceView, FingeringView, SoundView, StaffView, SynthView } from './views'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -154,6 +154,20 @@ describe('SynthView（合成器面板）', () => {
     expect(c.querySelector('.comp-synth.is-playing')).toBeNull()
     act(() => store.applyCommand('synth1', 'play', { notes: [{ midi: 60 }] }))
     expect(c.querySelector('.comp-synth.is-playing')).toBeTruthy()
+    expect(c.textContent).toContain('1 音')
+  })
+})
+
+describe('SoundView（发声器面板）', () => {
+  it('渲染采样音色标识；lastPlay 变化触发播放态', () => {
+    const store = new ComponentStore()
+    const spec = { id: 'sound1', type: 'sound', layout: { x: 0, y: 0, w: 200, h: 90 } } as ComponentInstance
+    store.init([spec])
+    const c = renderEl(<SoundView spec={spec} store={store} emit={() => {}} />)
+    expect(c.textContent).toContain('采样音色 · 钢琴')
+    expect(c.querySelector('.comp-sound.is-playing')).toBeNull()
+    act(() => store.applyCommand('sound1', 'play', { notes: [{ midi: 60 }] }))
+    expect(c.querySelector('.comp-sound.is-playing')).toBeTruthy()
     expect(c.textContent).toContain('1 音')
   })
 })

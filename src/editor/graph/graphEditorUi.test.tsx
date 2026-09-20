@@ -200,8 +200,11 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
   })
 
   it('call 节点：切方法重置参数形态，「按契约补全」生成键值对', () => {
-    // onChange 即用新 doc 重渲染：后续 DOM 交互（补全按钮）建立在最新 Inspector 上
-    let current = docWith([{ id: 'c1', kind: 'call', target: 'sound1', method: 'stop', args: [], x: 600, y: 0 }])
+    // 用 button 组件（sound 的 play 已特化为音符编辑器，不走通用键值路径）
+    let current = docWith([{ id: 'c1', kind: 'call', target: 'btn1', method: 'setEnabled', args: [], x: 600, y: 0 }], [
+      { id: 'sound1', type: 'sound', visible: false },
+      { id: 'btn1', type: 'button' },
+    ] as never)
     const container = document.createElement('div')
     document.body.appendChild(container)
     let root!: Root
@@ -214,21 +217,20 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
       root.render(<GraphEditor doc={current} onChange={rerender} />)
     })
     act(() => {
-      ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('sound1·stop'))!
+      ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('btn1·setEnabled'))!
         .dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
-    // 动作下拉：stop（无参）→ play（有参）
-    const methodSelect = [...container.querySelectorAll('.ginsp select')].find((s) => (s as HTMLSelectElement).value === 'stop')
+    // 动作下拉：setEnabled（有参）→ setText（有参，形态保持）→ 再切
+    const methodSelect = [...container.querySelectorAll('.ginsp select')].find((s) => (s as HTMLSelectElement).value === 'setEnabled')
     expect(methodSelect).toBeTruthy()
-    act(() => changeSelect(methodSelect as HTMLSelectElement, 'play'))
-    expect(current.content.logic.nodes.find((n) => n.id === 'c1')).toMatchObject({ method: 'play', args: ['{}'] })
-    // 按契约补全：sound.play 的 notes/tempo/mode 键值对
+    act(() => changeSelect(methodSelect as HTMLSelectElement, 'setText'))
+    expect(current.content.logic.nodes.find((n) => n.id === 'c1')).toMatchObject({ method: 'setText', args: ['{}'] })
+    // 按契约补全：button.setText 的 text 键值对
     const fillBtn = [...container.querySelectorAll('.call-args-actions button')].find((b) => b.textContent?.includes('按契约补全'))
     expect(fillBtn).toBeTruthy()
     act(() => (fillBtn as HTMLElement).click())
     const args = (current.content.logic.nodes.find((n) => n.id === 'c1') as { args: string[] }).args
-    expect(args[0]).toContain('notes:')
-    expect(args[0]).toContain('tempo:')
+    expect(args[0]).toContain('text:')
     roots.push(root)
     containers.push(container)
   })
