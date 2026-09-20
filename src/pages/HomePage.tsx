@@ -1,11 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type ProgressRecord } from '../library/db'
-import { partitionLevels } from '../library/browse'
+import { partitionLevels, readLevelDoc } from '../library/browse'
 import type { LevelDoc } from '../engine/level'
 import { ErrorBoundary } from '../library/ErrorBoundary'
 
-function diffStars(doc: LevelDoc): string {
-  const diff = Math.min(5, Math.max(1, Number(doc.meta.difficulty) || 1))
+function diffStars(doc: LevelDoc | null): string {
+  const diff = Math.min(5, Math.max(1, Number(doc?.meta.difficulty) || 1))
   return '★'.repeat(diff)
 }
 
@@ -73,18 +73,22 @@ export function HomePage() {
         ) : (
           <div className="cards">
             {independent.map((rec) => {
-              const doc = rec.doc as unknown as LevelDoc
+              // 库记录可能是 v1/v2 旧格式：经迁移读取；毒数据降级为最小卡（绝不白屏）
+              const doc = readLevelDoc(rec)
+              const meta = doc?.meta as { title?: unknown; description?: unknown } | undefined
               return (
                 <a key={rec.id} className="card" href={`#/level/${rec.id}`}>
                   <div className="card-kind">
                     关卡 · {diffStars(doc)} {rec.builtIn ? '' : '· 导入'}
                   </div>
                   <h3>
-                    {String(doc.meta.title)} <ProgressBadge levelId={rec.id} progress={progress} />
+                    {String(meta?.title ?? rec.title)} <ProgressBadge levelId={rec.id} progress={progress} />
                   </h3>
-                  <p>{String(doc.meta.description ?? '')}</p>
+                  <p>{String(meta?.description ?? '')}</p>
                   <div className="card-meta">
-                    {doc.content.components.length} 个组件 · {doc.content.table.rows.length} 道题
+                    {doc
+                      ? `${doc.content.components.length} 个组件 · ${doc.content.table.rows.length} 道题`
+                      : '文档格式无法解析——可在资源库导出排查，或删除后重新导入'}
                   </div>
                 </a>
               )

@@ -1,11 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type LibraryRecord, type ProgressRecord } from '../library/db'
-import { childIds } from '../library/browse'
+import { childIds, readLevelDoc } from '../library/browse'
 import type { LevelDoc } from '../engine/level'
 import { ErrorBoundary } from '../library/ErrorBoundary'
 
-function diffStars(doc: LevelDoc): string {
-  const diff = Math.min(5, Math.max(1, Number(doc.meta.difficulty) || 1))
+function diffStars(doc: LevelDoc | null): string {
+  const diff = Math.min(5, Math.max(1, Number(doc?.meta.difficulty) || 1))
   return '★'.repeat(diff)
 }
 
@@ -86,17 +86,19 @@ export function SeriesPage({ id }: { id: string }) {
                       </div>
                     )
                   }
-                  const ldoc = level.doc as unknown as LevelDoc
+                  // 库记录可能是 v1/v2 旧格式：经迁移读取；毒数据降级为最小行
+                  const ldoc = readLevelDoc(level)
                   const p = progress.find((x) => x.levelId === levelId)
                   return (
                     <a key={levelId} className="level-row" href={`#/level/${levelId}`}>
                       <span className="level-title">
-                        {String(ldoc.meta.title)} <span className="muted">{diffStars(ldoc)}</span>
+                        {String(ldoc?.meta.title ?? level.title)}{' '}
+                        <span className="muted">{diffStars(ldoc)}</span>
                       </span>
                       <span className="level-side">
                         {p && p.passed === 1 && <span className="badge pass">✅ 通过</span>}
                         {p && p.passed !== 1 && <span className="badge">最佳 {p.bestScore}</span>}
-                        <span className="muted">{ldoc.content.table.rows.length} 道题</span>
+                        <span className="muted">{ldoc ? `${ldoc.content.table.rows.length} 道题` : '格式无法解析'}</span>
                       </span>
                     </a>
                   )
