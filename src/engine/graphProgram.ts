@@ -53,8 +53,17 @@ export interface GEdge {
   port?: 'true' | 'false'
 }
 
-/** level facade 暴露给逻辑的方法（伪实例 id = "level"） */
-export const LEVEL_METHODS = ['next', 'restart', 'finish'] as const
+/** 行指针系统变量：运行时当前行号（0 起）。赋值即跳转题目行（LevelSession 注入钩子），lint 豁免声明 */
+export const ROW_POINTER_VAR = '__row'
+
+/** 题目载入事件（docs/25 改名；旧名 level.questionLoaded 由迁移器幂等改写） */
+export const QUESTION_LOADED_EVENT = 'question.loaded'
+
+/** level facade 暴露给逻辑的方法（伪实例 id = "level"）；换行/跳行走 question 伪实例与 v.__row */
+export const LEVEL_METHODS = ['restart', 'finish'] as const
+
+/** question 伪实例的方法：next = 推进到下一题（末题则结算关卡） */
+export const QUESTION_METHODS = ['next'] as const
 
 /** views 伪实例的方法（v3 视图切换）；goto 的参数 = 视图 id 字符串字面量 */
 export const VIEWS_METHODS = ['goto'] as const
@@ -284,7 +293,8 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
   const issues: LintIssue[] = []
   const compIds = ctx?.componentIds ? new Set(ctx.componentIds) : null
   const viewIdSet = ctx?.viewIds ? new Set(ctx.viewIds) : null
-  const declaredVars = new Set<string>(ctx?.extraVariableKeys ?? [])
+  // 行指针是系统级声明（LevelSession 装载行时写入、赋值即跳行），无需在 variables 里声明
+  const declaredVars = new Set<string>([ROW_POINTER_VAR, ...(ctx?.extraVariableKeys ?? [])])
   for (const key of Object.keys(program.variables ?? {})) declaredVars.add(key)
 
   // 0) schema：未知类型与必填字段
@@ -492,7 +502,18 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
               code: 'dangling-ref',
               nodeId: node.id,
               field: 'method',
-              message: `${where}: level 没有 "${node.method}" 方法（可用: ${LEVEL_METHODS.join('/')}）`,
+              message: `${where}: level 没有 "${node.method}" 方法（可用: ${LEVEL_METHODS.join('/')}；换行请用 question.next 或赋值 v.${ROW_POINTER_VAR}）`,
+            })
+          }
+          break
+        }
+        if (node.target === 'question') {
+          if (!(QUESTION_METHODS as readonly string[]).includes(node.method)) {
+            issues.push({
+              code: 'dangling-ref',
+              nodeId: node.id,
+              field: 'method',
+              message: `${where}: question 没有 "${node.method}" 方法（可用: ${QUESTION_METHODS.join('/')}）`,
             })
           }
           break

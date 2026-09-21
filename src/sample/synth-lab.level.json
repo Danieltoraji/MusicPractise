@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "meta": {
     "title": "音色实验室 · 合成器示例",
-    "description": "一张逻辑图 × 一张数据表（6 行）驱动全部内容：每种音色一行数据，「下一音色」推进行并自动刷新显示。演示数据表驱动 + 合成器 + 模版视图换行刷新。",
+    "description": "一张逻辑图 × 一张数据表（6 行）驱动全部内容：每种音色一行数据，「下一音色」推进题目行，文本组件绑定 $q.列名 随行自动刷新。演示数据表驱动 + 行指针 + 合成器。",
     "author": {
       "name": "POC 内置示例"
     },
@@ -24,8 +24,7 @@
     "views": [
       {
         "id": "lab",
-        "name": "音色实验室",
-        "template": true
+        "name": "音色实验室"
       }
     ],
     "components": [
@@ -61,6 +60,9 @@
         "props": {
           "text": "",
           "tone": "success"
+        },
+        "bindings": {
+          "text": "$q.title"
         }
       },
       {
@@ -95,6 +97,9 @@
         "props": {
           "text": "",
           "tone": "info"
+        },
+        "bindings": {
+          "text": "$q.desc"
         }
       },
       {
@@ -173,30 +178,8 @@
         {
           "id": "on_q",
           "kind": "on",
-          "event": "level.questionLoaded",
+          "event": "question.loaded",
           "x": 0,
-          "y": 0
-        },
-        {
-          "id": "wshow",
-          "kind": "call",
-          "target": "wave_label",
-          "method": "show",
-          "args": [
-            "{text: q.title}"
-          ],
-          "x": 260,
-          "y": 0
-        },
-        {
-          "id": "dshow",
-          "kind": "call",
-          "target": "desc_label",
-          "method": "show",
-          "args": [
-            "{text: q.desc}"
-          ],
-          "x": 520,
           "y": 0
         },
         {
@@ -238,7 +221,7 @@
         {
           "id": "nextrow",
           "kind": "call",
-          "target": "level",
+          "target": "question",
           "method": "next",
           "args": [],
           "x": 260,
@@ -303,21 +286,6 @@
       ],
       "edges": [
         {
-          "id": "e1",
-          "from": "on_q",
-          "to": "wshow"
-        },
-        {
-          "id": "e2",
-          "from": "wshow",
-          "to": "dshow"
-        },
-        {
-          "id": "e3",
-          "from": "dshow",
-          "to": "pshow"
-        },
-        {
           "id": "e4",
           "from": "on_playbtn",
           "to": "synthplay"
@@ -346,6 +314,11 @@
           "id": "e9",
           "from": "on_again",
           "to": "restart"
+        },
+        {
+          "id": "e1",
+          "from": "on_q",
+          "to": "pshow"
         }
       ]
     },
@@ -353,19 +326,23 @@
       "columns": [
         {
           "key": "wave",
-          "label": "音色"
+          "label": "音色",
+          "type": "text"
         },
         {
           "key": "title",
-          "label": "名称"
+          "label": "名称",
+          "type": "text"
         },
         {
           "key": "desc",
-          "label": "说明"
+          "label": "说明",
+          "type": "text"
         },
         {
           "key": "notes",
-          "label": "示例音符"
+          "label": "示例音符",
+          "type": "notes"
         }
       ],
       "rows": [

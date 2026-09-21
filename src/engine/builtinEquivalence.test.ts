@@ -87,7 +87,8 @@ async function runV3(
   const engine = new GraphEngine(program as never, host)
   engine.vars.__row = 0 // 行门控装载子图依赖的系统变量（真实运行时由 LevelSession.loadRow 写入）
   for (const [event, payload] of script) {
-    engine.dispatch(event, payload)
+    // docs/25 改名：v3 侧题目载入事件为 question.loaded（v1 引擎保持旧名不变）
+    engine.dispatch(event === 'level.questionLoaded' ? 'question.loaded' : event, payload)
     // 排空 drain 与微任务（无 wait 节点的内置关卡即可收敛）
     for (let i = 0; i < 100; i++) await Promise.resolve()
   }
@@ -137,7 +138,10 @@ describe('行为等价 golden：内置关卡 v1 vs v3（表格行 + 行门控装
       delete varsV3.__row // 运行时簿记变量（行门控用），v1 侧无此键，不参与终态对比
 
       expect(varsV3).toEqual(varsV1)
-      expect(recV3.commands).toEqual(recV1.commands)
+      // 命令序列一致（docs/25 改名折算：v1 的 level.next 即 v3 的 question.next）
+      const canon = (cs: { path: string; args: Json }[]) =>
+        cs.map((c) => ({ ...c, path: c.path === 'level.next' ? 'question.next' : c.path }))
+      expect(canon(recV3.commands)).toEqual(canon(recV1.commands))
       // 同样的表达式错误在两引擎中发生同样次数（规则跳过 vs 处理器中断，单规则等价）
       expect(recV3.errors).toHaveLength(recV1.errors.length)
     })

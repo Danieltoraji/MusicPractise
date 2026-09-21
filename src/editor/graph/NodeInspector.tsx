@@ -7,7 +7,7 @@
 import { useRef, useState } from 'react'
 import { exprFunctionNames } from '../../engine/expr'
 import type { LevelDoc } from '../../engine/level'
-import { LEVEL_METHODS, type GNode, type LintIssue } from '../../engine/graphProgram'
+import { LEVEL_METHODS, QUESTION_METHODS, type GNode, type LintIssue } from '../../engine/graphProgram'
 import { BASE_COMMANDS, type ContractDoc } from '../../runtime/componentDef'
 import { getDef } from '../../runtime/store'
 import { parseCommandParams, exprToOperand, type BridgeCtx, type Operand } from './exprBridge'
@@ -91,6 +91,7 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
   // call 方法候选（契约命令 + 基座命令；level 用 facade 方法）
   const methodOptions = (target: string): { name: string; doc?: string }[] => {
     if (target === 'level') return LEVEL_METHODS.map((m) => ({ name: m, doc: '无参数' }))
+    if (target === 'question') return QUESTION_METHODS.map((m) => ({ name: m, doc: '无参数' }))
     if (target === 'views') return [{ name: 'goto', doc: '{ id: 视图id }' }]
     const ct = contractOf(comps.find((c) => c.id === target)?.type ?? '')
     const own = Object.entries(ct?.commands ?? {})
@@ -267,10 +268,11 @@ function CallNodeEditor(props: {
             props.onPatch({ target, method, args } as unknown as Partial<GNode>)
           }}
         >
-          {!comps.some((c) => c.id === node.target) && node.target !== 'level' && node.target !== 'views' && (
+          {!comps.some((c) => c.id === node.target) && node.target !== 'level' && node.target !== 'question' && node.target !== 'views' && (
             <option value={node.target}>{`${node.target}（当前，实例不存在）`}</option>
           )}
           <option value="level">关卡（level）</option>
+          <option value="question">题目（question）</option>
           <option value="views">视图（views）</option>
           {comps.map((c) => (
             <option key={c.id} value={c.id}>{`${compLabel(c.id)}（${c.id}）`}</option>

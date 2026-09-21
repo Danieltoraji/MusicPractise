@@ -4,9 +4,8 @@
  */
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type LibraryRecord } from '../library/db'
-import type { LevelDoc } from '../engine/level'
-import { isGraphProgram, lintGraphProgram } from '../engine/graphProgram'
-import { migrateLogicV1toV2 } from '../engine/migrate'
+import { lintGraphProgram } from '../engine/graphProgram'
+import { migrateDocToV3 } from '../engine/migrateDoc'
 import { generateScript } from '../engine/script'
 import { ErrorBoundary } from '../library/ErrorBoundary'
 
@@ -31,8 +30,8 @@ export function GraphPage({ id }: { id: string }) {
     )
   }
 
-  const doc = (record as LibraryRecord).doc as unknown as LevelDoc
-  const program = isGraphProgram(doc.content.logic) ? doc.content.logic : migrateLogicV1toV2(doc.content.logic)
+  const doc = migrateDocToV3((record as LibraryRecord).doc) // 只读视图也走迁移规范化（旧名 question 改写 + 列类型补全）
+  const program = doc.content.logic
   const script = generateScript(program)
   const warnings = lintGraphProgram(program)
   const varEntries = Object.entries(program.variables ?? {})

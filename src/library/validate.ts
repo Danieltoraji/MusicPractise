@@ -91,10 +91,6 @@ export function loadLevelDoc(raw: unknown): LoadResult {
       viewIds: doc.content.views.map((v) => v.id),
     })
     // v3 结构告警（schema 无法表达的约束，评审 P2-12/13）
-    const templateViews = doc.content.views.filter((v) => v.template)
-    if (templateViews.length > 1) {
-      lintWarnings.push(`存在 ${templateViews.length} 个模版视图（${templateViews.map((v) => v.id).join('、')}）——运行时只取第一个`)
-    }
     const viewIdSet = new Set(doc.content.views.map((v) => v.id))
     for (const c of doc.content.components) {
       if (c.view !== undefined && !viewIdSet.has(c.view)) {

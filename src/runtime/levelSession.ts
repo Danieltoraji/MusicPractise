@@ -1,14 +1,16 @@
 /**
  * 关卡会话：与 React 无关的流程核心（v3：视图切换 + 数据表行推进）。
  * - 视图 = 互斥渲染边界：当前视图的组件才渲染；切换派发 view.entered {view}
- * - 数据表行 = 旧"题目"：q.* 指向当前行；level.next 推进行并在有模版视图时自动 goto 过去
+ * - 数据表行 = 题目：q.* 指向当前行；question.next 推进到下一题（末题结算）；
+ *   赋值 v.__row = N 即跳转第 N 题（rowPointerWrite 钩子）——换行不切视图，
+ *   当前视图内容随行刷新（loadRow 重放绑定；无绑定组件靠 question.loaded 重放命令）
  * - 逻辑执行 = GraphEngine（图 IR v2）；v3 文档已无 logicPatch（迁移器编译为图上的行门控子图）
  * 抽出为纯类是为了可单测；LevelRunner 只是其薄壳。
  */
 import type { LevelDoc, TableRow, ViewDef } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { GraphEngine } from '../engine/graphEngine'
-import { isGraphProgram, lintGraphProgram, type GraphProgram } from '../engine/graphProgram'
+import { isGraphProgram, lintGraphProgram, QUESTION_LOADED_EVENT, ROW_POINTER_VAR, type GraphProgram } from '../engine/graphProgram'
 import { migrateLogicV1toV2 } from '../engine/migrate'
 import { ComponentStore } from './store'
 import type { Effect } from './componentDef'
@@ -70,6 +72,8 @@ export class LevelSession {
     this.engine = new GraphEngine(this.baseProgram, {
       getQuestion: () => this.row as unknown as Json,
       dispatchCommand: (path, args, context) => this.handleCommand(path, args, context),
+      // 行指针赋值 = 跳转题目行（docs/25）：clamp 到有效行区间，重复行 no-op 防事件环
+      rowPointerWrite: (row) => this.jumpToRow(row),
       queryComponent: (target, method, args) => this.store.query(target, method, args),
       getNowSeconds: host.getNowSeconds,
       onError: (err, where) => {
@@ -106,11 +110,6 @@ export class LevelSession {
 
   get currentView(): string {
     return this.view
-  }
-
-  /** 模版视图 id（至多一个；level.next 推进行后自动切换过去） */
-  get templateView(): string | null {
-    return this.views.find((v) => v.template)?.id ?? null
   }
 
   /** 组件视图发事件的总入口（稳定引用，见 emitFor） */
@@ -188,19 +187,28 @@ export class LevelSession {
     }
   }
 
-  /** 推进到第 p 行（按 flow 顺序）；绑定重放 + onRow 回调 + level.questionLoaded */
+  /** 推进到第 p 行（按 flow 顺序）；绑定重放 + onRow 回调 + question.loaded */
   private loadRow(p: number): void {
     // 换行即停掉上一行的计时器：编译进图的行门控逻辑不会跨行触发，但已运行的句柄不会自动消失
     this.stopAllTimers()
     this.pos = p
     this.row = this.doc.content.table.rows[this.order[p]] ?? null
     // 系统变量 __row = 原始行号：迁移器编译的行门控子图（logicPatch）据此判行——
-    // 它可能在任意事件（x.ping/timer.tick…）上触发，那些事件的负载里没有行号
-    this.engine.vars.__row = this.order[p]
+    // 它可能在任意事件（x.ping/timer.tick…）上触发，那些事件的负载里没有行号。
+    // 直写字段不经 rowPointerWrite 钩子（否则赋值跳行会在这里递归触发自身）
+    this.engine.vars[ROW_POINTER_VAR] = this.order[p]
     this.applyBindings(this.view)
     this.host.onRow(p, this.order.length, this.row)
     // payload.row = 原始行号（shuffle 下与 index 不同）——迁移器编译的行门控子图据此判行
-    this.engine.dispatch('level.questionLoaded', { index: p, total: this.order.length, row: this.order[p] })
+    this.engine.dispatch(QUESTION_LOADED_EVENT, { index: p, total: this.order.length, row: this.order[p] })
+  }
+
+  /** 赋值 v.__row = N：跳转到第 N 题（原始行号，clamp 到有效区间）。同行 no-op，结算后终态 */
+  private jumpToRow(row: number): void {
+    if (this.finishedFlag || this.order.length === 0) return
+    const target = Math.min(this.order.length - 1, Math.max(0, row))
+    if (target === this.pos) return
+    this.loadRow(target)
   }
 
   private handleCommand(path: string, args: Json, context?: { nodeId?: string; event?: string }): void {
@@ -209,17 +217,16 @@ export class LevelSession {
     if (dot <= 0) return
     const cid = path.slice(0, dot)
     const cmd = path.slice(dot + 1)
-    if (cid === 'level') {
+    if (cid === 'question') {
       if (cmd === 'next') {
-        if (!this.finishedFlag && this.pos + 1 < this.order.length) {
-          this.loadRow(this.pos + 1)
-          // 模版视图 = 「显示题目」抽象：换行后自动切过去（同视图则 no-op）
-          const tpl = this.templateView
-          if (tpl) this.setView(tpl)
-        } else {
-          this.finish()
-        }
-      } else if (cmd === 'restart') {
+        // 下一题：纯推进行（换行不切视图，当前视图内容随 loadRow 刷新）；末题则结算关卡
+        if (!this.finishedFlag && this.pos + 1 < this.order.length) this.loadRow(this.pos + 1)
+        else this.finish()
+      }
+      return
+    }
+    if (cid === 'level') {
+      if (cmd === 'restart') {
         this.restart()
       } else if (cmd === 'finish') {
         // level facade：主动结算（args.passed === false 时强制未通过）
@@ -301,8 +308,8 @@ export class LevelSession {
   }
 
   private finish(passedArg?: boolean): void {
-    // 幂等守卫：已结算后再触发（如 on finished → level.next）直接忽略，
-    // 否则会形成 finish → level.finished → level.next → finish 的无界同步递归
+    // 幂等守卫：已结算后再触发（如 on finished → question.next）直接忽略，
+    // 否则会形成 finish → level.finished → question.next → finish 的无界同步递归
     if (this.finishedFlag) return
     this.finishedFlag = true
     let passed = true

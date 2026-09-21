@@ -10,7 +10,7 @@ const comps: CompInfo[] = [
 describe('friendlyEvent', () => {
   it('生命周期事件翻译', () => {
     expect(friendlyEvent('level.started')).toBe('关卡开始')
-    expect(friendlyEvent('level.questionLoaded')).toBe('题目载入')
+    expect(friendlyEvent('question.loaded')).toBe('题目载入')
     expect(friendlyEvent('level.finished')).toBe('关卡结算')
   })
 
@@ -28,7 +28,7 @@ describe('summarizeNode', () => {
     expect(summarizeNode({ id: 'b', kind: 'call', target: 'sound1', method: 'play', args: ["{notes: q.data.x}"] }, comps)).toEqual([
       'sound1·play { notes }',
     ])
-    expect(summarizeNode({ id: 'c', kind: 'call', target: 'level', method: 'next', args: [] }, comps)).toEqual(['level·next'])
+    expect(summarizeNode({ id: 'c', kind: 'call', target: 'question', method: 'next', args: [] }, comps)).toEqual(['question·next'])
     expect(summarizeNode({ id: 'd', kind: 'assign', target: 'score', value: { expr: 'v.score + 1' } }, comps)).toEqual([
       'v.score = v.score + 1',
     ])

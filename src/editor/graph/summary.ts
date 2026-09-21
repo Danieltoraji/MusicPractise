@@ -19,7 +19,7 @@ export function compLabel(comps: CompInfo[] | undefined, id: string): string {
 
 const LEVEL_EVENT_ZH: Record<string, string> = {
   'level.started': '关卡开始',
-  'level.questionLoaded': '题目载入',
+  'question.loaded': '题目载入',
   'level.finished': '关卡结算',
 }
 

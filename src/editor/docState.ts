@@ -24,7 +24,7 @@ export function blankLevelDoc(): LevelDoc {
     },
     refs: [],
     content: {
-      views: [{ id: 'main', name: '主视图', template: true }],
+      views: [{ id: 'main', name: '主视图' }],
       components: [],
       logic: {
         logicVersion: 2,
@@ -78,13 +78,6 @@ export function updateView(doc: LevelDoc, id: string, patch: Partial<Omit<ViewDe
   const view = next.content.views.find((v) => v.id === id)
   if (!view) return next
   if (patch.name !== undefined) view.name = patch.name
-  if (patch.template !== undefined) {
-    // 模版视图至多一个：设真时清掉其它视图的 template
-    for (const v of next.content.views) {
-      if (v.id !== id) v.template = false
-    }
-    view.template = patch.template
-  }
   return next
 }
 

@@ -96,7 +96,7 @@
         {
           "id": "q0_load",
           "kind": "on",
-          "event": "level.questionLoaded"
+          "event": "question.loaded"
         },
         {
           "id": "q0_gate",
@@ -122,7 +122,7 @@
         {
           "id": "q1_load",
           "kind": "on",
-          "event": "level.questionLoaded"
+          "event": "question.loaded"
         },
         {
           "id": "q1_gate",
@@ -148,7 +148,7 @@
         {
           "id": "load_on",
           "kind": "on",
-          "event": "level.questionLoaded"
+          "event": "question.loaded"
         },
         {
           "id": "load_d0",
@@ -267,7 +267,7 @@
         {
           "id": "next-or-restart_d0",
           "kind": "call",
-          "target": "level",
+          "target": "question",
           "method": "next",
           "args": []
         },
@@ -476,23 +476,25 @@
     "views": [
       {
         "id": "main",
-        "name": "主视图",
-        "template": true
+        "name": "主视图"
       }
     ],
     "table": {
       "columns": [
         {
           "key": "prompt",
-          "label": "题面"
+          "label": "题面",
+          "type": "json"
         },
         {
           "key": "data",
-          "label": "数据"
+          "label": "数据",
+          "type": "json"
         },
         {
           "key": "scoring",
-          "label": "分值"
+          "label": "分值",
+          "type": "json"
         }
       ],
       "rows": [

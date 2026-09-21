@@ -14,7 +14,7 @@
  * 传入 v1 LogicProgram 时构造器内透明迁移（ECA→图，见 migrate.ts）。
  */
 import { evalExpr, type ExprContext, type ExprScope, type Json } from './expr'
-import { isGraphProgram, type GEdge, type GNode, type GraphProgram } from './graphProgram'
+import { isGraphProgram, ROW_POINTER_VAR, type GEdge, type GNode, type GraphProgram } from './graphProgram'
 import { migrateLogicV1toV2 } from './migrate'
 import type { LogicProgram } from './logic'
 
@@ -37,8 +37,13 @@ export interface CommandContext {
 export interface GraphHost {
   /** 当前题目对象（表达式作用域 q） */
   getQuestion(): Json | null
-  /** 命令分发（实例id.方法 / level.next 等），由宿主实现 */
+  /** 命令分发（实例id.方法 / level.finish 等），由宿主实现 */
   dispatchCommand(path: string, args: Json, context?: CommandContext): void
+  /**
+   * 行指针写入钩子（docs/25）：assign v.__row = N 即「跳转题目行」——宿主执行完整行装载
+   * （写指针/重放绑定/派发 question.loaded）。未实现时退化为普通变量写。
+   */
+  rowPointerWrite?(row: number): void
   /** 查询方法调用（assign 右侧的 target.method(args)）；未实现时查询节点抛错 */
   queryComponent?(target: string, method: string, args: Json[]): Json
   getNowSeconds?: () => number
@@ -227,7 +232,16 @@ export class GraphEngine {
       }
       case 'assign': {
         const value = node.value
-        this.vars[node.target] = 'expr' in value ? evalExpr(value.expr, scope, ectx) : this.execQuery(value.call, scope, ectx)
+        const next = 'expr' in value ? evalExpr(value.expr, scope, ectx) : this.execQuery(value.call, scope, ectx)
+        if (node.target === ROW_POINTER_VAR && this.host.rowPointerWrite) {
+          if (typeof next !== 'number' || !Number.isFinite(next)) {
+            this.fail(new Error(`v.${ROW_POINTER_VAR} 需要赋数字（收到 ${JSON.stringify(next)}）`), { event: currentEvent, nodeId: node.id })
+            return null
+          }
+          this.host.rowPointerWrite(Math.trunc(next))
+          return this.nextOf(node.id)
+        }
+        this.vars[node.target] = next
         return this.nextOf(node.id)
       }
       case 'emit': {

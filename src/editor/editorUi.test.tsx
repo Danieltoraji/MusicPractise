@@ -15,7 +15,7 @@ const baseDoc = (): LevelDoc => ({
   meta: { title: '编辑器测试' },
   refs: [],
   content: {
-    views: [{ id: 'main', name: '主视图', template: true }],
+    views: [{ id: 'main', name: '主视图' }],
     components: [{ id: 'staff1', type: 'staff', visible: true, view: 'main' }],
     logic: {
       logicVersion: 2,

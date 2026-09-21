@@ -19,18 +19,20 @@ export interface MusicDoc {
  * 视图（v3）：互斥的表现层边界——同一时刻只渲染当前视图的组件。
  * 裁决（docs/20）：视图不划分变量作用域与逻辑图作用域（v.* 全局、单图）；
  * 事件隔离由「非当前视图组件不渲染 → 不发事件」免费获得。
- * template：至多一个的「模版视图」——level.next 推进表格行后自动 goto 到它
- * 并按当前行重放数据绑定，即「显示题目」的低代码抽象。
+ * 裁决（docs/25）：模版视图移除——换行不切视图，当前视图内容随行自动刷新
+ * （loadRow 重放绑定 + question.loaded 重放命令）；跳行 = 赋值 v.__row。
  */
 export interface ViewDef {
   id: string
   name?: string
-  template?: boolean
 }
+
+/** 列类型：编辑器按类型渲染单元格编辑器（迁移器按行数据启发式补全；缺省 text） */
+export type ColumnType = 'text' | 'number' | 'boolean' | 'notes' | 'list' | 'json'
 
 /** 数据表（v3）：与变量平权的自定义字段大表格，每行一条题目数据；q.* 指向当前行 */
 export interface DataTable {
-  columns: { key: string; label?: string }[]
+  columns: { key: string; label?: string; type?: ColumnType }[]
   rows: Record<string, Json>[]
 }
 
@@ -63,7 +65,7 @@ export interface LevelDoc {
   meta: { title: string; [k: string]: Json }
   refs?: unknown[]
   content: {
-    /** 视图清单（≥1；template 至多一个；缺省视图 = 首个） */
+    /** 视图清单（≥1；缺省视图 = 首个） */
     views: ViewDef[]
     components: ComponentInstance[]
     /** 关卡逻辑：GraphProgram v2 图 IR（v1 ECA 在装载管线透明迁移） */

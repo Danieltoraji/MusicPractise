@@ -125,7 +125,7 @@
               },
               "minItems": 1,
               "maxItems": 32,
-              "description": "互斥视图；template（模版视图）至多一个，level.next 推进行后自动切换到它"
+              "description": "互斥视图；运行时只渲染当前视图，组件可绑定 $q.列名 随数据行自动刷新"
             },
             "components": {
               "type": "array",
@@ -175,10 +175,6 @@
         "name": {
           "type": "string",
           "maxLength": 24
-        },
-        "template": {
-          "type": "boolean",
-          "description": "模版视图：进入/换行时按当前表格行重放数据绑定（「显示题目」抽象）"
         }
       },
       "required": [
@@ -203,6 +199,10 @@
               "label": {
                 "type": "string",
                 "maxLength": 24
+              },
+              "type": {
+                "enum": ["text", "number", "boolean", "notes", "list", "json"],
+                "description": "列类型：编辑器按类型渲染单元格编辑器（迁移器按行数据启发式补全；缺省 text）"
               }
             },
             "required": [

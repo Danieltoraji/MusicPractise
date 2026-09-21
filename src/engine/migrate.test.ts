@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Json } from './expr'
 import { lintGraphProgram, type GNode, type GraphProgram } from './graphProgram'
 import { jsonToExpr, migrateLogicV1toV2 } from './migrate'
+import { normalizeLogic } from './migrateDoc'
 import type { LogicProgram } from './logic'
 
 // v1 夹具：内置关卡转为 v2 前的原始 ECA 形态（迁移器与行为等价测试的永久输入）
@@ -158,7 +159,8 @@ describe('golden：内置关卡迁移', () => {
         content: { components: { id: string }[]; questions: { logicPatch?: { variables?: Record<string, Json> } }[]; logic: LogicProgram }
       }
       const v1 = doc.content.logic
-      const g: GraphProgram = migrateLogicV1toV2(v1)
+      // 规范化对齐真实装载管线（docs/25）：level.next → question.next 等改名后再 lint
+      const g: GraphProgram = normalizeLogic(migrateLogicV1toV2(v1))
 
       // 装载期 lint 全绿（语法/引用/环检测层面）——迁移正确性的强断言
       // extraVariableKeys 对齐真实管线：题目 logicPatch.variables 声明的变量豁免

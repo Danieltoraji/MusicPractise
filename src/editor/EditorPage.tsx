@@ -35,7 +35,6 @@ import {
   updateComponent,
   updateTableCell,
   updateTableColumnLabel,
-  updateView,
 } from './docState'
 
 type Tab = 'canvas' | 'graph' | 'script' | 'table' | 'json'
@@ -377,15 +376,6 @@ function EditorCanvas({
               <button type="button" className="views-open" onClick={() => setView(v.id)}>
                 {v.id === currentView ? '▸ ' : ''}
                 {v.name || v.id}
-                {v.template ? ' 📋' : ''}
-              </button>
-              <button
-                type="button"
-                className={v.template ? 'views-tpl on' : 'views-tpl'}
-                title={v.template ? '模版视图：换行后自动切换到这里并重放数据绑定（点击取消）' : '设为模版视图（换行后自动切换到这里）'}
-                onClick={() => onChange(updateView(doc, v.id, { template: !v.template }))}
-              >
-                ⭐
               </button>
               <button
                 type="button"
@@ -410,7 +400,7 @@ function EditorCanvas({
           }}>
             + 视图
           </button>
-          <span className="muted views-hint">互斥视图：运行时只渲染当前视图 · 📋/⭐ = 模版视图（换行自动切换+重放绑定）</span>
+          <span className="muted views-hint">互斥视图：运行时只渲染当前视图 · 组件可绑定 $q.列名（数据映射），换行随行自动刷新</span>
         </div>
         <div
           ref={canvasRef}

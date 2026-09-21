@@ -15,7 +15,7 @@ const doc = (components: { id: string; type: string; name?: string }[], variable
     meta: { title: 't' },
     refs: [],
     content: {
-      views: [{ id: 'main', name: '主视图', template: true }],
+      views: [{ id: 'main', name: '主视图' }],
       components: components.map((c) => ({ ...c, visible: true, view: 'main' })),
       logic: { ...blankGraphProgram(), variables },
       table: { columns: [], rows: [] },
@@ -36,7 +36,9 @@ describe('buildPalette（节点库候选，精简后）', () => {
     expect(shape.method).toBe('play')
     expect(byId.view.items).toHaveLength(1)
     expect(byId.view.items[0].key).toBe('view-goto-generic')
-    expect(byId.level.items.map((i) => i.key)).toEqual(['lvl-next', 'lvl-restart', 'lvl-finish'])
+    expect(byId.level.items.map((i) => i.key)).toEqual(['q-next', 'lvl-restart', 'lvl-finish'])
+    const next = byId.level.items[0].make() as { kind: 'call'; target: string; method: string }
+    expect(next).toMatchObject({ target: 'question', method: 'next' })
   })
 
   it('make 产出合法节点形状（补 id 后过 addNode）', () => {
@@ -48,12 +50,12 @@ describe('buildPalette（节点库候选，精简后）', () => {
     expect(prog.nodes[0]).toMatchObject({ kind: 'call', target: 'staff1', x: 10, y: 20 })
   })
 
-  it('变量赋值组按已声明变量生成；无组件时组件动作落 level.next', () => {
+  it('变量赋值组按已声明变量生成；无组件时组件动作落 question.next', () => {
     const groups = buildPalette(doc([], { score: 0, streak: 0 }))
     const varGroup = groups.find((g) => g.id === 'variable')!
     expect(varGroup.items.map((i) => i.label)).toEqual(['v.score = …', 'v.streak = …'])
     const act = groups.find((g) => g.id === 'action')!.items[0].make()
-    expect(act).toMatchObject({ kind: 'call', target: 'level', method: 'next' })
+    expect(act).toMatchObject({ kind: 'call', target: 'question', method: 'next' })
   })
 })
 
@@ -72,7 +74,9 @@ describe('buildEventGroups（事件面板候选）', () => {
     } as typeof d
     const groups = buildEventGroups(d)
     const byName = Object.fromEntries(groups.map((g) => [g.group, g.items]))
-    expect(byName['关卡与视图']?.map((i) => i.value)).toEqual(['level.started', 'level.questionLoaded', 'level.finished', 'view.entered'])
+    expect(byName['关卡']?.map((i) => i.value)).toEqual(['level.started', 'level.finished'])
+    expect(byName['题目']?.map((i) => i.value)).toEqual(['question.loaded'])
+    expect(byName['视图']?.map((i) => i.value)).toEqual(['view.entered'])
     expect(byName['组件事件']?.map((i) => i.value)).toEqual(['staff1.noteClicked'])
     expect(byName['内部事件']?.map((i) => i.value)).toEqual(['app:burst'])
   })

@@ -24,28 +24,23 @@
     "views": [
       {
         "id": "welcome",
-        "name": "欢迎",
-        "template": false
+        "name": "欢迎"
       },
       {
         "id": "step1",
-        "name": "第1步 · 按钮",
-        "template": false
+        "name": "第1步 · 按钮"
       },
       {
         "id": "step2",
-        "name": "第2步 · 滑块",
-        "template": false
+        "name": "第2步 · 滑块"
       },
       {
         "id": "step3",
-        "name": "第3步 · 听音",
-        "template": false
+        "name": "第3步 · 听音"
       },
       {
         "id": "done",
-        "name": "完成",
-        "template": false
+        "name": "完成"
       }
     ],
     "components": [
@@ -801,11 +796,13 @@
       "columns": [
         {
           "key": "data",
-          "label": "数据"
+          "label": "数据",
+          "type": "json"
         },
         {
           "key": "scoring",
-          "label": "分值"
+          "label": "分值",
+          "type": "number"
         }
       ],
       "rows": [

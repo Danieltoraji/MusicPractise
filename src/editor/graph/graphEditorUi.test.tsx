@@ -48,7 +48,7 @@ const baseDoc = (): LevelDoc =>
     meta: { title: '节点图测试' },
     refs: [],
     content: {
-      views: [{ id: 'main', name: '主视图', template: true }],
+      views: [{ id: 'main', name: '主视图' }],
       components: [{ id: 'sound1', type: 'sound', visible: false, view: 'main' }],
       logic: {
         logicVersion: 2,
@@ -89,7 +89,7 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     act(() => (addBtn as HTMLElement).click())
     expect(doc.content.logic.nodes).toHaveLength(3)
     const added = doc.content.logic.nodes.find((n) => n.kind === 'call')
-    expect(added).toMatchObject({ target: 'level', method: 'next', args: [] })
+    expect(added).toMatchObject({ target: 'question', method: 'next', args: [] })
   })
 
   it('崩溃回归：先选中 call 节点再切 assign 节点，首帧不因旧草稿崩溃且表达式可见', () => {
@@ -182,7 +182,7 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
 
   it('on 节点：事件下拉选择即提交（不手打事件名）', () => {
     // 用「题目载入」起头避免与基础 doc 的 on1（关卡开始）摘要重名
-    let doc = docWith([{ id: 'on2', kind: 'on', event: 'level.questionLoaded', x: 0, y: 200 }])
+    let doc = docWith([{ id: 'on2', kind: 'on', event: 'question.loaded', x: 0, y: 200 }])
     const onChange = vi.fn((next: LevelDoc) => {
       doc = next
     })
@@ -192,7 +192,7 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
         .dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     const eventSelect = [...container.querySelectorAll('.ginsp select')].find(
-      (s) => (s as HTMLSelectElement).value === 'level.questionLoaded',
+      (s) => (s as HTMLSelectElement).value === 'question.loaded',
     )
     expect(eventSelect).toBeTruthy()
     act(() => changeSelect(eventSelect as HTMLSelectElement, 'level.finished'))

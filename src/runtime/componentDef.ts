@@ -164,10 +164,12 @@ export const LABEL_DEF: ComponentDef<LabelState> = {
     events: {},
     commands: { show: '{ text: string, tone?: "info"|"success"|"error" }' },
     propsFields: [{ key: 'text', label: '文本', type: 'string', fallback: '' }],
+    bindings: { text: 'string' },
     state: { text: 'string', tone: '"info"|"success"|"error"' },
   },
   initialState: (spec) => ({ text: str(spec.props && (spec.props as Record<string, Json>).text, ''), tone: 'info' }),
-  applyBinding: (s) => s,
+  // text 绑定（如 $q.title）：行装载/进视图时自动刷新文案——「行驱动视图」的标配（docs/25）
+  applyBinding: (s, key, value) => (key === 'text' && typeof value === 'string' ? { ...s, text: value } : s),
   applyCommand: (s, cmd, args) => {
     if (cmd !== 'show') return { state: s }
     return {

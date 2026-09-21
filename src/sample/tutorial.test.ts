@@ -148,7 +148,7 @@ describe('音色实验室 · 合成器示例（数据表驱动）', () => {
     expect(play1).toMatchObject({ wave: 'sine', mode: 'seq' })
     expect((play1.notes as unknown[]).length).toBe(3)
 
-    // 「下一音色」= level.next：推进行 + 模版视图自动刷新
+    // 「下一音色」= question.next：推进题目行，绑定组件随行自动刷新
     session.dispatch('next_btn.clicked')
     await flush()
     expect((session.store.snapshot('wave_label').state as { text: string }).text).toBe('三角 · 木琴')
@@ -156,7 +156,7 @@ describe('音色实验室 · 合成器示例（数据表驱动）', () => {
     await flush()
     expect((effects.at(-1) as Extract<Effect, { type: 'audio.synth' }>).wave).toBe('triangle')
 
-    // 连推到末行：level.next 自动结算 → 完成文案 + 钟琴和弦
+    // 连推到末行：question.next 自动结算 → 完成文案 + 钟琴和弦
     for (let i = 0; i < 5; i++) {
       session.dispatch('next_btn.clicked')
       await flush()

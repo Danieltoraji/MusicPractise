@@ -384,18 +384,50 @@ describe('LevelSession', () => {
     expect(events.some((e) => e.kind === 'error' && e.message?.includes('ghost'))).toBe(true)
   })
 
-  it('level.next：换行后自动切换到模版视图', async () => {
-    const views = [{ id: 'main' }, { id: 'quiz', name: '答题', template: true }]
-    const rules = [{ id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'level.next' }] }]
+  it('question.next：换行停留当前视图（模版视图已移除，绑定随行刷新）', async () => {
+    const views = [{ id: 'main' }, { id: 'quiz', name: '答题' }]
+    const rules = [{ id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'question.next' }] }]
     const { host, rec } = makeHost()
     const session = new LevelSession(makeDoc({ rules, views }), host)
     session.start()
-    expect(session.currentView).toBe('main') // 初始视图 = 首视图（模版是 quiz 也不抢初始）
+    expect(session.currentView).toBe('main')
     session.dispatch('nextBtn.clicked')
     await flush()
     expect(rowTag(session.currentRow)).toBe('r2')
-    expect(session.currentView).toBe('quiz') // 「显示题目」抽象：换行自动进模版视图
-    expect(rec.views).toEqual(['main', 'quiz'])
+    expect(session.currentView).toBe('main') // 换行不切视图：当前视图内容由 loadRow 重放绑定刷新
+    expect(rec.views).toEqual(['main'])
+  })
+
+  it('赋值 v.__row = N 跳转题目行：越界 clamp、结算后忽略', async () => {
+    const rules = [
+      { id: 'jump', on: 'jumpBtn.clicked', do: [{ set: '__row', expr: 'event.row' }] },
+      { id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'question.next' }] },
+    ]
+    const { host, rec } = makeHost()
+    const session = new LevelSession(makeDoc({ rules }), host)
+    session.start()
+
+    session.dispatch('jumpBtn.clicked', { row: 1 }) // 跳到第 2 题
+    await flush()
+    expect(rowTag(session.currentRow)).toBe('r2')
+
+    session.dispatch('jumpBtn.clicked', { row: 99 }) // 越界 → clamp 到末行
+    await flush()
+    expect(rowTag(session.currentRow)).toBe('r2')
+
+    session.dispatch('jumpBtn.clicked', { row: -3 }) // 负数 → clamp 到首行
+    await flush()
+    expect(rowTag(session.currentRow)).toBe('r1')
+
+    session.dispatch('nextBtn.clicked') // 默认规则 question.next → r2
+    await flush()
+    session.dispatch('nextBtn.clicked') // 末题 → 结算
+    await flush()
+    expect(rec.finished).toHaveLength(1)
+
+    session.dispatch('jumpBtn.clicked', { row: 0 }) // 已结算：跳行被忽略（终态）
+    await flush()
+    expect(rowTag(session.currentRow)).toBe('r2')
   })
 
   it('P1 回归：命令执行失败（未知实例）产生 error 事件', async () => {

@@ -3,19 +3,26 @@
  *
  * v3 结构变更（docs/20）：
  * - schemaVersion 1 → 3：content.questions 移除，改为 content.table（自定义列 × 行，q.* = 当前行）
- * - content.views 视图清单（≥1，template 至多一个）；组件归属视图（comp.view，缺省首视图）
+ * - content.views 视图清单（≥1）；组件归属视图（comp.view，缺省首视图）
  * - logicPatch.variables 编译为图上的数据装载子图：
- *     on level.questionLoaded → branch(event.row == i) → assign v.k = 字面量
+ *     on question.loaded → branch(v.__row == i) → assign v.k = 字面量
  *   子图置于节点数组最前，保持旧「先补丁后处理器」时序；门控条件 v.__row == 行号
- *   （__row 为系统变量，LevelSession.loadRow 时写入；event.row 只存在于 questionLoaded 负载）
+ *   （__row 为系统变量，LevelSession.loadRow 时写入、赋值即跳行；event.row 只存在于 question.loaded 负载）
  *   补丁变量缺省补进 logic.variables = null
  * - logicPatch.appendRules（v1 规则）同样按行 gate 编译进图（内置关卡已无此形态，机制保留给旧用户文档）
  * - 行兼容：保留 prompt/data/scoring（及 hints/explanation）列，q.data.x / q.scoring.max 一字不改
  *
+ * docs/25 语义规范化（对 v1 迁移产物与已存 v3 文档都执行，幂等）：
+ * - 事件/命令改名：level.questionLoaded → question.loaded、level.next → question.next
+ *   （level.* 只留 started/finished/restart——节点图上「关卡」与「题目」概念分离）
+ * - 剥离 views[].template（模版视图移除：换行不切视图，当前视图随行刷新）
+ * - 数据表列补 type（text/number/boolean/notes/list/json 启发式；编辑器按类型渲染单元格，免 JSON 手输）
+ *
  * 纯函数、确定性：同输入逐字段同输出（golden 断言依赖）。
  */
-import type { ComponentInstance, DataTable, LevelDoc, TableRow, ViewDef } from './level'
+import type { ColumnType, ComponentInstance, DataTable, LevelDoc, TableRow, ViewDef } from './level'
 import type { GEdge, GNode, GraphProgram } from './graphProgram'
+import { QUESTION_LOADED_EVENT } from './graphProgram'
 import { migrateLogicV1toV2 } from './migrate'
 import type { Json } from './expr'
 
@@ -31,7 +38,10 @@ interface LegacyQuestion {
   [k: string]: unknown
 }
 
-const DEFAULT_VIEW: ViewDef = { id: 'main', name: '主视图', template: true }
+const DEFAULT_VIEW: ViewDef = { id: 'main', name: '主视图' }
+
+/** docs/25 改名前的旧事件/命令名（规范化改写源） */
+const LEGACY_QUESTION_LOADED = 'level.questionLoaded'
 
 /** 已知列的友好名（表格面板显示用；其余列用 key 本身） */
 const KNOWN_COLUMN_LABELS: Record<string, string> = {
@@ -77,7 +87,7 @@ interface LegacyContent {
 }
 
 /**
- * 任意受支持的关卡文档 → v3。幂等：v3 输入原样返回（浅拷贝壳）。
+ * 任意受支持的关卡文档 → v3。幂等：v3 输入仅做语义规范化（docs/25，见文件头）。
  * 抛错时消息面向用户（装载管线转为装载错误）。
  */
 export function migrateDocToV3(raw: unknown): LevelDoc {
@@ -85,10 +95,10 @@ export function migrateDocToV3(raw: unknown): LevelDoc {
   const source = raw as { schemaVersion?: unknown; kind?: unknown; content?: unknown }
   if (source.kind !== 'level') throw new Error(`kind 不是 level（实际: ${String(source.kind)}）`)
   if (source.schemaVersion === 3) {
-    // v3：仍兜底迁移逻辑 v1（用户可能手改 JSON），视图/表格由 schema 保证
+    // v3：仍兜底迁移逻辑 v1（用户可能手改 JSON），再做语义规范化
     const doc = { ...(raw as LevelDoc), content: { ...((raw as LevelDoc).content as object) } } as LevelDoc
     doc.content.logic = migrateLogicV1toV2(doc.content.logic)
-    return doc
+    return { ...doc, content: normalizeV3Content(doc.content) }
   }
   if (source.schemaVersion !== 1) {
     throw new Error(`schemaVersion ${String(source.schemaVersion)} 不受支持（支持 1 → 自动升级 3）`)
@@ -99,7 +109,7 @@ export function migrateDocToV3(raw: unknown): LevelDoc {
   // 1) 逻辑先行：v1 ECA → v2 图（保证后续编译产物的端口/节点协议成立）
   const logic = migrateLogicV1toV2(content.logic as never)
 
-  // 2) 视图：已有则沿用；否则默认主视图（模板）。组件补 view 归属（缺省 = 首视图）
+  // 2) 视图：已有则沿用；否则默认主视图。组件补 view 归属（缺省 = 首视图）
   const views: ViewDef[] =
     Array.isArray(content.views) && content.views.length > 0 ? content.views.map((v) => ({ ...v })) : [{ ...DEFAULT_VIEW }]
   const firstView = views[0].id
@@ -141,7 +151,65 @@ export function migrateDocToV3(raw: unknown): LevelDoc {
     },
   }
   delete (doc.content as Record<string, unknown>).questions
-  return doc
+  return { ...doc, content: normalizeV3Content(doc.content) }
+}
+
+// ---------------------------------------------------------------------------
+// docs/25 语义规范化（幂等纯函数）：question.* 改名 / 剥模版视图 / 列类型启发式
+// ---------------------------------------------------------------------------
+
+/** 图节点改名：on level.questionLoaded → question.loaded；call level.next → question.next（导出供直接迁移 v1 逻辑的管线对齐） */
+export function normalizeLogic(prog: GraphProgram): GraphProgram {
+  let changed = false
+  const nodes = prog.nodes.map((n) => {
+    if (n.kind === 'on' && n.event === LEGACY_QUESTION_LOADED) {
+      changed = true
+      return { ...n, event: QUESTION_LOADED_EVENT }
+    }
+    if (n.kind === 'call' && n.target === 'level' && n.method === 'next') {
+      changed = true
+      return { ...n, target: 'question', method: 'next' }
+    }
+    return n
+  })
+  return changed ? { ...prog, nodes } : prog
+}
+
+/** 音符串元素形态：{ midi: number, … }（notes 列启发式的判据） */
+function isNoteLike(v: unknown): boolean {
+  return v !== null && typeof v === 'object' && !Array.isArray(v) && typeof (v as { midi?: unknown }).midi === 'number'
+}
+
+/** 行值启发式列类型：常见结构（音符串/字符串列表/数值/布尔）结构化编辑免 JSON 手输（docs/25） */
+export function inferColumnType(values: Json[]): ColumnType {
+  const vs = values.filter((v) => v !== null && v !== undefined)
+  if (vs.length === 0) return 'text'
+  if (vs.every((v) => typeof v === 'boolean')) return 'boolean'
+  if (vs.every((v) => typeof v === 'number')) return 'number'
+  if (vs.every((v) => Array.isArray(v) && v.length > 0 && v.every(isNoteLike))) return 'notes'
+  if (vs.every((v) => Array.isArray(v) && v.every((x) => typeof x === 'string'))) return 'list'
+  if (vs.every((v) => typeof v === 'object')) return 'json'
+  return 'text'
+}
+
+/** v3 内容规范化：剥 template、改写 question.*、列类型缺省补全（不 mutate 输入） */
+function normalizeV3Content(content: LevelDoc['content']): LevelDoc['content'] {
+  const rows = content.table?.rows ?? []
+  return {
+    ...content,
+    views: content.views.map((v) => {
+      const { template: _legacy, ...rest } = v as ViewDef & { template?: unknown }
+      return rest
+    }),
+    logic: normalizeLogic(content.logic),
+    table: {
+      ...content.table,
+      columns: (content.table?.columns ?? []).map((c) => ({
+        ...c,
+        type: c.type ?? inferColumnType(rows.map((r) => r[c.key] ?? null)),
+      })),
+    },
+  }
 }
 
 /** 把每题 logicPatch 编译为「行门控」子图并前置（保持先补丁后处理器的装载时序） */
@@ -171,10 +239,10 @@ function compileLogicPatches(logic: GraphProgram, questions: LegacyQuestion[]): 
     if (varKeys.length === 0 && rules.length === 0) return
     for (const k of varKeys) patchVarKeys.add(k)
 
-    // on level.questionLoaded → gate(v.__row == i) → …
+    // on question.loaded → gate(v.__row == i) → …
     const onId = `q${i}_load`
     const gateId = `q${i}_gate`
-    prefixNodes.push({ id: reserve(onId), kind: 'on', event: 'level.questionLoaded' })
+    prefixNodes.push({ id: reserve(onId), kind: 'on', event: QUESTION_LOADED_EVENT })
     prefixNodes.push({ id: reserve(gateId), kind: 'branch', cond: `v.__row == ${i}` })
     prefixEdges.push({ id: nextEdgeId(), from: onId, to: gateId })
 

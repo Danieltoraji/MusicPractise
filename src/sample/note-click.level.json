@@ -140,7 +140,7 @@
         {
           "id": "load-question_on",
           "kind": "on",
-          "event": "level.questionLoaded"
+          "event": "question.loaded"
         },
         {
           "id": "load-question_d0",
@@ -311,7 +311,7 @@
         {
           "id": "next-or-restart_d0",
           "kind": "call",
-          "target": "level",
+          "target": "question",
           "method": "next",
           "args": []
         },
@@ -572,31 +572,35 @@
     "views": [
       {
         "id": "main",
-        "name": "主视图",
-        "template": true
+        "name": "主视图"
       }
     ],
     "table": {
       "columns": [
         {
           "key": "prompt",
-          "label": "题面"
+          "label": "题面",
+          "type": "json"
         },
         {
           "key": "data",
-          "label": "数据"
+          "label": "数据",
+          "type": "json"
         },
         {
           "key": "scoring",
-          "label": "分值"
+          "label": "分值",
+          "type": "json"
         },
         {
           "key": "hints",
-          "label": "提示"
+          "label": "提示",
+          "type": "json"
         },
         {
           "key": "explanation",
-          "label": "解析"
+          "label": "解析",
+          "type": "text"
         }
       ],
       "rows": [

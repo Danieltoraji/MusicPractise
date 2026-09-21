@@ -18,8 +18,14 @@ export interface EventGroup {
 
 const LEVEL_EVENTS: EventGroup['items'] = [
   { value: 'level.started', label: '关卡开始', desc: 'level.started——进入关卡后触发一次' },
-  { value: 'level.questionLoaded', label: '题目载入', desc: 'level.questionLoaded——每行数据装载后触发（payload: index/total/row）' },
   { value: 'level.finished', label: '关卡结算', desc: 'level.finished——结算时触发（payload: score/passed）' },
+]
+
+const QUESTION_EVENTS: EventGroup['items'] = [
+  { value: 'question.loaded', label: '题目载入', desc: 'question.loaded——每行数据装载后触发（payload: index/total/row）；换行与赋值 v.__row 都会触发' },
+]
+
+const VIEW_EVENTS: EventGroup['items'] = [
   { value: 'view.entered', label: '进入视图', desc: 'view.entered——切换视图后触发（payload: view）' },
 ]
 
@@ -51,7 +57,11 @@ export function buildEventGroups(doc: LevelDoc): EventGroup[] {
       ),
     ),
   ]
-  const groups: EventGroup[] = [{ group: '关卡与视图', items: LEVEL_EVENTS }]
+  const groups: EventGroup[] = [
+    { group: '关卡', items: LEVEL_EVENTS },
+    { group: '题目', items: QUESTION_EVENTS },
+    { group: '视图', items: VIEW_EVENTS },
+  ]
   if (compItems.length > 0) groups.push({ group: '组件事件', items: compItems })
   if (internal.length > 0) groups.push({ group: '内部事件', items: internal.map((e) => ({ value: e, label: e })) })
   return groups
@@ -116,7 +126,7 @@ export function buildTemplates(doc: LevelDoc): PaletteTemplate[] {
           nodes: [
             { kind: 'on', event: 'level.started', ...rel(p, 0, 0) },
             { kind: 'assign', target: 'score', value: { expr: '0' }, ...rel(p, 280, 0) },
-            { kind: 'on', event: 'level.questionLoaded', ...rel(p, 0, 170) },
+            { kind: 'on', event: 'question.loaded', ...rel(p, 0, 170) },
             { kind: 'branch', cond: 'v.score >= 10', ...rel(p, 280, 170) },
             { kind: 'call', target: 'level', method: 'finish', args: [], ...rel(p, 560, 170) },
           ],
@@ -175,7 +185,7 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
       desc: '调用组件实例的命令——添加后在右侧选择实例与命令',
       make: (pos) => ({
         kind: 'call',
-        target: firstComp?.id ?? 'level',
+        target: firstComp?.id ?? 'question',
         method: firstComp ? firstCmd : 'next',
         args: [],
         ...at(pos),
@@ -183,9 +193,9 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
     },
   ]
 
-  // level 伪实例动作
+  // 关卡/题目伪实例动作（docs/25：关卡与题目概念分离）
   const levelItems: PaletteItem[] = [
-    { key: 'lvl-next', label: '进入下一题', desc: 'level.next——推进数据表到下一行；有模版视图则自动切换过去，末行则结算', make: (pos) => ({ kind: 'call', target: 'level', method: 'next', args: [], ...at(pos) }) },
+    { key: 'q-next', label: '进入下一题', desc: 'question.next——推进数据表到下一行（换行不切视图，当前视图内容随行刷新）；末题则结算', make: (pos) => ({ kind: 'call', target: 'question', method: 'next', args: [], ...at(pos) }) },
     { key: 'lvl-restart', label: '重开本关', desc: 'level.restart——变量/组件状态重置并重新开始', make: (pos) => ({ kind: 'call', target: 'level', method: 'restart', args: [], ...at(pos) }) },
     { key: 'lvl-finish', label: '结算关卡', desc: 'level.finish——主动结算，可传 { passed: false } 强制未通过', make: (pos) => ({ kind: 'call', target: 'level', method: 'finish', args: [], ...at(pos) }) },
   ]
@@ -221,7 +231,7 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
 
   return [
     { id: 'action', label: '组件动作', hint: '调用组件实例的命令（实例与命令在右侧选择）', items: actionItems },
-    { id: 'level', label: '关卡', hint: 'level 伪实例的方法', items: levelItems },
+    { id: 'level', label: '关卡与题目', hint: '关卡级动作（结算/重开）与题目级动作（下一题）', items: levelItems },
     { id: 'view', label: '视图', hint: 'views 伪实例的方法（互斥视图切换）', items: viewItems },
     { id: 'variable', label: '变量赋值', hint: '给已声明变量赋值', items: variableItems },
     { id: 'flow', label: '控制流', hint: '分支 / 循环 / 等待 / 触发', items: flowItems },

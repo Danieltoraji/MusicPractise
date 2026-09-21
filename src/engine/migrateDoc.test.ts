@@ -32,10 +32,10 @@ function v1Doc(overrides?: { questions?: unknown[]; views?: unknown[]; rules?: u
 }
 
 describe('migrateDocToV3', () => {
-  it('信封升级：schemaVersion 3、视图默认主视图（模板）、组件归属视图、questions 移除', () => {
+  it('信封升级：schemaVersion 3、视图默认主视图、组件归属视图、questions 移除', () => {
     const doc = migrateDocToV3(v1Doc())
     expect(doc.schemaVersion).toBe(3)
-    expect(doc.content.views).toEqual([{ id: 'main', name: '主视图', template: true }])
+    expect(doc.content.views).toEqual([{ id: 'main', name: '主视图' }])
     expect(doc.content.components.every((c) => c.view === 'main')).toBe(true)
     expect('questions' in doc.content).toBe(false)
   })
@@ -81,8 +81,8 @@ describe('migrateDocToV3', () => {
   })
 
   it('已有 views 的 v1 文档沿用之（不强制默认主视图）', () => {
-    const doc = migrateDocToV3(v1Doc({ views: [{ id: 'title' }, { id: 'quiz', template: true }] }))
-    expect(doc.content.views).toEqual([{ id: 'title' }, { id: 'quiz', template: true }])
+    const doc = migrateDocToV3(v1Doc({ views: [{ id: 'title' }, { id: 'quiz', template: true }] as never }))
+    expect(doc.content.views).toEqual([{ id: 'title' }, { id: 'quiz' }]) // 沿用视图，且剥离 template（docs/25）
     expect(doc.content.components.every((c) => c.view === 'title')).toBe(true)
   })
 
@@ -148,7 +148,7 @@ describe('migrateDocToV3', () => {
     ;(raw.content as Record<string, unknown>).logic = {
       logicVersion: 2,
       variables: { score: 0 },
-      nodes: [{ id: 'q0_load', kind: 'on', event: 'level.questionLoaded' }],
+      nodes: [{ id: 'q0_load', kind: 'on', event: 'question.loaded' }],
       edges: [],
     }
     expect(() => migrateDocToV3(raw)).toThrow(/冲突/)
