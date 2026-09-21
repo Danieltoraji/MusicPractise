@@ -36,6 +36,15 @@ export function VariablesPanel({ prog, onSet, onRename, onRemove }: Props) {
   return (
     <div className="gvars">
       <div className="glib-title">变量（{entries.length}）</div>
+      {/* 行指针系统变量（docs/25）：运行时随行装载写入；节点图赋值 v.__row = N 即跳转该题。
+          不入 variables 声明、不可改名/删除，这里只作说明位 */}
+      <div className="gvar-row" title="行指针（0 起）：在节点图用「赋值」节点给 v.__row 赋数字即跳转该题；运行时装载行时自动更新">
+        <input className="gvar-name" value="__row" disabled title="系统变量" />
+        <input className="gvar-value" value="题目行（0 起）" disabled title="赋值即跳题——见节点库「变量赋值」组" />
+        <button type="button" className="ginsp-argdel" disabled style={{ visibility: 'hidden' }} aria-hidden>
+          ×
+        </button>
+      </div>
       {entries.length === 0 && <div className="glib-empty muted">暂无变量</div>}
       {entries.map(([name, value]) => (
         <div key={name} className="gvar-row">

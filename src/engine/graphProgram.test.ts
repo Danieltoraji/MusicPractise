@@ -142,6 +142,14 @@ describe('graphProgram 变量操作', () => {
     expect(() => renameGraphVariable(prog, 'total', '9x')).toThrow(/非法变量名/)
   })
 
+  it('行指针 __row 为系统变量：不可声明/改名/删除（docs/25）', () => {
+    const prog = blankGraphProgram()
+    expect(() => setGraphVariable(prog, '__row', 0)).toThrow(/行指针系统变量/)
+    expect(() => renameGraphVariable(prog, '__row', 'row')).toThrow(/行指针系统变量/)
+    expect(() => renameGraphVariable(prog, 'score', '__row')).toThrow(/行指针系统变量/)
+    expect(() => removeGraphVariable(prog, '__row')).toThrow(/行指针系统变量/)
+  })
+
   it('rename 保留其它键与顺序；撞新名抛错', () => {
     let prog = blankGraphProgram()
     prog = setGraphVariable(prog, 'a', 1)

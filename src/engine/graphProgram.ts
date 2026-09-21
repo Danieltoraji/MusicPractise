@@ -181,6 +181,7 @@ export function disconnect(prog: GraphProgram, edgeId: string): GraphProgram {
 // ---------------------------------------------------------------------------
 
 export function setGraphVariable(prog: GraphProgram, name: string, value: Json): GraphProgram {
+  if (name === ROW_POINTER_VAR) throw new Error('__row 是行指针系统变量（赋值即跳题），无需声明')
   if (!ID_RE.test(name)) throw new Error(`非法变量名: ${name}`)
   const next = clone(prog)
   next.variables = { ...next.variables, [name]: value }
@@ -188,6 +189,7 @@ export function setGraphVariable(prog: GraphProgram, name: string, value: Json):
 }
 
 export function renameGraphVariable(prog: GraphProgram, oldName: string, newName: string): GraphProgram {
+  if (oldName === ROW_POINTER_VAR || newName === ROW_POINTER_VAR) throw new Error('__row 是行指针系统变量，不可改名')
   if (!ID_RE.test(newName)) throw new Error(`非法变量名: ${newName}`)
   if (oldName === newName) return prog
   if (oldName !== newName && newName in (prog.variables ?? {})) throw new Error(`变量名已存在: ${newName}`)
@@ -202,6 +204,7 @@ export function renameGraphVariable(prog: GraphProgram, oldName: string, newName
 }
 
 export function removeGraphVariable(prog: GraphProgram, name: string): GraphProgram {
+  if (name === ROW_POINTER_VAR) throw new Error('__row 是行指针系统变量，不可删除')
   const next = clone(prog)
   const vars = { ...(next.variables ?? {}) }
   delete vars[name]

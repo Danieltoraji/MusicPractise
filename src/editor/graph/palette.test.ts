@@ -50,10 +50,12 @@ describe('buildPalette（节点库候选，精简后）', () => {
     expect(prog.nodes[0]).toMatchObject({ kind: 'call', target: 'staff1', x: 10, y: 20 })
   })
 
-  it('变量赋值组按已声明变量生成；无组件时组件动作落 question.next', () => {
+  it('变量赋值组：行指针快捷项置顶 + 已声明变量；无组件时组件动作落 question.next', () => {
     const groups = buildPalette(doc([], { score: 0, streak: 0 }))
     const varGroup = groups.find((g) => g.id === 'variable')!
-    expect(varGroup.items.map((i) => i.label)).toEqual(['v.score = …', 'v.streak = …'])
+    expect(varGroup.items.map((i) => i.label)).toEqual(['v.__row = …（跳转题目行）', 'v.score = …', 'v.streak = …'])
+    const jump = varGroup.items[0].make()
+    expect(jump).toMatchObject({ kind: 'assign', target: '__row' })
     const act = groups.find((g) => g.id === 'action')!.items[0].make()
     expect(act).toMatchObject({ kind: 'call', target: 'question', method: 'next' })
   })

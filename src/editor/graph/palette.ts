@@ -211,13 +211,23 @@ export function buildPalette(doc: LevelDoc): PaletteGroup[] {
     },
   ]
 
-  // 变量赋值组：按已声明变量
-  const variableItems: PaletteItem[] = Object.keys(doc.content.logic.variables ?? {}).map((name) => ({
-    key: `var-assign-${name}`,
-    label: `v.${name} = …`,
-    desc: `给变量 ${name} 赋值（表达式或查询调用）`,
-    make: (pos) => ({ kind: 'assign', target: name, value: { expr: '0' }, ...at(pos) }),
-  }))
+  // 变量赋值组：行指针快捷项置顶（跳题无需声明），其余按已声明变量
+  const variableItems: PaletteItem[] = [
+    {
+      key: 'var-assign-__row',
+      label: 'v.__row = …（跳转题目行）',
+      desc: '赋值行号（0 起）即跳转该题：完整行装载 + 绑定刷新 + question.loaded；越界自动钳制',
+      make: (pos) => ({ kind: 'assign', target: '__row', value: { expr: '0' }, ...at(pos) }),
+    },
+    ...Object.keys(doc.content.logic.variables ?? {})
+      .filter((name) => name !== '__row')
+      .map((name) => ({
+        key: `var-assign-${name}`,
+        label: `v.${name} = …`,
+        desc: `给变量 ${name} 赋值（表达式或查询调用）`,
+        make: (pos: { x: number; y: number } | undefined) => ({ kind: 'assign' as const, target: name, value: { expr: '0' }, ...at(pos) }),
+      })),
+  ]
 
   // 控制流组（默认值取有界/合法形态，避免添加即 lint 报错）
   const flowItems: PaletteItem[] = [

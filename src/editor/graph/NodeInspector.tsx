@@ -7,7 +7,7 @@
 import { useRef, useState } from 'react'
 import { exprFunctionNames } from '../../engine/expr'
 import type { LevelDoc } from '../../engine/level'
-import { LEVEL_METHODS, QUESTION_METHODS, type GNode, type LintIssue } from '../../engine/graphProgram'
+import { LEVEL_METHODS, QUESTION_METHODS, ROW_POINTER_VAR, type GNode, type LintIssue } from '../../engine/graphProgram'
 import { BASE_COMMANDS, type ContractDoc } from '../../runtime/componentDef'
 import { getDef } from '../../runtime/store'
 import { parseCommandParams, exprToOperand, type BridgeCtx, type Operand } from './exprBridge'
@@ -55,8 +55,10 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
     }
   }
 
-  // 变量候选：关卡 variables（v3 起题目补丁变量已由迁移器并入声明）；__ 前缀为系统变量，对作者隐藏
-  const varNames = [...new Set(Object.keys(program.variables ?? {}).filter((n) => !n.startsWith('__')))]
+  // 变量候选：关卡 variables + 行指针 __row（系统变量：赋值即跳题，免声明）；其余 __ 前缀对作者隐藏
+  const varNames = [
+    ...new Set([ROW_POINTER_VAR, ...Object.keys(program.variables ?? {})]).values(),
+  ].filter((n) => n === ROW_POINTER_VAR || !n.startsWith('__'))
 
   // 路径候选：程序里 on 事件的负载字段（如 staff1.noteClicked → event.midi）
   const refPaths: string[] = []
@@ -372,7 +374,7 @@ function AssignNodeEditor(props: {
         <select value={node.target} onChange={(e) => props.onPatch({ target: e.target.value } as unknown as Partial<GNode>)}>
           {missingVar && <option value={node.target}>{`v.${node.target}（当前，未声明）`}</option>}
           {props.varNames.map((v) => (
-            <option key={v} value={v}>{`v.${v}`}</option>
+            <option key={v} value={v}>{`v.${v}${v === ROW_POINTER_VAR ? '（题目行）' : ''}`}</option>
           ))}
         </select>
       </label>
