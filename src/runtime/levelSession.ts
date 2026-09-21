@@ -203,12 +203,17 @@ export class LevelSession {
     this.engine.dispatch(QUESTION_LOADED_EVENT, { index: p, total: this.order.length, row: this.order[p] })
   }
 
-  /** 赋值 v.__row = N：跳转到第 N 题（原始行号，clamp 到有效区间）。同行 no-op，结算后终态 */
+  /**
+   * 赋值 v.__row = N：跳转到原始行号为 N 的题（与门控表达式 v.__row == i 同一语义）。
+   * shuffle/count 下按行号反查 flow 位置；行号不在本局（被 count 抽掉）则忽略。
+   * 同行 no-op 防事件环；结算后终态忽略。
+   */
   private jumpToRow(row: number): void {
     if (this.finishedFlag || this.order.length === 0) return
-    const target = Math.min(this.order.length - 1, Math.max(0, row))
-    if (target === this.pos) return
-    this.loadRow(target)
+    const target = Math.trunc(row)
+    const pos = this.order.indexOf(target)
+    if (pos === -1 || pos === this.pos) return
+    this.loadRow(pos)
   }
 
   private handleCommand(path: string, args: Json, context?: { nodeId?: string; event?: string }): void {

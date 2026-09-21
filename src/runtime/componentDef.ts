@@ -168,8 +168,14 @@ export const LABEL_DEF: ComponentDef<LabelState> = {
     state: { text: 'string', tone: '"info"|"success"|"error"' },
   },
   initialState: (spec) => ({ text: str(spec.props && (spec.props as Record<string, Json>).text, ''), tone: 'info' }),
-  // text 绑定（如 $q.title）：行装载/进视图时自动刷新文案——「行驱动视图」的标配（docs/25）
-  applyBinding: (s, key, value) => (key === 'text' && typeof value === 'string' ? { ...s, text: value } : s),
+  // text 绑定（如 $q.title）：行装载/进视图时自动刷新文案——「行驱动视图」的标配（docs/25）；
+  // 数字/布尔列收敛为字符串（与 props 初始 str() 同口径），对象/数组丢弃
+  applyBinding: (s, key, value) => {
+    if (key !== 'text') return s
+    if (typeof value === 'string') return { ...s, text: value }
+    if (typeof value === 'number' || typeof value === 'boolean') return { ...s, text: String(value) }
+    return s
+  },
   applyCommand: (s, cmd, args) => {
     if (cmd !== 'show') return { state: s }
     return {

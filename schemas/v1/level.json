@@ -175,6 +175,10 @@
         "name": {
           "type": "string",
           "maxLength": 24
+        },
+        "template": {
+          "type": "boolean",
+          "description": "已废弃（docs/25 模版视图移除）：仅为兼容旧 v3 文档装载保留，迁移器会剥离该字段"
         }
       },
       "required": [
@@ -246,11 +250,14 @@
                     "const": "level"
                   },
                   {
+                    "const": "question"
+                  },
+                  {
                     "const": "views"
                   }
                 ]
               },
-              "description": "\"level\" / \"views\" 是运行器伪组件的保留字"
+              "description": "\"level\" / \"question\" / \"views\" 是运行器伪组件的保留字"
             }
           ]
         },

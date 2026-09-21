@@ -30,7 +30,7 @@ export type Action =
 export interface LogicHost {
   /** 当前题目对象（表达式作用域 q） */
   getQuestion(): Json | null
-  /** 命令分发（组件id.命令 / level.next 等），由宿主实现 */
+  /** 命令分发（组件id.命令 / question.next 等），由宿主实现 */
   dispatchCommand(path: string, args: Json): void
   getNowSeconds?: () => number
   onError?: (err: unknown, context: { ruleId?: string; event?: string }) => void

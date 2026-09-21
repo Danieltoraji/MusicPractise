@@ -398,7 +398,7 @@ describe('LevelSession', () => {
     expect(rec.views).toEqual(['main'])
   })
 
-  it('赋值 v.__row = N 跳转题目行：越界 clamp、结算后忽略', async () => {
+  it('赋值 v.__row = N 跳转题目行：行号不在本局则忽略、同行 no-op、结算后忽略', async () => {
     const rules = [
       { id: 'jump', on: 'jumpBtn.clicked', do: [{ set: '__row', expr: 'event.row' }] },
       { id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'question.next' }] },
@@ -407,20 +407,20 @@ describe('LevelSession', () => {
     const session = new LevelSession(makeDoc({ rules }), host)
     session.start()
 
-    session.dispatch('jumpBtn.clicked', { row: 1 }) // 跳到第 2 题
+    session.dispatch('jumpBtn.clicked', { row: 1 }) // 跳到原始行号 1（第 2 题）
     await flush()
     expect(rowTag(session.currentRow)).toBe('r2')
 
-    session.dispatch('jumpBtn.clicked', { row: 99 }) // 越界 → clamp 到末行
+    session.dispatch('jumpBtn.clicked', { row: 1 }) // 同行：no-op（防事件环）
     await flush()
     expect(rowTag(session.currentRow)).toBe('r2')
 
-    session.dispatch('jumpBtn.clicked', { row: -3 }) // 负数 → clamp 到首行
+    session.dispatch('jumpBtn.clicked', { row: 99 }) // 行号不在本局：忽略
     await flush()
-    expect(rowTag(session.currentRow)).toBe('r1')
+    session.dispatch('jumpBtn.clicked', { row: -3 }) // 负数：忽略
+    await flush()
+    expect(rowTag(session.currentRow)).toBe('r2')
 
-    session.dispatch('nextBtn.clicked') // 默认规则 question.next → r2
-    await flush()
     session.dispatch('nextBtn.clicked') // 末题 → 结算
     await flush()
     expect(rec.finished).toHaveLength(1)
@@ -428,6 +428,33 @@ describe('LevelSession', () => {
     session.dispatch('jumpBtn.clicked', { row: 0 }) // 已结算：跳行被忽略（终态）
     await flush()
     expect(rowTag(session.currentRow)).toBe('r2')
+  })
+
+  it('shuffle 下 v.__row 语义为原始行号：读出再写回 = 同行 no-op（评审 P1-2 回归）', async () => {
+    const questions = [1, 2, 3, 4, 5].map((i) => ({
+      id: `q${i}`,
+      data: { tag: `r${i}`, n: i },
+      scoring: { max: 1 },
+    }))
+    const rules = [
+      { id: 'self', on: 'selfBtn.clicked', do: [{ set: '__row', expr: 'v.__row' }] },
+      { id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'question.next' }] },
+    ]
+    const doc = makeDoc({ questions, rules })
+    doc.content.flow = { order: 'shuffle' }
+    const { host, rec } = makeHost()
+    const session = new LevelSession(doc, host)
+    session.start()
+    for (let i = 0; i < 5; i++) {
+      const before = session.engine.vars.__row as number
+      session.dispatch('selfBtn.clicked') // 赋值 v.__row = v.__row：必须原地不动
+      await flush()
+      expect(session.engine.vars.__row).toBe(before)
+      expect(rec.rows.filter((r) => r.index === session.index)).toHaveLength(1) // 没有额外行装载
+      session.dispatch('nextBtn.clicked')
+      await flush()
+    }
+    expect(rec.finished).toHaveLength(1)
   })
 
   it('P1 回归：命令执行失败（未知实例）产生 error 事件', async () => {

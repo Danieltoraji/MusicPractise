@@ -197,7 +197,7 @@ function normalizeV3Content(content: LevelDoc['content']): LevelDoc['content'] {
   const rows = content.table?.rows ?? []
   return {
     ...content,
-    views: content.views.map((v) => {
+    views: (content.views ?? []).map((v) => {
       const { template: _legacy, ...rest } = v as ViewDef & { template?: unknown }
       return rest
     }),

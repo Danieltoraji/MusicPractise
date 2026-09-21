@@ -142,6 +142,7 @@ describe('行为等价 golden：内置关卡 v1 vs v3（表格行 + 行门控装
       const canon = (cs: { path: string; args: Json }[]) =>
         cs.map((c) => ({ ...c, path: c.path === 'level.next' ? 'question.next' : c.path }))
       expect(canon(recV3.commands)).toEqual(canon(recV1.commands))
+      expect(recV3.commands.some((c) => c.path === 'level.next')).toBe(false) // 改名后 v3 侧不允许残留旧名
       // 同样的表达式错误在两引擎中发生同样次数（规则跳过 vs 处理器中断，单规则等价）
       expect(recV3.errors).toHaveLength(recV1.errors.length)
     })
