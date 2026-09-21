@@ -2,7 +2,7 @@
  * 编辑器的文档状态操作：不可变更新 + 空白/副本模板（v3：视图 + 数据表）。
  * 编辑态是内存中的 LevelDoc 副本，保存时经 loadLevelDoc 校验后入库。
  */
-import type { ComponentInstance, DataTable, LevelDoc, ViewDef } from '../engine/level'
+import type { ColumnType, ComponentInstance, DataTable, LevelDoc, ViewDef } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { migrateDocToV3 } from '../engine/migrateDoc'
 import { newResourceId } from '../library/id'
@@ -174,6 +174,14 @@ export function updateTableColumnLabel(doc: LevelDoc, key: string, label: string
   const next = structuredClone(doc)
   const col = next.content.table.columns.find((c) => c.key === key)
   if (col) col.label = label
+  return next
+}
+
+/** 列类型（编辑器按类型渲染单元格编辑器；切换类型不改写既有数据，仅改变渲染与编辑方式） */
+export function setTableColumnType(doc: LevelDoc, key: string, type: ColumnType): LevelDoc {
+  const next = structuredClone(doc)
+  const col = next.content.table.columns.find((c) => c.key === key)
+  if (col) col.type = type
   return next
 }
 

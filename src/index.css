@@ -1585,39 +1585,230 @@ path.gedge-false {
   flex-direction: column;
   gap: 8px;
 }
-.table-cols {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.table-col {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+/* 数据表网格（3-7）：密集显示 + 拖拽列宽/行高；单元格按列类型结构化编辑 */
+.tgrid-wrap {
+  overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 3px 6px;
-  background: #fff;
+  border-radius: 10px;
+  background: var(--panel);
+  max-height: calc(100vh - 240px);
 }
-.table-col input {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 3px 6px;
+.tgrid {
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
+  width: max-content;
+  min-width: 100%;
+}
+.tgrid th,
+.tgrid td {
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 2px 5px;
+  margin: 0;
+  text-align: left;
+  vertical-align: middle;
+}
+.tgrid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #eef0f7;
+  font-weight: 600;
+}
+.tgrid-colhead {
+  position: relative;
+  min-width: 64px;
+}
+.tgrid-colhead-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.tgrid-colhead-row input,
+.tgrid-addcol input {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 2px 4px;
+  font-size: 11.5px;
+  min-width: 0;
   color: var(--ink);
 }
-.table-col-key {
-  width: 110px;
+.tgrid-colhead-row input:hover,
+.tgrid-colhead-row input:focus {
+  border-color: var(--line);
+  background: #fff;
+}
+.tgrid-key {
+  width: 84px;
   font-family: Consolas, monospace;
 }
-.table-col-label {
-  width: 80px;
+.tgrid-label {
+  width: 68px;
 }
-.table-row-cells {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 6px;
+.tgrid-type {
+  font-size: 11px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  padding: 1px 2px;
+}
+.tgrid-type:hover,
+.tgrid-type:focus {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+.tgrid-colresize {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+.tgrid-colresize:hover {
+  background: rgb(79 70 229 / 0.25);
+}
+.tgrid-addcol {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.tgrid-addcol input {
+  width: 84px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.tgrid-rowhead {
+  position: relative;
+  text-align: center;
+  white-space: nowrap;
+  background: #eef0f7;
+}
+.tgrid-rownum {
+  font-family: Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.tgrid-rowresize {
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 6px;
+  cursor: row-resize;
+  touch-action: none;
+}
+.tgrid-rowresize:hover {
+  background: rgb(79 70 229 / 0.25);
+}
+.tgrid-cell {
+  min-width: 60px;
+}
+.tgrid-cell-add {
+  border-right: none;
+}
+.tgrid-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+  padding: 2px 3px;
+  outline: none;
+}
+.tgrid-input:focus {
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  border-radius: 4px;
+}
+.tcell-boolean {
+  text-align: center;
+}
+.tcell-notes .play-notes {
+  gap: 3px;
+}
+.tcell-notes .play-note select,
+.tcell-notes .play-note input {
+  font-size: 11px;
+  padding: 1px 3px;
+}
+.tlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+.tlist-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 3px;
+  background: #fff;
+}
+.tlist-item input {
+  border: none;
+  font-size: 11.5px;
+  width: 64px;
+  padding: 2px 1px;
+  outline: none;
+}
+.tlist-add {
+  font-size: 11px;
+  color: var(--accent);
+}
+.tjson {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.tjson-text {
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tjson-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(15 23 42 / 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tjson-modal {
+  width: min(640px, 92vw);
+  background: var(--panel);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tjson-modal-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.tjson-modal-head b {
+  margin-right: auto;
+}
+.tjson-modal textarea {
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* ---------- 节点图：变量/日志/问题列表/脚本覆盖层（3-2b） ---------- */

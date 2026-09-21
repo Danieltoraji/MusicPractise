@@ -13,6 +13,7 @@ import { ErrorBoundary } from '../library/ErrorBoundary'
 import { allContracts, ComponentStore, getDef } from '../runtime/store'
 import { ComponentView } from '../components/views'
 import { makeDirtyHashHandler } from './graph/dirtyGuard'
+import { TableEditor } from './TableGrid'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentInstance, LevelDoc } from '../engine/level'
 import type { Json } from '../engine/expr'
@@ -21,20 +22,13 @@ import { migrateDocToV3 } from '../engine/migrateDoc'
 import { copyForEditing } from './docState'
 import {
   addComponent,
-  addTableColumn,
-  addTableRow,
   addView,
   blankLevelDoc,
   parseJsonText,
   removeComponent,
-  removeTableColumn,
-  removeTableRow,
   removeView,
-  renameTableColumn,
   setMeta,
   updateComponent,
-  updateTableCell,
-  updateTableColumnLabel,
 } from './docState'
 
 type Tab = 'canvas' | 'graph' | 'script' | 'table' | 'json'
@@ -679,144 +673,6 @@ function safeContract(type: string) {
   } catch {
     return { type, displayName: type, category: 'ui' as const, events: {}, commands: {} }
   }
-}
-
-// ---------------------------------------------------------------------------
-// 数据表编辑器（v3：取代题目编辑器）
-// ---------------------------------------------------------------------------
-
-/** 单元格显示文本：对象/数组 → JSON，其余 → String */
-function cellText(v: Json | undefined): string {
-  if (v === undefined || v === null) return ''
-  if (typeof v === 'object') return JSON.stringify(v)
-  return String(v)
-}
-
-/** 单元格解析：'' → null；[/{ 开头按 JSON；true/false → 布尔；数字 → number；其余字符串 */
-function parseCell(text: string): { value: Json; error?: string } {
-  const t = text.trim()
-  if (t === '') return { value: null }
-  if (t.startsWith('[') || t.startsWith('{')) {
-    const v = parseJsonText(t)
-    if (v === null) return { value: text, error: '不是合法 JSON' }
-    return { value: v }
-  }
-  if (t === 'true') return { value: true }
-  if (t === 'false') return { value: false }
-  if (!Number.isNaN(Number(t))) return { value: Number(t) }
-  return { value: text }
-}
-
-export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
-  const table = doc.content.table
-  const [newCol, setNewCol] = useState('')
-  const [colErr, setColErr] = useState('')
-
-  const addColumn = (): void => {
-    const key = newCol.trim()
-    try {
-      onChange(addTableColumn(doc, key))
-      setNewCol('')
-      setColErr('')
-    } catch (err) {
-      setColErr(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  return (
-    <div className="questions-editor table-editor">
-      <div className="rules-toolbar">
-        <b>题目数据表</b>
-        <span className="muted">
-          每行一条题目数据；q.&lt;列名&gt; 指向当前行（如 q.data、q.scoring.max）。运行顺序（顺序/乱序、题数、通过线）在 JSON 页配置。
-        </span>
-        <button type="button" onClick={() => onChange(addTableRow(doc))}>
-          + 添加行
-        </button>
-      </div>
-
-      <div className="table-cols">
-        {table.columns.map((c) => (
-          <span key={c.key} className="table-col">
-            <input
-              className="table-col-key"
-              defaultValue={c.key}
-              title={`列名（表达式 q.${c.key}）`}
-              onBlur={(e) => {
-                const key = e.currentTarget.value.trim()
-                if (key === c.key) return
-                try {
-                  onChange(renameTableColumn(doc, c.key, key))
-                } catch (err) {
-                  e.currentTarget.value = c.key
-                  setColErr(err instanceof Error ? err.message : String(err))
-                }
-              }}
-            />
-            <input
-              className="table-col-label"
-              defaultValue={c.label ?? ''}
-              placeholder="显示名"
-              onBlur={(e) => {
-                if (e.currentTarget.value !== (c.label ?? '')) onChange(updateTableColumnLabel(doc, c.key, e.currentTarget.value))
-              }}
-            />
-            <button
-              type="button"
-              className="ginsp-argdel"
-              title={`删除列 ${c.key}`}
-              onClick={() => onChange(removeTableColumn(doc, c.key))}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        <span className="table-col">
-          <input
-            className="table-col-key"
-            value={newCol}
-            placeholder="新列名…"
-            onChange={(e) => setNewCol(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') addColumn()
-            }}
-          />
-          <button type="button" onClick={addColumn}>
-            + 添加列
-          </button>
-        </span>
-      </div>
-      {colErr && <div className="tone-error">{colErr}</div>}
-
-      {table.rows.length === 0 && <p className="muted">还没有数据行——点「+ 添加行」创建第一题的数据。</p>}
-      {table.rows.map((row, i) => (
-        <div key={i} className="rule-card">
-          <div className="rule-head">
-            <b>第 {i + 1} 行</b>
-            <button type="button" className="link danger" onClick={() => onChange(removeTableRow(doc, i))}>
-              删除行
-            </button>
-          </div>
-          <div className="table-row-cells">
-            {table.columns.map((c) => (
-              <label key={c.key} className="inspector-prop">
-                {c.label || c.key}
-                <input
-                  value={cellText(row[c.key])}
-                  onChange={(e) => {
-                    // 受控：删行/插行后不会残留旧行文本（评审 P1-2——非受控 defaultValue 会串值写坏行）
-                    const { value, error } = parseCell(e.currentTarget.value)
-                    if (error) return // 非法 JSON 不提交，输入框保持作者文本
-                    onChange(updateTableCell(doc, i, { [c.key]: value }))
-                  }}
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { describe, expect, it } from 'vitest'
 import type { LevelDoc } from '../engine/level'
-import { checkExprText, TableEditor } from './EditorPage'
+import { checkExprText } from './EditorPage'
+import { TableEditor } from './TableGrid'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -38,7 +39,7 @@ const baseDoc = (): LevelDoc => ({
 })
 
 describe('TableEditor（jsdom 渲染）', () => {
-  it('渲染数据表的列头与行卡片', () => {
+  it('渲染数据表网格：列头（列名/类型）与行头（题号）', () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     let root!: Root
@@ -48,8 +49,57 @@ describe('TableEditor（jsdom 渲染）', () => {
     })
     try {
       expect(container.textContent).toContain('题目数据表')
-      expect(container.textContent).toContain('第 1 行')
+      // 网格：行头题号 1（= v.__row 值）、列类型下拉、单元格输入
+      expect(container.querySelectorAll('.tgrid tbody tr').length).toBeGreaterThanOrEqual(1)
+      expect(container.querySelectorAll('.tgrid-type').length).toBeGreaterThanOrEqual(1)
+      expect(container.querySelector('.tgrid-rownum')?.textContent).toBe('1')
       expect(container.querySelectorAll('input').length).toBeGreaterThanOrEqual(3)
+    } finally {
+      act(() => root.unmount())
+      container.remove()
+    }
+  })
+
+  it('notes 列单元格渲染音符 chips；类型切换与单元格提交走 onChange', () => {
+    const doc = baseDoc()
+    doc.content.table = {
+      columns: [
+        { key: 'title', label: '题面', type: 'text' },
+        { key: 'notes', label: '示例音符', type: 'notes' },
+        { key: 'locked', label: '是否加锁', type: 'boolean' },
+      ],
+      rows: [{ title: '行一', notes: [{ midi: 60, dur: '4n' }], locked: false }],
+    }
+    let current = doc
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    let root!: Root
+    const rerender = (): void => {
+      act(() => root.render(<TableEditor doc={current} onChange={(n) => { current = n }} />))
+    }
+    act(() => {
+      root = createRoot(container)
+      rerender()
+    })
+    try {
+      // notes 单元格：结构化 chips（音名下拉），不出现 JSON 文本
+      const noteCell = container.querySelector('.tcell-notes')!
+      expect(noteCell.querySelectorAll('.play-note').length).toBeGreaterThanOrEqual(1)
+      expect(noteCell.textContent).not.toContain('midi')
+      // 文本单元格：输入即提交（受控写回）
+      const textInput = container.querySelector('.tcell-text .tgrid-input') as HTMLInputElement
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      act(() => {
+        setter.call(textInput, '改过的题面')
+        textInput.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      expect(current.content.table.rows[0].title).toBe('改过的题面')
+      // 布尔单元格：勾选提交
+      const checkbox = container.querySelector('.tcell-boolean input') as HTMLInputElement
+      act(() => {
+        checkbox.click()
+      })
+      expect(current.content.table.rows[0].locked).toBe(true)
     } finally {
       act(() => root.unmount())
       container.remove()
