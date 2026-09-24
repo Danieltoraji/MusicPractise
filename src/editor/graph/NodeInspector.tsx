@@ -255,8 +255,10 @@ function CallNodeEditor(props: {
   // sound/synth 的 play：音符可视化编辑（音名/频率选择，不再手写 [{midi:..}]）
   const compTypeOfTarget = comps.find((c) => c.id === node.target)?.type
   const isPlayCall = (compTypeOfTarget === 'sound' || compTypeOfTarget === 'synth') && node.method === 'play'
-  // 「应用行数据」特化（docs/26）：setText/setOptions/setMusic 的值 = 数据表列下拉
-  const applyCmd = compTypeOfTarget !== undefined ? DATA_APPLY_COMMANDS[compTypeOfTarget]?.[node.method] : undefined
+  // 「应用行数据」特化（docs/26）：setText/setOptions/setMusic 的值 = 数据表列下拉。
+  // DATA_APPLY_COMMANDS[类型] 内层键是槽位名，按 .method 匹配当前命令（与 lint 同口径）
+  const applyMap = compTypeOfTarget !== undefined ? DATA_APPLY_COMMANDS[compTypeOfTarget] : undefined
+  const applyCmd = applyMap !== undefined ? Object.values(applyMap).find((e) => e.method === node.method) : undefined
   const applyEntries = applyCmd !== undefined && typeof node.args[0] === 'string' ? splitObjectLiteral(node.args[0]) : null
   const applyEntry = applyEntries?.find((e) => e.key === applyCmd?.argKey)
   const isDataApply = applyCmd !== undefined && applyEntries !== null

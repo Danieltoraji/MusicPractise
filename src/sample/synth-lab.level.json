@@ -60,9 +60,6 @@
         "props": {
           "text": "",
           "tone": "success"
-        },
-        "bindings": {
-          "text": "$q.title"
         }
       },
       {
@@ -97,9 +94,6 @@
         "props": {
           "text": "",
           "tone": "info"
-        },
-        "bindings": {
-          "text": "$q.desc"
         }
       },
       {
@@ -282,6 +276,57 @@
           "args": [],
           "x": 260,
           "y": 600
+        },
+        {
+          "id": "bnd_qload",
+          "kind": "on",
+          "event": "question.loaded"
+        },
+        {
+          "id": "bnd_q_wave_label_setText_1",
+          "kind": "call",
+          "target": "wave_label",
+          "method": "setText",
+          "args": [
+            "{ text: q.title }"
+          ]
+        },
+        {
+          "id": "bnd_q_desc_label_setText_2",
+          "kind": "call",
+          "target": "desc_label",
+          "method": "setText",
+          "args": [
+            "{ text: q.desc }"
+          ]
+        },
+        {
+          "id": "bnd_venter",
+          "kind": "on",
+          "event": "view.entered"
+        },
+        {
+          "id": "bnd_v_wave_label_setText_1",
+          "kind": "call",
+          "target": "wave_label",
+          "method": "setText",
+          "args": [
+            "{ text: q.title }"
+          ]
+        },
+        {
+          "id": "bnd_v_desc_label_setText_2",
+          "kind": "call",
+          "target": "desc_label",
+          "method": "setText",
+          "args": [
+            "{ text: q.desc }"
+          ]
+        },
+        {
+          "id": "bnd_v_vguard",
+          "kind": "branch",
+          "cond": "q != null"
         }
       ],
       "edges": [
@@ -319,6 +364,32 @@
           "id": "e1",
           "from": "on_q",
           "to": "pshow"
+        },
+        {
+          "id": "bnd_q_e1",
+          "from": "bnd_q_wave_label_setText_1",
+          "to": "bnd_q_desc_label_setText_2"
+        },
+        {
+          "id": "bnd_q_eq",
+          "from": "bnd_qload",
+          "to": "bnd_q_wave_label_setText_1"
+        },
+        {
+          "id": "bnd_v_e1",
+          "from": "bnd_v_wave_label_setText_1",
+          "to": "bnd_v_desc_label_setText_2"
+        },
+        {
+          "id": "bnd_v_ev",
+          "from": "bnd_venter",
+          "to": "bnd_v_vguard"
+        },
+        {
+          "id": "bnd_v_evg",
+          "from": "bnd_v_vguard",
+          "to": "bnd_v_wave_label_setText_1",
+          "port": "true"
         }
       ]
     },
