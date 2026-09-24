@@ -1316,6 +1316,36 @@ path.gedge-false {
   flex-direction: column;
   gap: 2px;
 }
+/* 数据表字段选择器（docs/26 应用行数据） */
+.tfp {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tfp select,
+.tfp input {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel, #fff);
+}
+.tfp button {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.tfp-warn {
+  font-size: 11.5px;
+  color: #b45309;
+}
 .ginsp-argline {
   display: flex;
   gap: 6px;

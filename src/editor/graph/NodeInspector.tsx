@@ -6,14 +6,15 @@
  */
 import { useRef, useState } from 'react'
 import { exprFunctionNames } from '../../engine/expr'
-import type { LevelDoc } from '../../engine/level'
+import { DATA_APPLY_ACCEPTED_TYPES, DATA_APPLY_COMMANDS, type LevelDoc } from '../../engine/level'
 import { LEVEL_METHODS, QUESTION_METHODS, ROW_POINTER_VAR, type GNode, type LintIssue } from '../../engine/graphProgram'
 import { BASE_COMMANDS, type ContractDoc } from '../../runtime/componentDef'
 import { getDef } from '../../runtime/store'
-import { parseCommandParams, exprToOperand, type BridgeCtx, type Operand } from './exprBridge'
+import { parseCommandParams, exprToOperand, splitObjectLiteral, type BridgeCtx, type Operand } from './exprBridge'
 import { buildEventGroups } from './palette'
 import { CallArgsEditor, ConditionBuilder, OperandBody, OperandPicker, QueryCallEditor, defaultOperandExprFor } from './controls'
 import { PlayArgsEditor } from './PlayArgsEditor'
+import { TableFieldPicker } from './TableFieldPicker'
 
 interface Props {
   node: GNode | undefined
@@ -60,7 +61,7 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
     ...new Set([ROW_POINTER_VAR, ...Object.keys(program.variables ?? {})]).values(),
   ].filter((n) => n === ROW_POINTER_VAR || !n.startsWith('__'))
 
-  // 路径候选：程序里 on 事件的负载字段（如 staff1.noteClicked → event.midi）
+  // 路径候选：程序里 on 事件的负载字段（如 staff1.noteClicked → event.midi）+ 数据表列（q.<列>，docs/26）
   const refPaths: string[] = []
   for (const n of program.nodes) {
     if (n.kind !== 'on') continue
@@ -73,6 +74,11 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
       const path = `event.${f.name}`
       if (!refPaths.includes(path)) refPaths.push(path)
     }
+  }
+  const tableColumns = doc.content.table.columns
+  for (const c of tableColumns) {
+    const path = `q.${c.key}`
+    if (!refPaths.includes(path)) refPaths.push(path)
   }
   const ctx: BridgeCtx = { varNames, refPaths }
 
@@ -131,7 +137,6 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
         {refPaths.map((p) => (
           <option key={`p-${p}`} value={p} />
         ))}
-        <option value="q.data" />
         {exprFunctionNames.map((fn) => (
           <option key={fn} value={`${fn}(`} label={fn} />
         ))}
@@ -144,6 +149,7 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
           node={node}
           comps={comps}
           views={doc.content.views}
+          tableColumns={tableColumns}
           methodOptions={methodOptions}
           queriesOf={queriesOf}
           ctx={ctx}
@@ -232,6 +238,7 @@ function CallNodeEditor(props: {
   node: Extract<GNode, { kind: 'call' }>
   comps: LevelDoc['content']['components']
   views: LevelDoc['content']['views']
+  tableColumns: LevelDoc['content']['table']['columns']
   methodOptions: (target: string) => { name: string; doc?: string }[]
   queriesOf: (target: string) => string[]
   ctx: BridgeCtx
@@ -248,6 +255,11 @@ function CallNodeEditor(props: {
   // sound/synth 的 play：音符可视化编辑（音名/频率选择，不再手写 [{midi:..}]）
   const compTypeOfTarget = comps.find((c) => c.id === node.target)?.type
   const isPlayCall = (compTypeOfTarget === 'sound' || compTypeOfTarget === 'synth') && node.method === 'play'
+  // 「应用行数据」特化（docs/26）：setText/setOptions/setMusic 的值 = 数据表列下拉
+  const applyCmd = compTypeOfTarget !== undefined ? DATA_APPLY_COMMANDS[compTypeOfTarget]?.[node.method] : undefined
+  const applyEntries = applyCmd !== undefined && typeof node.args[0] === 'string' ? splitObjectLiteral(node.args[0]) : null
+  const applyEntry = applyEntries?.find((e) => e.key === applyCmd?.argKey)
+  const isDataApply = applyCmd !== undefined && applyEntries !== null
 
   return (
     <>
@@ -325,6 +337,19 @@ function CallNodeEditor(props: {
               )}
             </select>
           </label>
+        ) : isDataApply ? (
+          <>
+            <div className="muted call-args-doc">应用当前行数据——把节点挂在 question.loaded（换行）或 view.entered（进视图）后随行刷新</div>
+            <TableFieldPicker
+              value={applyEntry?.source ?? ''}
+              columns={props.tableColumns}
+              accepted={DATA_APPLY_ACCEPTED_TYPES[node.method]}
+              datalistId={exprDatalistId}
+              onChange={(expr) =>
+                props.onPatch({ args: [`{ ${applyCmd!.argKey}: ${expr} }`] } as unknown as Partial<GNode>)
+              }
+            />
+          </>
         ) : (
           <>
             {currentDoc && currentDoc !== '无参数' && <div className="muted call-args-doc">{currentDoc}</div>}

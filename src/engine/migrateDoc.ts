@@ -28,6 +28,7 @@
  * 纯函数、确定性：同输入逐字段同输出（golden 断言依赖）。
  */
 import type { ColumnType, ComponentInstance, DataTable, LevelDoc, TableRow, ViewDef } from './level'
+import { DATA_APPLY_COMMANDS } from './level'
 import type { GEdge, GNode, GraphProgram } from './graphProgram'
 import { QUESTION_LOADED_EVENT } from './graphProgram'
 import { jsonToExpr, migrateLogicV1toV2 } from './migrate'
@@ -228,13 +229,6 @@ function normalizeV3Content(content: LevelDoc['content']): LevelDoc['content'] {
 /** 旧文档组件上的 bindings 形态（TS 类型已移除该字段，迁移器经 Json 层读取） */
 type LegacyBindings = { bindings?: Record<string, Json> }
 
-/** 组件类型 × 槽位 → set 命令与参数键（未列出的槽位在旧运行时本就是 no-op applyBinding，直接丢弃） */
-const BINDING_SLOT_COMMANDS: Record<string, Record<string, { method: string; argKey: string }>> = {
-  label: { text: { method: 'setText', argKey: 'text' } },
-  choice: { options: { method: 'setOptions', argKey: 'options' } },
-  staff: { music: { method: 'setMusic', argKey: 'music' } },
-}
-
 /**
  * 把每个组件的 bindings 编译为 set 命令节点，两个事件入口各持有一条独立链：
  *   on question.loaded → call×N（行装载后应用；row 必已就绪，无需守卫）
@@ -254,7 +248,7 @@ function compileBindingsToNodes(logic: GraphProgram, components: ComponentInstan
     const bindings = comp.bindings
     delete comp.bindings
     if (!bindings || typeof bindings !== 'object') continue
-    const slotMap = BINDING_SLOT_COMMANDS[comp.type]
+    const slotMap = DATA_APPLY_COMMANDS[comp.type]
     for (const [slot, raw] of Object.entries(bindings)) {
       const cmd = slotMap?.[slot]
       if (!cmd) {

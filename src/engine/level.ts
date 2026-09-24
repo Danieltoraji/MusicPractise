@@ -39,6 +39,28 @@ export interface DataTable {
 /** 表格行（运行时 q 作用域）：列名 → 值 */
 export type TableRow = Record<string, Json>
 
+/**
+ * docs/26「应用行数据」set 命令映射：组件类型 × 旧绑定槽位 → 命令与参数键。
+ * 单一真源：迁移器（bindings → 图节点）、节点图 Inspector（图形化列选择特化）共用。
+ * 运行时收敛实现在 componentDef 的 applyCommand；格式矩阵见 DATA_APPLY_ACCEPTED_TYPES。
+ */
+export const DATA_APPLY_COMMANDS: Record<string, Record<string, { method: string; argKey: string }>> = {
+  label: { text: { method: 'setText', argKey: 'text' } },
+  choice: { options: { method: 'setOptions', argKey: 'options' } },
+  staff: { music: { method: 'setMusic', argKey: 'music' } },
+}
+
+/**
+ * docs/26 格式判断矩阵：set 命令可接受的列类型。
+ * accept = 完全匹配；soft = 可用但需保证形状（如 json 列存字符串数组），仅提示不拦截。
+ * lint（graphProgram）与编辑器内联提示（TableFieldPicker）共用，防两端口径漂移。
+ */
+export const DATA_APPLY_ACCEPTED_TYPES: Record<string, { accept: ColumnType[]; soft?: ColumnType[]; hint: string }> = {
+  setText: { accept: ['text', 'number', 'boolean'], hint: '文本标签需要 文本/数字/布尔 列（对象/数组无法显示）' },
+  setOptions: { accept: ['list'], soft: ['json'], hint: '选择器选项需要 文本列表 列（json 列需存字符串数组）' },
+  setMusic: { accept: ['json'], hint: '五线谱需要 JSON 列（存乐谱对象 MusicDoc）' },
+}
+
 export interface ComponentInstance {
   id: string
   type: string
