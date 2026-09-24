@@ -116,7 +116,9 @@ function GraphEditorInner({ doc, onChange }: Props) {
     () =>
       lintGraphProgramDetailed(program, {
         componentIds: doc.content.components.map((c) => c.id),
+        componentTypes: Object.fromEntries(doc.content.components.map((c) => [c.id, c.type])),
         viewIds: doc.content.views.map((v) => v.id),
+        tableColumns: doc.content.table.columns,
       }),
     [program, doc],
   )

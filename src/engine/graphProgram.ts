@@ -13,6 +13,7 @@
 
 import type { Json } from './expr'
 import { evalExpr, ExprError } from './expr'
+import { COLUMN_TYPE_LABELS, DATA_APPLY_ACCEPTED_TYPES, DATA_APPLY_COMMANDS, type ColumnType } from './level'
 
 export interface GraphProgram {
   logicVersion: 2
@@ -240,10 +241,14 @@ export interface LintIssue {
 export interface GraphLintCtx {
   /** 组件 id 集合：提供时做悬空实例检查 */
   componentIds?: Iterable<string>
+  /** 组件 id → 类型（docs/26：应用行数据命令的格式检查需要契约类型） */
+  componentTypes?: Record<string, string>
   /** 题目 logicPatch.variables 声明的变量豁免 */
   extraVariableKeys?: Iterable<string>
   /** 视图 id 集合（v3）：views.goto 的字面量参数据此校验 */
   viewIds?: Iterable<string>
+  /** 数据表列（docs/26：set 命令里 q.<列> 引用的存在性与类型格式检查） */
+  tableColumns?: { key: string; type?: ColumnType }[]
 }
 
 /** 收集节点中出现的全部表达式源文本（仅在字段为字符串时收集，schema 问题由 structure 检查报告） */
@@ -295,6 +300,8 @@ const VAR_REF_RE = /\bv\.([A-Za-z_][A-Za-z0-9_]*)/g
 export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintCtx): LintIssue[] {
   const issues: LintIssue[] = []
   const compIds = ctx?.componentIds ? new Set(ctx.componentIds) : null
+  const compTypes = ctx?.componentTypes ? new Map(Object.entries(ctx.componentTypes)) : null
+  const tableCols = ctx?.tableColumns ?? null
   const viewIdSet = ctx?.viewIds ? new Set(ctx.viewIds) : null
   // 行指针是系统级声明（LevelSession 装载行时写入、赋值即跳行），无需在 variables 里声明
   const declaredVars = new Set<string>([ROW_POINTER_VAR, ...(ctx?.extraVariableKeys ?? [])])
@@ -555,6 +562,40 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
           break
         }
         checkCompRef(node.target, where, node.id, 'target')
+        // docs/26 格式判断：应用行数据命令（setText/setOptions/setMusic）的 q.<列> 引用
+        // 做存在性（dangling-ref）与列类型兼容（structure 警告）检查——矩阵与编辑器同源
+        const compType = compTypes?.get(node.target)
+        // DATA_APPLY_COMMANDS[类型] 内层键是槽位名，按 .method 匹配当前命令
+        const applyCmd = compType !== undefined ? Object.values(DATA_APPLY_COMMANDS[compType] ?? {}).find((e) => e.method === node.method) : undefined
+        if (applyCmd !== undefined && (tableCols !== null || compTypes !== null)) {
+          // 字符串字面量剔除后再扫描 q. 引用，避免把字面量文本误当引用
+          const argSrc = typeof node.args?.[0] === 'string' ? node.args[0].replace(/'[^']*'|"[^"]*"/g, '') : ''
+          const colRefs = new Set([...argSrc.matchAll(/\bq\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]))
+          for (const key of colRefs) {
+            const col = tableCols?.find((c) => c.key === key)
+            if (!col) {
+              if (tableCols !== null) {
+                issues.push({
+                  code: 'dangling-ref',
+                  nodeId: node.id,
+                  field: 'args',
+                  message: `${where}: 数据表没有列 "${key}"（q.${key} 无法解析；检查列名拼写或在数据表补列）`,
+                })
+              }
+              continue
+            }
+            const acc = DATA_APPLY_ACCEPTED_TYPES[node.method]
+            const colType = col.type ?? 'text'
+            if (acc && !acc.accept.includes(colType) && !(acc.soft ?? []).includes(colType)) {
+              issues.push({
+                code: 'structure',
+                nodeId: node.id,
+                field: 'args',
+                message: `${where}: ${node.target}.${node.method} 引用的 "q.${key}" 是${COLUMN_TYPE_LABELS[colType]}列——${acc.hint}`,
+              })
+            }
+          }
+        }
         break
       }
       case 'emit':

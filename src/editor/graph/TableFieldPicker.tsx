@@ -6,7 +6,7 @@
  * 纯函数 exprToColumnRef / columnRefToExpr 导出供单测。
  */
 import { useState } from 'react'
-import type { ColumnType } from '../../engine/level'
+import { COLUMN_TYPE_LABELS, type ColumnType } from '../../engine/level'
 import { ExprInput } from './controls'
 
 export interface TableColumnInfo {
@@ -24,15 +24,6 @@ export function exprToColumnRef(src: string, keys: readonly string[]): string | 
 /** 列 key → expr 源文本 */
 export function columnRefToExpr(key: string): string {
   return `q.${key}`
-}
-
-const COLUMN_TYPE_ZH: Record<ColumnType, string> = {
-  text: '文本',
-  number: '数字',
-  boolean: '布尔',
-  notes: '音符串',
-  list: '文本列表',
-  json: 'JSON',
 }
 
 export function TableFieldPicker(props: {
@@ -90,7 +81,7 @@ export function TableFieldPicker(props: {
         {selected === null && props.value.trim() === '' && <option value="">（选择数据表列…）</option>}
         {props.columns.map((c) => (
           <option key={c.key} value={c.key}>
-            {c.label && c.label !== c.key ? `${c.label}（${c.key}）` : c.key} · {COLUMN_TYPE_ZH[typeOf(c.key)]}
+            {c.label && c.label !== c.key ? `${c.label}（${c.key}）` : c.key} · {COLUMN_TYPE_LABELS[typeOf(c.key)]}
           </option>
         ))}
         <option value="__adv__">高级表达式…</option>

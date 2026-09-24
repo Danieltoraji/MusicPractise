@@ -61,6 +61,16 @@ export const DATA_APPLY_ACCEPTED_TYPES: Record<string, { accept: ColumnType[]; s
   setMusic: { accept: ['json'], hint: '五线谱需要 JSON 列（存乐谱对象 MusicDoc）' },
 }
 
+/** 列类型的中文显示名（lint 消息 / 编辑器下拉共用） */
+export const COLUMN_TYPE_LABELS: Record<ColumnType, string> = {
+  text: '文本',
+  number: '数字',
+  boolean: '布尔',
+  notes: '音符串',
+  list: '文本列表',
+  json: 'JSON',
+}
+
 export interface ComponentInstance {
   id: string
   type: string

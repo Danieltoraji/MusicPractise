@@ -90,7 +90,9 @@ export class LevelSession {
 
     const problems = lintGraphProgram(this.baseProgram, {
       componentIds: content.components.map((c) => c.id),
+      componentTypes: Object.fromEntries(content.components.map((c) => [c.id, c.type])),
       viewIds: this.views.map((v) => v.id),
+      tableColumns: content.table.columns,
     })
     if (problems.length > 0) console.warn('[session] 逻辑 lint:', problems)
   }

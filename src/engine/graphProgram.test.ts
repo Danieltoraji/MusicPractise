@@ -352,3 +352,76 @@ describe('views.goto lint（docs/24）', () => {
     expect(issues.some((i) => i.code === 'dangling-ref' && i.message.includes('views 没有 "back"'))).toBe(true)
   })
 })
+
+describe('应用行数据命令的格式判断（docs/26）', () => {
+  const ctx = {
+    componentIds: ['lab1', 'ch1', 'st1'],
+    componentTypes: { lab1: 'label', ch1: 'choice', st1: 'staff' },
+    tableColumns: [
+      { key: 'title', type: 'text' as const },
+      { key: 'opts', type: 'list' as const },
+      { key: 'score', type: 'number' as const },
+      { key: 'music', type: 'json' as const },
+    ],
+  }
+  const base = (): GraphProgram => ({
+    logicVersion: 2,
+    variables: {},
+    nodes: [on('e', 'app:x'), call('c1', 'lab1', 'setText', ['{ text: q.title }'])],
+    edges: [{ id: 'e1', from: 'e', to: 'c1' }],
+  })
+
+  it('列类型匹配：零告警（文本列 → setText、list 列 → setOptions、json 列 → setMusic）', () => {
+    let prog = base()
+    prog = addNode(prog, call('c2', 'ch1', 'setOptions', ['{ options: q.opts }']))
+    prog = addNode(prog, call('c3', 'st1', 'setMusic', ['{ music: q.music }']))
+    prog = connect(prog, 'c1', 'c2')
+    prog = connect(prog, 'c2', 'c3')
+    expect(lintGraphProgram(prog, ctx)).toEqual([])
+  })
+
+  it('列类型不符：structure 警告并指明期望', () => {
+    const bad: GraphProgram = {
+      ...base(),
+      nodes: [on('e', 'app:x'), call('c1', 'ch1', 'setOptions', ['{ options: q.title }'])],
+      edges: [{ id: 'e1', from: 'e', to: 'c1' }],
+    }
+    const issues = lintGraphProgramDetailed(bad, ctx)
+    expect(issues.some((i) => i.code === 'structure' && i.message.includes('q.title') && i.message.includes('文本列表'))).toBe(true)
+  })
+
+  it('引用不存在的列：dangling-ref', () => {
+    const bad: GraphProgram = {
+      ...base(),
+      nodes: [on('e', 'app:x'), call('c1', 'lab1', 'setText', ['{ text: q.nope }'])],
+      edges: [{ id: 'e1', from: 'e', to: 'c1' }],
+    }
+    const issues = lintGraphProgramDetailed(bad, ctx)
+    expect(issues.some((i) => i.code === 'dangling-ref' && i.message.includes('q.nope'))).toBe(true)
+  })
+
+  it('数字列喂 setText 属收敛范围：不告警；字符串字面量里的 q.x 不误报', () => {
+    const ok: GraphProgram = {
+      ...base(),
+      nodes: [on('e', 'app:x'), call('c1', 'lab1', 'setText', ['{ text: q.score }']), call('c2', 'lab1', 'setText', ["{ text: 'q.title 不是引用' }"])],
+      edges: [{ id: 'e1', from: 'e', to: 'c1' }, { id: 'e2', from: 'c1', to: 'c2' }],
+    }
+    expect(lintGraphProgramDetailed(ok, ctx).filter((i) => i.code === 'dangling-ref' || i.code === 'structure')).toEqual([])
+  })
+
+  it('非数据应用命令（button.setText 等）不做列检查；缺 ctx 时不检查', () => {
+    const prog: GraphProgram = {
+      ...base(),
+      nodes: [on('e', 'app:x'), call('c1', 'lab1', 'show', ['{ text: q.nope }'])],
+      edges: [{ id: 'e1', from: 'e', to: 'c1' }],
+    }
+    expect(lintGraphProgramDetailed(prog, ctx).some((i) => i.code === 'dangling-ref' && i.message.includes('q.nope'))).toBe(false)
+    // ctx 只有 componentIds（旧调用方）：跳过格式检查
+    const legacy = {
+      ...base(),
+      nodes: [on('e', 'app:x'), call('c1', 'lab1', 'setText', ['{ text: q.nope }'])],
+      edges: [{ id: 'e1', from: 'e', to: 'c1' }],
+    }
+    expect(lintGraphProgramDetailed(legacy, { componentIds: ['lab1'] }).some((i) => i.message.includes('q.nope'))).toBe(false)
+  })
+})
