@@ -155,6 +155,56 @@ describe('migrateDocToV3', () => {
   })
 })
 
+describe('docs/26：组件 bindings 编译为 set 命令节点', () => {
+  it('label.text 绑定 → question.loaded / view.entered 双入口各自独立 setText 链，转换后剥离 bindings', () => {
+    const raw = v1Doc()
+    ;(raw.content.components[0] as unknown as Record<string, unknown>).bindings = { text: '$q.prompt' }
+    const doc = migrateDocToV3(raw)
+    const logic = doc.content.logic
+    // 组件上的 bindings 已剥离（幂等的关键），set 命令节点生成（两个入口各一条独立链）
+    expect((doc.content.components[0] as unknown as Record<string, unknown>).bindings).toBeUndefined()
+    const callQ = logic.nodes.find((n) => n.id === 'bnd_q_label1_setText_1')
+    const callV = logic.nodes.find((n) => n.id === 'bnd_v_label1_setText_1')
+    const expected = { kind: 'call', target: 'label1', method: 'setText', args: ['{ text: q.prompt }'] }
+    expect(callQ).toMatchObject(expected)
+    expect(callV).toMatchObject(expected)
+    // 双入口：question.loaded 直连自己的链；view.entered 经 q != null 守卫（true 端口）接自己的链
+    expect(logic.nodes.find((n) => n.id === 'bnd_qload')).toMatchObject({ kind: 'on', event: 'question.loaded' })
+    expect(logic.nodes.find((n) => n.id === 'bnd_venter')).toMatchObject({ kind: 'on', event: 'view.entered' })
+    expect(logic.nodes.find((n) => n.id === 'bnd_v_vguard')).toMatchObject({ kind: 'branch', cond: 'q != null' })
+    expect(logic.edges.find((e) => e.from === 'bnd_v_vguard')).toMatchObject({ port: 'true', to: 'bnd_v_label1_setText_1' })
+    expect(logic.edges.find((e) => e.from === 'bnd_qload')).toMatchObject({ to: 'bnd_q_label1_setText_1' })
+    // lint 零误报（事件名/实例/表达式均合法）
+    expect(lintGraphProgram(logic, { componentIds: ['label1', 'btn1'], viewIds: ['main'] })).toEqual([])
+  })
+
+  it('无对应 set 命令的槽位丢弃（原运行时 no-op），字面量值转表达式字面量', () => {
+    const raw = v1Doc()
+    ;(raw.content.components[1] as unknown as Record<string, unknown>).bindings = { text: '$q.nope' } // button 无绑定槽位
+    ;(raw.content.components[0] as unknown as Record<string, unknown>).bindings = { text: '固定文案' }
+    const warn = console.warn
+    const warns: string[] = []
+    console.warn = (...args: unknown[]) => warns.push(args.map(String).join(' '))
+    try {
+      const doc = migrateDocToV3(raw)
+      expect(doc.content.logic.nodes.some((n) => n.id.includes('btn1'))).toBe(false)
+      const call = doc.content.logic.nodes.find((n) => n.id.includes('label1_setText'))
+      expect(call).toMatchObject({ kind: 'call', method: 'setText', args: ["{ text: '固定文案' }"] })
+      expect(warns.some((msg) => msg.includes('没有对应的 set 命令'))).toBe(true)
+    } finally {
+      console.warn = warn
+    }
+  })
+
+  it('幂等：带 bindings 的文档迁移一次后，二次迁移不再追加节点', () => {
+    const raw = v1Doc()
+    ;(raw.content.components[0] as Record<string, unknown>).bindings = { text: '$q.prompt' }
+    const once = migrateDocToV3(raw)
+    const twice = migrateDocToV3(JSON.parse(JSON.stringify(once)))
+    expect(twice).toEqual(once)
+  })
+})
+
 describe('jsonToExprSource（Json → 表达式字面量）', () => {
   it('标量 / 数组 / 对象（键为标识符）', () => {
     expect(jsonToExprSource(null)).toBe('null')

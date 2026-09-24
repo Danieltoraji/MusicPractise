@@ -39,7 +39,7 @@ describe('组件视图（jsdom 冒烟）', () => {
       props: { clickable: true },
     }
     store.init([spec])
-    store.applyBinding('staff1', 'music', { notes: [{ midi: 60 }, { midi: 64 }], clef: 'treble' })
+    store.applyCommand('staff1', 'setMusic', { music: { notes: [{ midi: 60 }, { midi: 64 }], clef: 'treble' } })
     const container = renderEl(<StaffView spec={spec} store={store} emit={() => {}} />)
     const groups = container.querySelectorAll('[data-midi]')
     expect([...groups].map((g) => g.getAttribute('data-midi'))).toEqual(['60', '64'])
@@ -50,7 +50,7 @@ describe('组件视图（jsdom 冒烟）', () => {
     const store = new ComponentStore()
     const spec: ComponentInstance = { id: 'choice1', type: 'choice', layout: { x: 0, y: 0, w: 720, h: 220 } }
     store.init([spec])
-    store.applyBinding('choice1', 'options', ['甲', '乙', '丙'])
+    store.applyCommand('choice1', 'setOptions', { options: ['甲', '乙', '丙'] })
     const emit = vi.fn()
     const container = renderEl(<ChoiceView spec={spec} store={store} emit={emit} />)
 
@@ -74,7 +74,7 @@ describe('组件视图（jsdom 冒烟）', () => {
     const store = new ComponentStore()
     const spec: ComponentInstance = { id: 'choice1', type: 'choice', layout: { x: 0, y: 0, w: 720, h: 220 } }
     store.init([spec])
-    store.applyBinding('choice1', 'options', ['A', 'B'])
+    store.applyCommand('choice1', 'setOptions', { options: ['A', 'B'] })
     const container = renderEl(<ChoiceView spec={spec} store={store} emit={() => {}} />)
     act(() => {
       store.applyCommand('choice1', 'reveal', { correctIndex: 0 })
@@ -82,7 +82,7 @@ describe('组件视图（jsdom 冒烟）', () => {
     expect((container.querySelector('.choice-item') as HTMLButtonElement).disabled).toBe(true)
 
     act(() => {
-      store.applyBinding('choice1', 'options', ['X', 'Y', 'Z'])
+      store.applyCommand('choice1', 'setOptions', { options: ['X', 'Y', 'Z'] })
     })
     const renewed = container.querySelectorAll('.choice-item')
     expect(renewed).toHaveLength(3)

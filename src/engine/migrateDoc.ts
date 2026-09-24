@@ -18,12 +18,19 @@
  * - 剥离 views[].template（模版视图移除：换行不切视图，当前视图随行刷新）
  * - 数据表列补 type（text/number/boolean/notes/list/json 启发式；编辑器按类型渲染单元格，免 JSON 手输）
  *
+ * docs/26 绑定机制移除（对 v1 迁移产物与已存 v3 文档都执行，幂等）：
+ * - 组件静态 bindings（$q.列 → 组件状态）编译为图上的「数据应用」set 命令节点：
+ *     on question.loaded → call <comp>.setText/setOptions/setMusic({ 字段: q.… })
+ *     on view.entered    → branch(q != null) → 独立 call 链（守卫首帧 row 未装载）
+ *   换行/进视图两个时机与原 applyBindings 重放语义对齐；随后从组件上剥离 bindings
+ *   （schema 保留该字段声明，保证旧档先通过装载校验——「先放行后清洗」）
+ *
  * 纯函数、确定性：同输入逐字段同输出（golden 断言依赖）。
  */
 import type { ColumnType, ComponentInstance, DataTable, LevelDoc, TableRow, ViewDef } from './level'
 import type { GEdge, GNode, GraphProgram } from './graphProgram'
 import { QUESTION_LOADED_EVENT } from './graphProgram'
-import { migrateLogicV1toV2 } from './migrate'
+import { jsonToExpr, migrateLogicV1toV2 } from './migrate'
 import type { Json } from './expr'
 
 /** 旧 questions 条目（v1/v2 文档形态，仅迁移器关心） */
@@ -192,16 +199,18 @@ export function inferColumnType(values: Json[]): ColumnType {
   return 'text'
 }
 
-/** v3 内容规范化：剥 template、改写 question.*、列类型缺省补全（不 mutate 输入） */
+/** v3 内容规范化：剥 template、改写 question.*、列类型缺省补全、bindings 编译为 set 命令节点（不 mutate 输入） */
 function normalizeV3Content(content: LevelDoc['content']): LevelDoc['content'] {
   const rows = content.table?.rows ?? []
+  const { logic, components } = compileBindingsToNodes(normalizeLogic(content.logic), content.components ?? [])
   return {
     ...content,
     views: (content.views ?? []).map((v) => {
       const { template: _legacy, ...rest } = v as ViewDef & { template?: unknown }
       return rest
     }),
-    logic: normalizeLogic(content.logic),
+    logic,
+    components,
     table: {
       ...content.table,
       columns: (content.table?.columns ?? []).map((c) => ({
@@ -209,6 +218,102 @@ function normalizeV3Content(content: LevelDoc['content']): LevelDoc['content'] {
         type: c.type ?? inferColumnType(rows.map((r) => r[c.key] ?? null)),
       })),
     },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// docs/26：组件静态 bindings → 图上「数据应用」set 命令节点（幂等：转换后剥离 bindings）
+// ---------------------------------------------------------------------------
+
+/** 旧文档组件上的 bindings 形态（TS 类型已移除该字段，迁移器经 Json 层读取） */
+type LegacyBindings = { bindings?: Record<string, Json> }
+
+/** 组件类型 × 槽位 → set 命令与参数键（未列出的槽位在旧运行时本就是 no-op applyBinding，直接丢弃） */
+const BINDING_SLOT_COMMANDS: Record<string, Record<string, { method: string; argKey: string }>> = {
+  label: { text: { method: 'setText', argKey: 'text' } },
+  choice: { options: { method: 'setOptions', argKey: 'options' } },
+  staff: { music: { method: 'setMusic', argKey: 'music' } },
+}
+
+/**
+ * 把每个组件的 bindings 编译为 set 命令节点，两个事件入口各持有一条独立链：
+ *   on question.loaded → call×N（行装载后应用；row 必已就绪，无需守卫）
+ *   on view.entered    → branch(q != null) → call×N（进视图重放；守卫首帧 row 未装载）
+ * 两个入口语义相同（应用当前行数据）；不共享链节点——script 伪代码视图按处理器
+ * 遍历渲染，跨处理器共享节点无法文本化（往返会丢节点），必须保持图在可文本化子集内。
+ * 附加到既有节点之后（logicPatch 行门控前缀在前，时序不变）。
+ */
+function compileBindingsToNodes(logic: GraphProgram, components: ComponentInstance[]): {
+  logic: GraphProgram
+  components: ComponentInstance[]
+} {
+  // 1) 收集 (组件, 槽位) → set 命令调用；同时准备剥离 bindings 后的组件
+  const comps = components.map((c) => ({ ...c })) as (ComponentInstance & LegacyBindings)[]
+  const calls: { compId: string; method: string; argKey: string; expr: string }[] = []
+  for (const comp of comps) {
+    const bindings = comp.bindings
+    delete comp.bindings
+    if (!bindings || typeof bindings !== 'object') continue
+    const slotMap = BINDING_SLOT_COMMANDS[comp.type]
+    for (const [slot, raw] of Object.entries(bindings)) {
+      const cmd = slotMap?.[slot]
+      if (!cmd) {
+        console.warn(`[migrate] 绑定 ${comp.id}.${slot}（组件类型 ${comp.type}）没有对应的 set 命令，已丢弃（原运行时也是 no-op）`)
+        continue
+      }
+      let expr: string
+      try {
+        expr = jsonToExpr(raw as Json)
+      } catch (err) {
+        console.warn(`[migrate] 绑定 ${comp.id}.${slot} 的值无法转为表达式，已丢弃: ${err instanceof Error ? err.message : String(err)}`)
+        continue
+      }
+      calls.push({ compId: comp.id, method: cmd.method, argKey: cmd.argKey, expr })
+    }
+  }
+  if (calls.length === 0) return { logic, components: comps }
+
+  // 2) 分配节点/边 id（与既有图撞车时加数字后缀，确定性分配）
+  const usedIds = new Set<string>([...logic.nodes.map((n) => n.id), ...logic.edges.map((e) => e.id)])
+  const alloc = (base: string): string => {
+    let id = base
+    for (let i = 2; usedIds.has(id); i++) id = `${base}_${i}`
+    usedIds.add(id)
+    return id
+  }
+  const sanitize = (s: string): string => s.replace(/\W/g, '_') || 'x'
+
+  // 3) 生成节点与边：每个入口一条独立 call 链（view.entered 入口带 q != null 守卫）
+  const nodes: GNode[] = []
+  const edges: GEdge[] = []
+  const chain = (suffix: string, headId: string, viaGuard: boolean): void => {
+    const chainIds = calls.map((c, i) => {
+      const id = alloc(`bnd${suffix}_${sanitize(c.compId)}_${sanitize(c.method)}_${i + 1}`)
+      nodes.push({ id, kind: 'call', target: c.compId, method: c.method, args: [`{ ${c.argKey}: ${c.expr} }`] })
+      return id
+    })
+    for (let i = 0; i + 1 < chainIds.length; i++) {
+      edges.push({ id: alloc(`bnd${suffix}_e${i + 1}`), from: chainIds[i], to: chainIds[i + 1] })
+    }
+    if (viaGuard) {
+      const guardId = alloc(`bnd${suffix}_vguard`)
+      nodes.push({ id: guardId, kind: 'branch', cond: 'q != null' })
+      edges.push({ id: alloc(`bnd${suffix}_ev`), from: headId, to: guardId })
+      edges.push({ id: alloc(`bnd${suffix}_evg`), from: guardId, to: chainIds[0], port: 'true' })
+    } else {
+      edges.push({ id: alloc(`bnd${suffix}_eq`), from: headId, to: chainIds[0] })
+    }
+  }
+  const onQId = alloc('bnd_qload')
+  nodes.push({ id: onQId, kind: 'on', event: QUESTION_LOADED_EVENT })
+  chain('_q', onQId, false)
+  const onVId = alloc('bnd_venter')
+  nodes.push({ id: onVId, kind: 'on', event: 'view.entered' })
+  chain('_v', onVId, true)
+
+  return {
+    logic: { ...logic, nodes: [...logic.nodes, ...nodes], edges: [...logic.edges, ...edges] },
+    components: comps,
   }
 }
 

@@ -262,12 +262,10 @@ describe('GraphEngine 级联与查询', () => {
     expect(commands).toEqual([])
   })
 
-  it('resolve 与 evaluate（flow.pass / bindings 用）', () => {
+  it('evaluate（flow.pass 通过线用）', () => {
     const p = blankGraphProgram()
     const { host } = makeHost()
     const engine = new GraphEngine(p, host)
-    expect(engine.resolve({ notes: '$q.data.target', n: 1 })).toEqual({ notes: 60, n: 1 })
-    expect(engine.resolve('$expr:v.score + 1')).toBe(1)
     expect(engine.evaluate('v.score >= 1')).toBe(false)
     engine.vars.score = 5
     expect(engine.evaluate('v.score >= 1')).toBe(true)

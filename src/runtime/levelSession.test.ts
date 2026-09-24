@@ -90,7 +90,7 @@ function makeHost(): { host: SessionHost; rec: Recording } {
 }
 
 describe('LevelSession', () => {
-  it('start 触发 started→初始视图→装载第 1 行→questionLoaded，绑定解析到组件', async () => {
+  it('start 触发 started→初始视图→装载第 1 行→questionLoaded，行数据经迁移的 set 命令节点应用到组件', async () => {
     const doc = makeDoc()
     const r1 = doc.content.table.rows[0].data as Record<string, Json>
     r1.music = { notes: [{ midi: 60 }] }
@@ -98,6 +98,7 @@ describe('LevelSession', () => {
     const { host, rec } = makeHost()
     const session = new LevelSession(doc, host)
     session.start()
+    await flush()
 
     expect(rec.views).toEqual(['main'])
     expect(rec.rows[0]).toEqual({ index: 0, total: 2, tag: 'r1' })
@@ -384,7 +385,7 @@ describe('LevelSession', () => {
     expect(events.some((e) => e.kind === 'error' && e.message?.includes('ghost'))).toBe(true)
   })
 
-  it('question.next：换行停留当前视图（模版视图已移除，绑定随行刷新）', async () => {
+  it('question.next：换行停留当前视图（模版视图已移除，行数据经 question.loaded 上的 set 命令节点随行刷新）', async () => {
     const views = [{ id: 'main' }, { id: 'quiz', name: '答题' }]
     const rules = [{ id: 'next', on: 'nextBtn.clicked', do: [{ cmd: 'question.next' }] }]
     const { host, rec } = makeHost()
@@ -394,7 +395,7 @@ describe('LevelSession', () => {
     session.dispatch('nextBtn.clicked')
     await flush()
     expect(rowTag(session.currentRow)).toBe('r2')
-    expect(session.currentView).toBe('main') // 换行不切视图：当前视图内容由 loadRow 重放绑定刷新
+    expect(session.currentView).toBe('main') // 换行不切视图：当前视图内容由 question.loaded 上的 set 命令节点刷新
     expect(rec.views).toEqual(['main'])
   })
 

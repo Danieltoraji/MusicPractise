@@ -19,8 +19,8 @@ export interface MusicDoc {
  * 视图（v3）：互斥的表现层边界——同一时刻只渲染当前视图的组件。
  * 裁决（docs/20）：视图不划分变量作用域与逻辑图作用域（v.* 全局、单图）；
  * 事件隔离由「非当前视图组件不渲染 → 不发事件」免费获得。
- * 裁决（docs/25）：模版视图移除——换行不切视图，当前视图内容随行自动刷新
- * （loadRow 重放绑定 + question.loaded 重放命令）；跳行 = 赋值 v.__row。
+ * 裁决（docs/25/26）：模版视图与静态 bindings 均移除——换行不切视图，
+ * 行数据由节点图上的 set 命令节点（question.loaded/view.entered 驱动）应用；跳行 = 赋值 v.__row。
  */
 export interface ViewDef {
   id: string
@@ -48,7 +48,8 @@ export interface ComponentInstance {
   view?: string
   layout?: { x: number; y: number; w: number; h: number }
   props?: Json
-  bindings?: Record<string, Json>
+  // 历史说明：v3 早期存在 bindings（$q.列 → 组件状态的静态绑定），已被移除（docs/26）；
+  // 旧文档由迁移器编译为 set 命令节点后剥离（schema 保留该字段声明以保证装载通畅）
 }
 
 export interface FlowConfig {

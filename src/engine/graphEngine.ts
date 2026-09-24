@@ -292,28 +292,6 @@ export class GraphEngine {
     return this.portOut(this.idx.outEdges, id)
   }
 
-  /** 深度解析 "$q.…"/"$event.…"/"$v.…"/"$expr:…" 引用（组件 bindings 用，与 v1 同语义） */
-  resolve(value: Json, scope?: ExprScope): Json {
-    const s: ExprScope = scope ?? { event: {}, q: this.host.getQuestion(), v: this.vars }
-    const ectx: ExprContext = { getNowSeconds: this.host.getNowSeconds }
-    const refRe = /^\$(q|event|v)(\.[A-Za-z_]\w*)+$/
-    const walk = (v: Json): Json => {
-      if (typeof v === 'string') {
-        if (v.startsWith('$expr:')) return evalExpr(v.slice(6), s, ectx)
-        if (refRe.test(v)) return evalExpr(v.slice(1), s, ectx)
-        return v
-      }
-      if (Array.isArray(v)) return v.map(walk)
-      if (v !== null && typeof v === 'object') {
-        const out: Record<string, Json> = {}
-        for (const [k, val] of Object.entries(v)) out[k] = walk(val)
-        return out
-      }
-      return v
-    }
-    return walk(value)
-  }
-
   /** 独立求值（如 flow.pass 通过线表达式）；作用域 event 默认为空对象 */
   evaluate(expr: string, event: Json = {}): Json {
     return evalExpr(expr, { event, q: this.host.getQuestion(), v: this.vars }, { getNowSeconds: this.host.getNowSeconds })

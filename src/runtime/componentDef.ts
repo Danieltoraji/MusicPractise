@@ -1,7 +1,9 @@
 /**
  * 组件定义的运行时形态：每个组件类型实现统一契约 ——
- * events（对外事件）/ commands（可被逻辑调用的命令）/ bindings（随题注入），
+ * events（对外事件）/ commands（可被逻辑调用的命令），
  * 命令处理是纯函数（状态进、状态+效果出），便于测试与未来服务端重放。
+ * 数据表字段的应用统一走命令（label.setText / choice.setOptions / staff.setMusic，
+ * 由节点图 question.loaded / view.entered 驱动）——静态 bindings 已移除（docs/26）。
  */
 import type { ComponentInstance, Note } from '../engine/level'
 import type { Json } from '../engine/expr'
@@ -35,8 +37,6 @@ export interface ContractDoc {
   commands: Record<string, string>
   /** 查询方法名 → 返回值说明（读操作，assign 右侧调用，如 v.x = input1.getValue()） */
   queries?: Record<string, string>
-  /** 绑定槽位 → 值类型说明 */
-  bindings?: Record<string, string>
   /** 可读状态（编辑器展示用；表达式 v1 经事件即可覆盖） */
   state?: Record<string, string>
   /** props 说明（自由文本） */
@@ -59,7 +59,6 @@ export interface PropFieldDef {
 export interface ComponentDef<S = unknown> {
   contract: ContractDoc
   initialState(spec: ComponentInstance): S
-  applyBinding(state: S, key: string, value: Json): S
   applyCommand(state: S, command: string, args: Record<string, Json>): { state: S; effects?: Effect[] }
   /** 查询方法（contract.queries 中声明的方法在此实现）；未识别的方法名抛错 */
   query?(state: S, method: string, args: Json[]): Json
@@ -162,28 +161,29 @@ export const LABEL_DEF: ComponentDef<LabelState> = {
     displayName: '文本',
     category: 'ui',
     events: {},
-    commands: { show: '{ text: string, tone?: "info"|"success"|"error" }' },
+    // setText：应用数据表字段（q.列）的标配命令（docs/26）；show 额外带 tone 语义
+    commands: { show: '{ text: string, tone?: "info"|"success"|"error" }', setText: '{ text: string }' },
     propsFields: [{ key: 'text', label: '文本', type: 'string', fallback: '' }],
-    bindings: { text: 'string' },
     state: { text: 'string', tone: '"info"|"success"|"error"' },
   },
   initialState: (spec) => ({ text: str(spec.props && (spec.props as Record<string, Json>).text, ''), tone: 'info' }),
-  // text 绑定（如 $q.title）：行装载/进视图时自动刷新文案——「行驱动视图」的标配（docs/25）；
-  // 数字/布尔列收敛为字符串（与 props 初始 str() 同口径），对象/数组丢弃
-  applyBinding: (s, key, value) => {
-    if (key !== 'text') return s
-    if (typeof value === 'string') return { ...s, text: value }
-    if (typeof value === 'number' || typeof value === 'boolean') return { ...s, text: String(value) }
-    return s
-  },
   applyCommand: (s, cmd, args) => {
-    if (cmd !== 'show') return { state: s }
-    return {
-      state: {
-        text: str(args.text, s.text),
-        tone: (args.tone === 'success' || args.tone === 'error' ? args.tone : 'info') as Tone,
-      },
+    if (cmd === 'show') {
+      return {
+        state: {
+          text: str(args.text, s.text),
+          tone: (args.tone === 'success' || args.tone === 'error' ? args.tone : 'info') as Tone,
+        },
+      }
     }
+    if (cmd === 'setText') {
+      // 数字/布尔列收敛为字符串（与 props 初始 str() 同口径）；对象/数组无法显示，警告后丢弃
+      if (typeof args.text === 'string') return { state: { ...s, text: args.text } }
+      if (typeof args.text === 'number' || typeof args.text === 'boolean') return { state: { ...s, text: String(args.text) } }
+      console.warn('[label] setText 收到无法显示的值（对象/数组），已忽略')
+      return { state: s }
+    }
+    return { state: s }
   },
 }
 
@@ -204,7 +204,6 @@ export const BUTTON_DEF: ComponentDef<ButtonState> = {
     const p = (spec.props ?? {}) as Record<string, Json>
     return { text: str(p.text, '按钮'), enabled: bool(p.enabled, true) }
   },
-  applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'setEnabled') return { state: { ...s, enabled: bool(args.enabled, s.enabled) } }
     if (cmd === 'setText') return { state: { ...s, text: str(args.text, s.text) } }
@@ -218,24 +217,25 @@ export const CHOICE_DEF: ComponentDef<ChoiceState> = {
     displayName: '选择器',
     category: 'ui',
     events: { chosen: '{ index: number, value: string }' },
-    commands: { reveal: '{ correctIndex: number }', reset: '无参数' },
-    bindings: { options: 'string[]' },
+    // setOptions：应用数据表 list 列（q.列）换题刷新选项（docs/26）
+    commands: { reveal: '{ correctIndex: number }', reset: '无参数', setOptions: '{ options: string[] }' },
     state: { options: 'string[]', revealed: 'number?' },
   },
   initialState: () => ({ options: [], revealed: null }),
-  applyBinding: (s, key, value) => {
-    if (key === 'options' && Array.isArray(value)) {
-      // spread 保留基座状态位（__visible/__enabled），换题重放绑定不丢
-      return { ...s, options: value.map((o) => (typeof o === 'string' ? o : JSON.stringify(o))), revealed: null }
-    }
-    return s
-  },
   applyCommand: (s, cmd, args) => {
     if (cmd === 'reveal') {
       const idx = typeof args.correctIndex === 'number' ? args.correctIndex : null
       return { state: { ...s, revealed: idx } }
     }
     if (cmd === 'reset') return { state: { ...s, revealed: null } }
+    if (cmd === 'setOptions') {
+      // spread 保留基座状态位（__visible/__enabled）；换题重放不丢；非字符串项 JSON.stringify
+      if (Array.isArray(args.options)) {
+        return { state: { ...s, options: args.options.map((o) => (typeof o === 'string' ? o : JSON.stringify(o))), revealed: null } }
+      }
+      console.warn('[choice] setOptions 需要字符串数组，已忽略')
+      return { state: s }
+    }
     return { state: s }
   },
 }
@@ -246,17 +246,19 @@ export const STAFF_DEF: ComponentDef<StaffState> = {
     displayName: '五线谱',
     category: 'music',
     events: { noteClicked: '{ midi: number, name: string }' },
-    commands: { highlight: '{ target: number(midi), style: "correct"|"wrong" }', clear: '无参数' },
+    // setMusic：应用数据表字段（json 列存整块 MusicDoc）换题刷新乐谱（docs/26）
+    commands: { highlight: '{ target: number(midi), style: "correct"|"wrong" }', clear: '无参数', setMusic: '{ music: MusicDoc }' },
     propsFields: [{ key: 'clickable', label: '音符可点击', type: 'boolean', fallback: true }],
-    bindings: { music: 'MusicDoc' },
     state: { music: 'MusicDoc', highlights: 'Record<midi, "correct"|"wrong">' },
   },
   initialState: () => ({ music: null, highlights: {}, clearToken: 0 }),
-  applyBinding: (s, key, value) => {
-    if (key === 'music') return { ...s, music: value }
-    return s
-  },
   applyCommand: (s, cmd, args) => {
+    if (cmd === 'setMusic') {
+      const m = args.music
+      if (m !== null && typeof m === 'object' && !Array.isArray(m)) return { state: { ...s, music: m } }
+      console.warn('[staff] setMusic 需要乐谱对象（MusicDoc），已忽略')
+      return { state: s }
+    }
     if (cmd === 'highlight') {
       if (typeof args.target !== 'number') return { state: s }
       const style = args.style === 'wrong' ? 'wrong' : 'correct'
@@ -282,7 +284,6 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
     state: { lastPlay: 'Json' },
   },
   initialState: () => ({ lastPlay: null }),
-  applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'play') {
       const notes = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
@@ -313,7 +314,6 @@ export const TIMER_DEF: ComponentDef<TimerState> = {
     state: { running: 'boolean', count: 'number', ms: 'number' },
   },
   initialState: () => ({ running: false, count: 0, ms: 0 }),
-  applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'start') {
       // 下界 1ms 防零/负；上界 24h（setTimeout 规范对 >2^31-1 会立即触发）
@@ -354,7 +354,6 @@ export const SLIDER_DEF: ComponentDef<SliderState> = {
     const initial = typeof p.initial === 'number' ? p.initial : min
     return { value: Math.min(max, Math.max(min, initial)), min, max }
   },
-  applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'setValue' || cmd === '__set') {
       if (typeof args.value !== 'number') return { state: s }
@@ -381,7 +380,6 @@ export const INPUT_DEF: ComponentDef<InputState> = {
     state: { value: 'string' },
   },
   initialState: () => ({ value: '' }),
-  applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'setValue') return { state: { ...s, value: str(args.value, s.value) } }
     if (cmd === 'clear') return { state: { ...s, value: '' } }
@@ -408,7 +406,6 @@ export const FINGERING_DEF: ComponentDef<FingeringState> = {
     state: { highlights: 'Record<midi, "correct"|"wrong">' },
   },
   initialState: () => ({ highlights: {}, clearToken: 0 }),
-  applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'highlight') {
       if (typeof args.target !== 'number') return { state: s }
@@ -442,7 +439,6 @@ export const RHYTHM_DEF: ComponentDef<RhythmState> = {
     const p = (spec.props ?? {}) as Record<string, Json>
     return { running: false, beats: 8, bpm: 80, countIn: typeof p.countInBeats === 'number' ? p.countInBeats : 4, runId: 0 }
   },
-  applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'start') {
       const bpm = typeof args.bpm === 'number' ? Math.min(300, Math.max(20, args.bpm)) : 80
@@ -466,7 +462,6 @@ export const TUNER_DEF: ComponentDef<TunerState> = {
     state: { running: 'boolean' },
   },
   initialState: () => ({ running: false }),
-  applyBinding: (s) => s,
   applyCommand: (s, cmd) => {
     if (cmd === 'start') return { state: { ...s, running: true } }
     if (cmd === 'stop') return { state: { ...s, running: false } }
@@ -501,7 +496,6 @@ export const SYNTH_DEF: ComponentDef<SynthState> = {
       playSeq: 0,
     }
   },
-  applyBinding: (s) => s,
   applyCommand: (s, cmd, args) => {
     if (cmd === 'play') {
       const notes = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []

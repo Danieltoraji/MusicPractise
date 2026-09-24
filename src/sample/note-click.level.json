@@ -52,9 +52,6 @@
           "clef": "treble",
           "clickable": true
         },
-        "bindings": {
-          "music": "$q.data.music"
-        },
         "view": "main"
       },
       {
@@ -401,6 +398,39 @@
           "args": [
             "{enabled: true}"
           ]
+        },
+        {
+          "id": "bnd_qload",
+          "kind": "on",
+          "event": "question.loaded"
+        },
+        {
+          "id": "bnd_q_staff1_setMusic_1",
+          "kind": "call",
+          "target": "staff1",
+          "method": "setMusic",
+          "args": [
+            "{ music: q.data.music }"
+          ]
+        },
+        {
+          "id": "bnd_venter",
+          "kind": "on",
+          "event": "view.entered"
+        },
+        {
+          "id": "bnd_v_staff1_setMusic_1",
+          "kind": "call",
+          "target": "staff1",
+          "method": "setMusic",
+          "args": [
+            "{ music: q.data.music }"
+          ]
+        },
+        {
+          "id": "bnd_v_vguard",
+          "kind": "branch",
+          "cond": "q != null"
         }
       ],
       "edges": [
@@ -559,6 +589,22 @@
           "from": "on-finish_cond",
           "to": "on-finish_e0",
           "port": "false"
+        },
+        {
+          "id": "bnd_q_eq",
+          "from": "bnd_qload",
+          "to": "bnd_q_staff1_setMusic_1"
+        },
+        {
+          "id": "bnd_v_ev",
+          "from": "bnd_venter",
+          "to": "bnd_v_vguard"
+        },
+        {
+          "id": "bnd_v_evg",
+          "from": "bnd_v_vguard",
+          "to": "bnd_v_staff1_setMusic_1",
+          "port": "true"
         }
       ]
     },

@@ -284,7 +284,7 @@
         },
         "bindings": {
           "type": "object",
-          "description": "绑定槽位 → 随题目注入的值（$q.<列>… 指向表格当前行）",
+          "description": "【已废弃 docs/26】旧版静态绑定槽位。运行时已移除 bindings 机制；保留声明仅为旧档装载通畅（先放行后清洗），迁移器将其编译为 set 命令节点（setText/setOptions/setMusic）后剥离",
           "additionalProperties": {
             "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/BindingValue"
           }

@@ -138,9 +138,19 @@ describe('行为等价 golden：内置关卡 v1 vs v3（表格行 + 行门控装
       delete varsV3.__row // 运行时簿记变量（行门控用），v1 侧无此键，不参与终态对比
 
       expect(varsV3).toEqual(varsV1)
-      // 命令序列一致（docs/25 改名折算：v1 的 level.next 即 v3 的 question.next）
+      // 命令序列一致（docs/25 改名折算：v1 的 level.next 即 v3 的 question.next）。
+      // docs/26：旧 bindings 由 LevelSession 在引擎外应用，v1 引擎从不产生 set 命令；
+      // 迁移器把它们编译进图后 v3 引擎会执行——按 v1 夹具的 bindings 精确列出后从对比中剔除。
+      const SLOT_METHOD: Record<string, string> = { label: 'setText', choice: 'setOptions', staff: 'setMusic' }
+      const dataApply = new Set<string>(
+        ((v1Doc.content as { components?: { id: string; type: string; bindings?: Record<string, unknown> }[] }).components ?? [])
+          .filter((c) => SLOT_METHOD[c.type] && c.bindings && Object.keys(c.bindings).length > 0)
+          .map((c) => `${c.id}.${SLOT_METHOD[c.type]}`),
+      )
       const canon = (cs: { path: string; args: Json }[]) =>
-        cs.map((c) => ({ ...c, path: c.path === 'level.next' ? 'question.next' : c.path }))
+        cs
+          .filter((c) => !dataApply.has(c.path))
+          .map((c) => ({ ...c, path: c.path === 'level.next' ? 'question.next' : c.path }))
       expect(canon(recV3.commands)).toEqual(canon(recV1.commands))
       expect(recV3.commands.some((c) => c.path === 'level.next')).toBe(false) // 改名后 v3 侧不允许残留旧名
       // 同样的表达式错误在两引擎中发生同样次数（规则跳过 vs 处理器中断，单规则等价）

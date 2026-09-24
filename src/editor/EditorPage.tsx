@@ -394,7 +394,7 @@ function EditorCanvas({
           }}>
             + 视图
           </button>
-          <span className="muted views-hint">互斥视图：运行时只渲染当前视图 · 组件可绑定 $q.列名（数据映射），换行随行自动刷新</span>
+          <span className="muted views-hint">互斥视图：运行时只渲染当前视图 · 随行刷新的数据展示请在节点图用 set 命令（question.loaded / view.entered）</span>
         </div>
         <div
           ref={canvasRef}
@@ -455,7 +455,7 @@ function EditorCanvas({
 }
 
 // ---------------------------------------------------------------------------
-// 属性检查器（含数据映射：模版视图的「字段 → 显示值」绑定）
+// 属性检查器（布局 / 视图归属 / props；随行数据展示统一走节点图 set 命令，docs/26）
 // ---------------------------------------------------------------------------
 
 function Inspector({
@@ -472,13 +472,10 @@ function Inspector({
   const contract = safeContract(comp.type)
   const [propsText, setPropsText] = useState(() => JSON.stringify(comp.props ?? {}, null, 2))
   const [propsErr, setPropsErr] = useState('')
-  const [bindText, setBindText] = useState(() => JSON.stringify(comp.bindings ?? {}, null, 2))
-  const [bindErr, setBindErr] = useState('')
 
   // 切换选中组件时同步文本
   useEffect(() => {
     setPropsText(JSON.stringify(comp.props ?? {}, null, 2))
-    setBindText(JSON.stringify(comp.bindings ?? {}, null, 2))
   }, [comp.id])
 
   const applyProps = (text: string): void => {
@@ -488,16 +485,6 @@ function Inspector({
     else {
       setPropsErr('')
       onChange({ props: v ?? {} })
-    }
-  }
-
-  const applyBindings = (text: string): void => {
-    setBindText(text)
-    const v = parseJsonText(text)
-    if (v === null || typeof v !== 'object' || Array.isArray(v)) setBindErr('需为 JSON 对象')
-    else {
-      setBindErr('')
-      onChange({ bindings: v as Record<string, Json> })
     }
   }
 
@@ -517,9 +504,6 @@ function Inspector({
       />
     </label>
   )
-
-  const bindingSlots = Object.keys(contract.bindings ?? {})
-  const columnKeys = doc.content.table.columns.map((c) => c.key)
 
   return (
     <div className="inspector">
@@ -607,32 +591,6 @@ function Inspector({
           })}
         </div>
       )}
-      {bindingSlots.length > 0 && (
-        <div className="inspector-bindings">
-          <b>数据映射（字段 → 显示值）</b>
-          <p className="muted">选一列后，组件进入视图/换行时自动显示该行的值（$q.列名）</p>
-          {bindingSlots.map((slot) => {
-            const raw = (comp.bindings ?? {}) as Record<string, Json>
-            const cur = typeof raw[slot] === 'string' ? (raw[slot] as string) : ''
-            return (
-              <label key={slot} className="inspector-prop">
-                {slot}
-                <input
-                  value={cur}
-                  list="inspector-column-options"
-                  placeholder="（未绑定）"
-                  onChange={(e) => onChange({ bindings: { ...raw, [slot]: e.target.value } })}
-                />
-              </label>
-            )
-          })}
-          <datalist id="inspector-column-options">
-            {columnKeys.map((k) => (
-              <option key={k} value={`$q.${k}`} />
-            ))}
-          </datalist>
-        </div>
-      )}
       <details
         onToggle={(e) => {
           if ((e.target as HTMLDetailsElement).open) setPropsText(JSON.stringify(comp.props ?? {}, null, 2))
@@ -645,20 +603,6 @@ function Inspector({
           {propsErr && <span className="tone-error">{propsErr}</span>}
         </label>
       </details>
-      {(comp.bindings || bindingSlots.length > 0) && (
-        <details
-          onToggle={(e) => {
-            if ((e.target as HTMLDetailsElement).open) setBindText(JSON.stringify(comp.bindings ?? {}, null, 2))
-          }}
-        >
-          <summary className="muted">bindings JSON（高级）</summary>
-          <label>
-            bindings JSON
-            <textarea rows={4} value={bindText} onChange={(e) => applyBindings(e.target.value)} />
-            {bindErr && <span className="tone-error">{bindErr}</span>}
-          </label>
-        </details>
-      )}
       <button type="button" className="danger" onClick={onRemove}>
         删除组件
       </button>

@@ -41,7 +41,6 @@ const DEFS: Record<string, ComponentDef<never>> = {
 const UNKNOWN_DEF: ComponentDef<Record<string, never>> = {
   contract: { type: 'unknown', displayName: '未知组件', category: 'ui', events: {}, commands: {} },
   initialState: () => ({}),
-  applyBinding: (s) => s,
   applyCommand: (s) => ({ state: s }),
 }
 
@@ -122,15 +121,6 @@ export class ComponentStore {
     this.versions.set(id, (this.versions.get(id) ?? 0) + 1)
     this.snaps.set(id, { state: this.states.get(id), version: this.versions.get(id)! })
     this.listeners.forEach((l) => l())
-  }
-
-  /** 题目装载时：解析后的绑定值写入组件状态 */
-  applyBinding(id: string, key: string, value: Json): void {
-    const def = this.defs.get(id)
-    const state = this.states.get(id)
-    if (!def || state === undefined) return
-    this.states.set(id, def.applyBinding(state as never, key, value))
-    this.bump(id)
   }
 
   /**

@@ -3,7 +3,7 @@
  * - 视图 = 互斥渲染边界：当前视图的组件才渲染；切换派发 view.entered {view}
  * - 数据表行 = 题目：q.* 指向当前行；question.next 推进到下一题（末题结算）；
  *   赋值 v.__row = N 即跳转第 N 题（rowPointerWrite 钩子）——换行不切视图，
- *   当前视图内容随行刷新（loadRow 重放绑定；无绑定组件靠 question.loaded 重放命令）
+ *   当前视图内容随行刷新（迁移器把旧 bindings 编译为 question.loaded/view.entered 上的 set 命令节点）
  * - 逻辑执行 = GraphEngine（图 IR v2）；v3 文档已无 logicPatch（迁移器编译为图上的行门控子图）
  * 抽出为纯类是为了可单测；LevelRunner 只是其薄壳。
  */
@@ -93,7 +93,6 @@ export class LevelSession {
       viewIds: this.views.map((v) => v.id),
     })
     if (problems.length > 0) console.warn('[session] 逻辑 lint:', problems)
-    this.warnOrphanBindings()
   }
 
   get total(): number {
@@ -151,7 +150,7 @@ export class LevelSession {
   }
 
   /**
-   * 切换视图：应用该视图组件的数据绑定（指向当前行）→ 派发 view.entered。
+   * 切换视图：派发 view.entered（数据应用由迁移的 set 命令节点在该事件上重放）。
    * 同视图重复 goto = no-op（防 handler 里 goto 自己造成事件环）。
    */
   private setView(id: string): void {
@@ -162,32 +161,10 @@ export class LevelSession {
     if (this.view === id) return
     this.view = id
     this.host.onView(id)
-    this.applyBindings(id)
     this.engine.dispatch('view.entered', { view: id })
   }
 
-  /** 应用某视图组件的绑定（$q.<列>… 解析为当前行；视图切换与换行两个时机都会调用） */
-  private applyBindings(viewId: string): void {
-    if (this.row === null) return // 初始视图进入时还没有行；loadRow 会立即按当前行应用绑定
-    for (const comp of this.doc.content.components) {
-      if ((comp.view ?? this.views[0].id) !== viewId) continue
-      for (const [key, raw] of Object.entries(comp.bindings ?? {})) {
-        try {
-          this.store.applyBinding(comp.id, key, this.engine.resolve(raw))
-        } catch (err) {
-          console.error(`[session] 绑定解析失败 ${comp.id}.${key}:`, raw, err)
-          this.host.onLogicEvent?.({
-            kind: 'error',
-            message: `绑定解析失败 ${comp.id}.${key}: ${err instanceof Error ? err.message : String(err)}`,
-            event: 'binding',
-            t: Date.now(),
-          })
-        }
-      }
-    }
-  }
-
-  /** 推进到第 p 行（按 flow 顺序）；绑定重放 + onRow 回调 + question.loaded */
+  /** 推进到第 p 行（按 flow 顺序）；onRow 回调 + question.loaded（set 命令节点在该事件上应用行数据） */
   private loadRow(p: number): void {
     // 换行即停掉上一行的计时器：编译进图的行门控逻辑不会跨行触发，但已运行的句柄不会自动消失
     this.stopAllTimers()
@@ -197,7 +174,6 @@ export class LevelSession {
     // 它可能在任意事件（x.ping/timer.tick…）上触发，那些事件的负载里没有行号。
     // 直写字段不经 rowPointerWrite 钩子（否则赋值跳行会在这里递归触发自身）
     this.engine.vars[ROW_POINTER_VAR] = this.order[p]
-    this.applyBindings(this.view)
     this.host.onRow(p, this.order.length, this.row)
     // payload.row = 原始行号（shuffle 下与 index 不同）——迁移器编译的行门控子图据此判行
     this.engine.dispatch(QUESTION_LOADED_EVENT, { index: p, total: this.order.length, row: this.order[p] })
@@ -334,25 +310,5 @@ export class LevelSession {
     const score = this.engine.vars.score ?? 0
     this.host.onFinished({ score, passed })
     this.engine.dispatch('level.finished', { score, passed })
-  }
-
-  /** 绑定路径存在性检查（警告级）：$q.path 至少要在一行里能解析 */
-  private warnOrphanBindings(): void {
-    const hasPath = (obj: unknown, parts: string[]): boolean => {
-      let cur: unknown = obj
-      for (const part of parts) {
-        if (cur === null || typeof cur !== 'object' || !(part in (cur as object))) return false
-        cur = (cur as Record<string, unknown>)[part]
-      }
-      return true
-    }
-    for (const comp of this.doc.content.components) {
-      for (const [key, raw] of Object.entries(comp.bindings ?? {})) {
-        if (typeof raw !== 'string' || !raw.startsWith('$q.')) continue
-        const parts = raw.slice(3).split('.')
-        const found = this.doc.content.table.rows.some((row) => hasPath(row, parts))
-        if (!found) console.warn(`[session] 绑定 ${comp.id}.${key} = "${raw}" 在任何数据行中都不存在`)
-      }
-    }
   }
 }

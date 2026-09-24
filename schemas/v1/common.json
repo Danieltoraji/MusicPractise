@@ -182,7 +182,7 @@
       "additionalProperties": false
     },
     "BindingValue": {
-      "description": "绑定值：\"$q.…\" 路径引用（相对题目对象）或字面量",
+      "description": "【已废弃 docs/26】旧版绑定值：\"$q.…\" 路径引用或字面量；仅服务旧档装载，迁移器编译为 set 命令节点后剥离",
       "type": [
         "string",
         "number",

@@ -78,10 +78,10 @@ describe('ComponentStore', () => {
     expect(store.snapshot('t1').state).toMatchObject({ running: false })
   })
 
-  it('applyBinding 走组件定义（choice.options）', () => {
+  it('applyCommand 走组件定义（choice.setOptions）', () => {
     const store = new ComponentStore()
     store.init([spec('c1', 'choice')])
-    store.applyBinding('c1', 'options', ['甲', '乙'])
+    store.applyCommand('c1', 'setOptions', { options: ['甲', '乙'] })
     expect(store.snapshot('c1').state).toEqual({ options: ['甲', '乙'], revealed: null })
   })
 
