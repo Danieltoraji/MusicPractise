@@ -150,10 +150,11 @@ function GraphEditorInner({ doc, onChange }: Props) {
   )
 
   const rootRef = useRef<HTMLDivElement>(null)
+  // 全屏态走 React state：根节点 className 是受控的，classList 直接挂的 is-fullscreen
+  // 会在任意重渲染（如切主题）时被覆盖丢失——根节点丢背景色，:fullscreen 黑背板透出
+  const [fullscreen, setFullscreen] = useState(() => document.fullscreenElement != null)
   useEffect(() => {
-    const sync = (): void => {
-      rootRef.current?.classList.toggle('is-fullscreen', document.fullscreenElement != null)
-    }
+    const sync = (): void => setFullscreen(document.fullscreenElement != null)
     document.addEventListener('fullscreenchange', sync)
     return () => document.removeEventListener('fullscreenchange', sync)
   }, [])
@@ -332,7 +333,7 @@ function GraphEditorInner({ doc, onChange }: Props) {
   const errorCount = runLog.filter((e) => e.kind === 'error').length
 
   return (
-    <div ref={rootRef} className={`graph-editor ge-${theme}`}>
+    <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`}>
       <div className="graph-toolbar">
         <button type="button" onClick={() => apply((prog) => arrangeLayout(prog, 'all'))} title="按执行层级自动重排全部节点">
           整理布局

@@ -62,18 +62,20 @@ export function StaffView({ spec, store, emit }: ViewProps) {
     const el = containerRef.current
     if (!el) return
     el.innerHTML = ''
-    if (!music || !Array.isArray((music as { notes?: unknown }).notes)) return
-    const doc = music as unknown as MusicDoc
     const w = spec.layout?.w ?? 720
     const h = spec.layout?.h ?? 160
+    const hasMusic = music !== null && music !== undefined && Array.isArray((music as { notes?: unknown }).notes)
+    const doc = hasMusic ? (music as unknown as MusicDoc) : null
 
+    // 谱架始终绘制：行数据尚未装载（预览/首帧）也呈现五线谱形态，而不是空白盒
     const renderer = new Renderer(el, Renderer.Backends.SVG)
     renderer.resize(w, h)
     const rc = renderer.getContext()
     const stave = new Stave(10, Math.max(10, h / 2 - 50), w - 30)
-    stave.addClef(doc.clef ?? 'treble')
-    if (doc.timeSig) stave.addTimeSignature(`${doc.timeSig[0]}/${doc.timeSig[1]}`)
+    stave.addClef(doc?.clef ?? 'treble')
+    if (doc?.timeSig) stave.addTimeSignature(`${doc.timeSig[0]}/${doc.timeSig[1]}`)
     stave.setContext(rc).draw()
+    if (!doc) return
 
     const staveNotes = toStaveNotes(doc)
 

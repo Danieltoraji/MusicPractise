@@ -46,6 +46,15 @@ describe('组件视图（jsdom 冒烟）', () => {
     expect(container.querySelector('svg')).not.toBeNull()
   })
 
+  it('StaffView 无行数据（音乐为 null）时仍渲染空谱架（画布预览/首帧不空白，docs/26 回归）', () => {
+    const store = new ComponentStore()
+    const spec: ComponentInstance = { id: 'staff1', type: 'staff', layout: { x: 0, y: 0, w: 720, h: 160 } }
+    store.init([spec])
+    const container = renderEl(<StaffView spec={spec} store={store} emit={() => {}} />)
+    expect(container.querySelector('svg')).not.toBeNull()
+    expect(container.querySelectorAll('[data-midi]')).toHaveLength(0)
+  })
+
   it('ChoiceView 点击发 chosen；reveal 后锁定并标记对错', () => {
     const store = new ComponentStore()
     const spec: ComponentInstance = { id: 'choice1', type: 'choice', layout: { x: 0, y: 0, w: 720, h: 220 } }

@@ -417,7 +417,13 @@ function EditorCanvas({
               title={`${comp.type} · ${comp.name ?? comp.id}`}
             >
               <div className="editor-box-preview" inert={true as unknown as boolean}>
-                <ComponentView spec={{ ...comp, visible: true }} store={previewStore} emit={noopEmit} />
+                {/* 预览盒已由 inset:0 定位到布局框内：把 layout.x/y 清零，
+                    否则组件视图的绝对定位（boxStyle）会按画布坐标二次偏移并溢出裁切 */}
+                <ComponentView
+                  spec={{ ...comp, visible: true, layout: comp.layout ? { ...comp.layout, x: 0, y: 0 } : undefined }}
+                  store={previewStore}
+                  emit={noopEmit}
+                />
               </div>
               <span className="box-label">{comp.name ?? comp.id}</span>
               <span

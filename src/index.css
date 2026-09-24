@@ -696,6 +696,10 @@ a.level-row:hover {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  /* 预览层是 absolute 覆盖盒（不透明组件如 staff 会盖住标签），标签提升到其上 */
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
 }
 .box-type {
   color: var(--muted);
@@ -716,6 +720,12 @@ a.level-row:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+/* 勾选框与文字同行（可见/音符可点击等 boolean 开关；上面的 column 规则是为「标题+输入框」设计的） */
+.inspector label:has(> input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
 }
 .inspector input[type='text'],
 .inspector input:not([type]) {
@@ -2609,7 +2619,10 @@ a.lib-title:hover {
   }
 }
 
-/* 节点图工作台全屏态（工具条「⛶ 全屏」切换） */
+/* 节点图工作台全屏态（工具条「⛶ 全屏」切换）。
+   :fullscreen 伪类跟随原生全屏状态——内嵌 webview 不派发 fullscreenchange 事件，
+   依赖 JS 挂类在部分环境永远不生效；伪类与 state 类双保险。 */
+.graph-editor:fullscreen,
 .graph-editor.is-fullscreen {
   position: fixed;
   inset: 0;
@@ -2620,6 +2633,7 @@ a.lib-title:hover {
   border-radius: 0;
   background: #fff;
 }
+.ge-dark:fullscreen,
 .ge-dark.is-fullscreen {
   background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0));
 }
@@ -2640,7 +2654,7 @@ a.lib-title:hover {
   max-height: none;
   overflow-y: auto;
 }
-.editor-canvas-layout .inspector input,
+.editor-canvas-layout .inspector input:not([type='checkbox']),
 .editor-canvas-layout .inspector select,
 .editor-canvas-layout .inspector textarea {
   width: 100%;
