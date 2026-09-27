@@ -32,12 +32,14 @@ export function TableFieldPicker(props: {
   /** 目标槽位接受的列类型（缺省不提示） */
   accepted?: { accept: ColumnType[]; soft?: ColumnType[]; hint: string }
   datalistId?: string
+  /** 非列引用值也先显示列下拉（值为「（当前为自定义表达式）」选项）——play notes 等场景 */
+  preferSelect?: boolean
   onChange: (expr: string) => void
 }): React.ReactElement {
   const keys = props.columns.map((c) => c.key)
   const selected = exprToColumnRef(props.value, keys)
-  // 非列引用的非空值 → 直接进高级模式（原文保留）；空值/列引用 → 列选择
-  const [advanced, setAdvanced] = useState(selected === null && props.value.trim() !== '')
+  // 非列引用的非空值 → 默认进高级模式（原文保留）；空值/列引用/强制选择 → 列选择
+  const [advanced, setAdvanced] = useState(props.preferSelect !== true && selected === null && props.value.trim() !== '')
 
   const typeOf = (key: string): ColumnType => props.columns.find((c) => c.key === key)?.type ?? 'text'
   const mismatch =

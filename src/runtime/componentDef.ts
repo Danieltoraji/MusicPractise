@@ -261,8 +261,10 @@ export const STAFF_DEF: ComponentDef<StaffState> = {
   applyCommand: (s, cmd, args) => {
     if (cmd === 'setMusic') {
       const m = args.music
-      if (m !== null && typeof m === 'object' && !Array.isArray(m)) return { state: { ...s, music: m } }
-      console.warn('[staff] setMusic 需要乐谱对象（MusicDoc），已忽略')
+      // 直接接收音符串数组（docs/27）：包装成 { notes } 乐谱形态，渲染层零改动
+      if (Array.isArray(m)) return { state: { ...s, music: { notes: m } } }
+      if (m !== null && typeof m === 'object') return { state: { ...s, music: m } }
+      console.warn('[staff] setMusic 需要乐谱对象（MusicDoc）或音符串数组，已忽略')
       return { state: s }
     }
     if (cmd === 'highlight') {

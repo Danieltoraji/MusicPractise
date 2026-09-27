@@ -116,6 +116,24 @@ describe('ComponentStore', () => {
     expect(store.applyCommand('st1', '__strike', {})).toEqual([]) // 非 midi 参数静默忽略
   })
 
+  it('staff.setMusic 直收音符串数组（包装 {notes}，docs/27）；标量仍拒绝', () => {
+    const store = new ComponentStore()
+    store.init([spec('st1', 'staff')])
+    store.applyCommand('st1', 'setMusic', { music: [{ midi: 60, dur: '4n' }, { rest: true, dur: '8n' }] })
+    expect(store.snapshot('st1').state).toMatchObject({ music: { notes: [{ midi: 60, dur: '4n' }, { rest: true, dur: '8n' }] } })
+    // MusicDoc 对象形态照常
+    store.applyCommand('st1', 'setMusic', { music: { notes: [{ midi: 64 }], clef: 'bass' } })
+    expect(store.snapshot('st1').state).toMatchObject({ music: { clef: 'bass', notes: [{ midi: 64 }] } })
+    const warn = console.warn
+    console.warn = () => {}
+    try {
+      store.applyCommand('st1', 'setMusic', { music: '不是对象' })
+    } finally {
+      console.warn = warn
+    }
+    expect(store.snapshot('st1').state).toMatchObject({ music: { clef: 'bass' } }) // 标量被忽略，状态不变
+  })
+
   it('不存在的组件 id 抛错（运行器会兜底）', () => {
     const store = new ComponentStore()
     store.init([])

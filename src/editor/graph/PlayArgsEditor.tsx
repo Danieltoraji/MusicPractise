@@ -8,7 +8,9 @@
 import { useMemo, useState } from 'react'
 import { splitObjectLiteral } from './exprBridge'
 import { SYNTH_WAVES } from '../../runtime/componentDef'
+import type { ColumnType } from '../../engine/level'
 import { CallArgsEditor } from './controls'
+import { TableFieldPicker } from './TableFieldPicker'
 import { NoteChipsEditor, type PlayNote } from './NoteChipsEditor'
 
 export type { PlayNote } from './NoteChipsEditor'
@@ -198,9 +200,11 @@ export function serializePlayArgs(p: ParsedPlayArgs): string[] {
 
 export function PlayArgsEditor(props: {
   args: string[]
-  /** 组件类型：sound（notes/tempo/mode）或 synth（附加 wave） */
+  /** 组件类型：sound（notes/tempo）或 synth（附加 wave） */
   kind: 'sound' | 'synth'
   ctx: { varNames: string[]; refPaths: string[] }
+  /** 数据表列（存在时：notes 动态表达式渲染「音符串列」下拉，docs/27） */
+  tableColumns?: { key: string; label?: string; type?: ColumnType }[]
   onChange: (args: string[]) => void
 }): React.ReactElement {
   const parsed = useMemo(() => parsePlayArgs(props.args), [props.args])
@@ -230,7 +234,19 @@ export function PlayArgsEditor(props: {
       <div className="play-notes">
         <span className="muted play-notes-label">音符序列</span>
         {parsed.dynamic ? (
-          <span className="muted">notes 来自表达式（{parsed.notesSource}），如需图形编辑请改用字面量</span>
+          props.tableColumns && props.tableColumns.length > 0 ? (
+            // 数据表列下拉（docs/27）：sound 直接应用音符串列，随行播放当前行的音符
+            <TableFieldPicker
+              value={parsed.notesSource}
+              columns={props.tableColumns}
+              accepted={{ accept: ['notes'], hint: '播放需要 音符串 列（{midi, dur} 数组）' }}
+              datalistId="ginsp-expr-options"
+              preferSelect
+              onChange={(expr) => write({ notesSource: expr })}
+            />
+          ) : (
+            <span className="muted">notes 来自表达式（{parsed.notesSource}），如需图形编辑请改用字面量</span>
+          )
         ) : (
           <NoteChipsEditor notes={parsed.notes} onChange={(notes) => write({ notes })} />
         )}

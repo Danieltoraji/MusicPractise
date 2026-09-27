@@ -109,4 +109,33 @@ describe('PlayArgsEditor 组件', () => {
     expect(c.textContent).toContain('来自表达式')
     expect(c.textContent).toContain('高级')
   })
+
+  it('动态 notes + 数据表列：渲染音符串列下拉，选中写回 q.<列>（docs/27）', () => {
+    const writes: string[][] = []
+    const c = renderEl(
+      <PlayArgsEditor
+        args={["{notes: q.data.notes, tempo: 96}"]}
+        kind="sound"
+        ctx={{ varNames: [], refPaths: [] }}
+        tableColumns={[
+          { key: 'title', label: '标题', type: 'text' },
+          { key: 'listen', type: 'notes' },
+        ]}
+        onChange={(a) => writes.push(a)}
+      />,
+    )
+    const select = c.querySelector('.tfp select') as HTMLSelectElement
+    expect(select).not.toBeNull()
+    // q.data.notes 是多段路径非单列引用 → 显示「当前为自定义表达式」占位，列清单仍可选
+    expect((select.selectedOptions[0]?.textContent ?? '')).toContain('当前为自定义表达式')
+    expect(select.textContent).toContain('标题（title）')
+    expect(select.textContent).toContain('音符串')
+    // 选音符串列 → notes 写回 q.listen
+    const setVal = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+    act(() => {
+      setVal.call(select, 'listen')
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(writes.at(-1)![0]).toBe("{notes: q.listen, tempo: 96}")
+  })
 })

@@ -322,6 +322,7 @@ function CallNodeEditor(props: {
             args={node.args}
             kind={compTypeOfTarget as 'sound' | 'synth'}
             ctx={props.ctx}
+            tableColumns={props.tableColumns}
             onChange={(args) => props.onPatch({ args } as unknown as Partial<GNode>)}
           />
         ) : isViewsGoto ? (
