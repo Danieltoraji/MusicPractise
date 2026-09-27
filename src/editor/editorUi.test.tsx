@@ -60,7 +60,7 @@ describe('TableEditor（jsdom 渲染）', () => {
     }
   })
 
-  it('notes 列单元格渲染音符 chips；类型切换与单元格提交走 onChange', () => {
+  it('notes 列单元格渲染五线谱迷你谱+弹窗编辑；类型切换与单元格提交走 onChange', () => {
     const doc = baseDoc()
     doc.content.table = {
       columns: [
@@ -82,10 +82,21 @@ describe('TableEditor（jsdom 渲染）', () => {
       rerender()
     })
     try {
-      // notes 单元格：结构化 chips（音名下拉），不出现 JSON 文本
+      // notes 单元格：五线谱迷你预览（svg），不出现 JSON 文本（docs/27）
       const noteCell = container.querySelector('.tcell-notes')!
-      expect(noteCell.querySelectorAll('.play-note').length).toBeGreaterThanOrEqual(1)
+      expect(noteCell.querySelector('.tstaff .tstaff-svg svg')).not.toBeNull()
       expect(noteCell.textContent).not.toContain('midi')
+      // 点击迷你谱 → 弹窗编辑器打开（谱面 + 工具条）；应用走 notesToCell 受控写回
+      act(() => {
+        ;(noteCell.querySelector('.tstaff') as HTMLElement).click()
+      })
+      const modal = container.querySelector('.staff-modal')!
+      expect(modal).not.toBeNull()
+      expect(modal.querySelectorAll('svg > g.vf-stavenote').length).toBe(1)
+      act(() => {
+        ;[...modal.querySelectorAll('button')].find((b) => b.textContent === '应用')!.click()
+      })
+      expect(current.content.table.rows[0].notes).toEqual([{ midi: 60, dur: '4n' }])
       // 文本单元格：输入即提交（受控写回）
       const textInput = container.querySelector('.tcell-text .tgrid-input') as HTMLInputElement
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!

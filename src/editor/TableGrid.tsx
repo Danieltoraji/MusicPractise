@@ -1,9 +1,9 @@
 /**
- * 题目数据表（3-7 网格化重做）：真表格网格 + 零 JSON 输入。
+ * 题目数据表（3-7 网格化重做 + docs/27 全可视化）：真表格网格 + 零 JSON 输入。
  * - 列头：列名 / 显示名 / 类型下拉（文本|数字|布尔|音符串|字符串列表|JSON高级）/ 删除；右缘拖拽调列宽
  * - 行头：题号（= v.__row 行号）/ 删除；下缘拖拽调行高
- * - 单元格按列类型渲染专用编辑器：notes → NoteChipsEditor；list → 条目 chips；
- *   json → 高级弹层兜底（仅历史复合列需要，常见类型已结构化）
+ * - 单元格按列类型渲染专用编辑器：notes → 五线谱迷你预览 + 弹窗谱面编辑（StaffEditor）；
+ *   list → 条目 chips；json → 高级弹层兜底（仅历史复合列需要）
  * - 列宽/行高为编辑器内存态（不进文档 JSON，会话内保持）
  * 约束延续：单元格受控写回（删行/插行后不残留旧文本，评审 P1-2）。
  */
@@ -21,7 +21,8 @@ import {
   updateTableCell,
   updateTableColumnLabel,
 } from './docState'
-import { NoteChipsEditor, notesFromCell, notesToCell } from './graph/NoteChipsEditor'
+import { notesFromCell, notesToCell } from './graph/NoteChipsEditor'
+import { StaffEditorModal, StaffPreview } from './StaffEditor'
 
 const COLUMN_TYPES: { value: ColumnType; label: string }[] = [
   { value: 'text', label: '文本' },
@@ -59,6 +60,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
   const [newCol, setNewCol] = useState('')
   const [colErr, setColErr] = useState('')
   const [jsonCell, setJsonCell] = useState<{ row: number; key: string } | null>(null)
+  const [staffCell, setStaffCell] = useState<{ row: number; key: string } | null>(null)
   const colDrag = useRef<{ key: string; startX: number; startW: number } | null>(null)
   const rowDrag = useRef<{ index: number; startY: number; startH: number } | null>(null)
 
@@ -227,8 +229,11 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
                     <CellEditor
                       type={c.type ?? 'text'}
                       value={row[c.key] ?? null}
+                      width={widthOf(c.key, c.type ?? 'text')}
+                      height={heightOf(i)}
                       onCommit={(v) => commitCell(i, c.key, v)}
                       onOpenJson={() => setJsonCell({ row: i, key: c.key })}
+                      onOpenStaff={() => setStaffCell({ row: i, key: c.key })}
                     />
                   </td>
                 ))}
@@ -255,6 +260,17 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
           onClose={() => setJsonCell(null)}
         />
       )}
+      {staffCell && (
+        <StaffEditorModal
+          title={`编辑音符串 · 第 ${staffCell.row + 1} 行 / ${staffCell.key}`}
+          value={notesFromCell(doc.content.table.rows[staffCell.row]?.[staffCell.key] ?? null) ?? []}
+          onCommit={(notes) => {
+            onChange(updateTableCell(doc, staffCell.row, { [staffCell.key]: notesToCell(notes) as Json }))
+            setStaffCell(null)
+          }}
+          onClose={() => setStaffCell(null)}
+        />
+      )}
     </div>
   )
 }
@@ -266,8 +282,12 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
 function CellEditor(props: {
   type: ColumnType
   value: Json
+  /** 所在列宽/行高（notes 迷你谱预览适配用） */
+  width?: number
+  height?: number
   onCommit: (v: Json) => void
   onOpenJson: () => void
+  onOpenStaff: () => void
 }): React.ReactElement {
   const { type, value, onCommit } = props
 
@@ -306,7 +326,12 @@ function CellEditor(props: {
   if (type === 'notes') {
     const notes = notesFromCell(value)
     if (notes === null) return <JsonFallbackCell value={value} expect="音符串（{midi, dur} 数组）" onOpenJson={props.onOpenJson} />
-    return <NoteChipsEditor notes={notes} onChange={(ns) => onCommit(notesToCell(ns))} />
+    // 五线谱可视化（docs/27）：迷你谱预览（只显示一行，后面隐藏），点击打开谱面弹窗编辑
+    return (
+      <button type="button" className="tstaff" title="点击编辑五线谱" onClick={props.onOpenStaff}>
+        <StaffPreview notes={notes} width={props.width} height={Math.max(56, (props.height ?? 64) - 6)} />
+      </button>
+    )
   }
 
   if (type === 'list') {

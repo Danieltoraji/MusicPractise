@@ -1851,6 +1851,70 @@ path.gedge-false {
   box-sizing: border-box;
 }
 
+/* ---------- 五线谱编辑器（docs/27 数据表全可视化） ---------- */
+.tstaff {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+.tstaff:hover {
+  border-color: var(--accent);
+}
+.tstaff-svg {
+  pointer-events: none;
+  line-height: 0;
+}
+.tstaff-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+.staff-modal {
+  width: min(960px, 94vw);
+}
+.staff-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.staff-toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.staff-toolbar select {
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12.5px;
+}
+.staff-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+}
+.staff-editor-score {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fcfcff;
+  cursor: crosshair;
+  min-height: 212px;
+}
+.staff-editor-hint {
+  margin: 0;
+  font-size: 11.5px;
+}
+
 /* ---------- 节点图：变量/日志/问题列表/脚本覆盖层（3-2b） ---------- */
 
 .gvars {
