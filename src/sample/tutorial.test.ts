@@ -84,7 +84,7 @@ describe('新手引导 · 交互教程（全流程可玩）', () => {
     session.dispatch('play_btn.clicked')
     await flush()
     const synth = effects.find((e) => e.type === 'audio.synth') as Extract<Effect, { type: 'audio.synth' }> | undefined
-    expect(synth).toMatchObject({ wave: 'triangle', mode: 'seq' })
+    expect(synth).toMatchObject({ wave: 'triangle' })
     // 音阶参考 + 目标音：Do → Re → Mi（最后的音就是题目）
     expect((synth!.notes as unknown[]).length).toBe(3)
     expect((synth!.notes as unknown[]).at(-1)).toMatchObject({ midi: 64, dur: '2n' })
@@ -145,7 +145,7 @@ describe('音色实验室 · 合成器示例（数据表驱动）', () => {
     session.dispatch('play_btn.clicked')
     await flush()
     const play1 = effects.at(-1) as Extract<Effect, { type: 'audio.synth' }>
-    expect(play1).toMatchObject({ wave: 'sine', mode: 'seq' })
+    expect(play1).toMatchObject({ wave: 'sine' })
     expect((play1.notes as unknown[]).length).toBe(3)
 
     // 「下一音色」= question.next：推进题目行，绑定组件随行自动刷新

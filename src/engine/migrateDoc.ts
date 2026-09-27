@@ -25,6 +25,10 @@
  *   换行/进视图两个时机与原 applyBindings 重放语义对齐；随后从组件上剥离 bindings
  *   （schema 保留该字段声明，保证旧档先通过装载校验——「先放行后清洗」）
  *
+ * docs/27 播放语义规范化（幂等）：sound/synth play 调用 UI 上不再提供 mode 参数——
+ * 时序关系内化为音符串的 t（起始拍）字段；已有 mode 键保留为运行时兼容键（仅规范引号），
+ * 缺失时按旧缺省 chord 显式化。规则详见 normalizePlayModes。
+ *
  * 纯函数、确定性：同输入逐字段同输出（golden 断言依赖）。
  */
 import type { ColumnType, ComponentInstance, DataTable, LevelDoc, TableRow, ViewDef } from './level'
@@ -200,10 +204,11 @@ export function inferColumnType(values: Json[]): ColumnType {
   return 'text'
 }
 
-/** v3 内容规范化：剥 template、改写 question.*、列类型缺省补全、bindings 编译为 set 命令节点（不 mutate 输入） */
+/** v3 内容规范化：剥 template、改写 question.*、列类型缺省补全、bindings 编译为 set 命令节点、播放 mode 显式化（不 mutate 输入） */
 function normalizeV3Content(content: LevelDoc['content']): LevelDoc['content'] {
   const rows = content.table?.rows ?? []
-  const { logic, components } = compileBindingsToNodes(normalizeLogic(content.logic), content.components ?? [])
+  const { logic: logicBound, components } = compileBindingsToNodes(normalizeLogic(content.logic), content.components ?? [])
+  const logic = normalizePlayModes(logicBound, new Map(components.map((c) => [c.id, c.type])))
   return {
     ...content,
     views: (content.views ?? []).map((v) => {
@@ -228,6 +233,121 @@ function normalizeV3Content(content: LevelDoc['content']): LevelDoc['content'] {
 
 /** 旧文档组件上的 bindings 形态（TS 类型已移除该字段，迁移器经 Json 层读取） */
 type LegacyBindings = { bindings?: Record<string, Json> }
+
+/** 顶层逗号切分（引号/括号感知，depth 不配对返回 null）——exprBridge.splitTopLevel 的引擎侧镜像 */
+function splitTopLevel(src: string): string[] | null {
+  const parts: string[] = []
+  let depth = 0
+  let quote: string | null = null
+  let cur = ''
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i]
+    if (quote) {
+      cur += ch
+      if (ch === '\\') {
+        cur += src[i + 1] ?? ''
+        i++
+      } else if (ch === quote) {
+        quote = null
+      }
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      cur += ch
+      continue
+    }
+    if (ch === '{' || ch === '[' || ch === '(') {
+      depth++
+      cur += ch
+      continue
+    }
+    if (ch === '}' || ch === ']' || ch === ')') {
+      depth--
+      cur += ch
+      continue
+    }
+    if (ch === ',' && depth === 0) {
+      parts.push(cur)
+      cur = ''
+      continue
+    }
+    cur += ch
+  }
+  if (depth !== 0 || quote !== null) return null
+  parts.push(cur)
+  return parts
+}
+
+/** play args 对象字面量 `{ k: v, … }` 的顶层键值切分；形态不符返回 null */
+function playArgsEntries(src: string): { key: string; source: string }[] | null {
+  const t = src.trim()
+  if (!t.startsWith('{') || !t.endsWith('}')) return null
+  const parts = splitTopLevel(t.slice(1, -1))
+  if (parts === null) return null
+  const out: { key: string; source: string }[] = []
+  for (const part of parts) {
+    const m = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([\s\S]+)$/.exec(part.trim())
+    if (!m) return null
+    out.push({ key: m[1], source: m[2].trim() })
+  }
+  return out
+}
+
+/**
+ * docs/27 播放语义规范化（幂等）：sound/synth 的 play 调用 UI 上不再提供 mode——
+ * 时序关系由音符串的 t（起始拍，缺省接排）表达。已有的 mode 键作为运行时兼容键
+ * 原样保留（chord = 运行时折算全音 t:0 同时；seq = 运行时忽略即接排，均与旧语义一致），
+ * 仅规范化引号形态；只对真正缺失 mode 的「旧缺省 chord」调用显式化：
+ * - 缺 mode + notes 为多音字面量数组 → 每音补 t:0（同时发声）
+ * - 缺 mode + notes 为动态引用 → 补写 mode:'chord' 兼容键（无法静态改写行数据）
+ */
+function normalizePlayModes(logic: GraphProgram, compTypes: Map<string, string>): GraphProgram {
+  let changed = false
+  const rebuild = (entries: { key: string; source: string }[]): string[] =>
+    [`{ ${entries.map((e) => `${e.key}: ${e.source}`).join(', ')} }`]
+  const nodes = logic.nodes.map((node) => {
+    if (node.kind !== 'call' || node.method !== 'play') return node
+    if (!Array.isArray(node.args) || typeof node.args[0] !== 'string') return node
+    const compType = compTypes.get(node.target)
+    if (compType !== 'sound' && compType !== 'synth') return node
+    const entries = playArgsEntries(node.args[0])
+    if (entries === null) return node
+    const modeEntry = entries.find((e) => e.key === 'mode')
+    const modeVal = modeEntry ? /^["']?(chord|seq)["']?$/.exec(modeEntry.source.trim())?.[1] ?? null : null
+    if (modeVal !== null) {
+      // 兼容键保留（语义与旧档一致），引号规范化为单引号形态（幂等收敛）
+      const normalized = entries.map((e) => (e.key === 'mode' ? { ...e, source: `'${modeVal}'` } : e))
+      const next = rebuild(normalized)
+      if (next[0] === node.args[0]) return node
+      changed = true
+      return { ...node, args: next }
+    }
+    const notesEntry = entries.find((e) => e.key === 'notes')
+    if (!notesEntry) return node
+    const notesSrc = notesEntry.source
+    if (notesSrc.startsWith('[')) {
+      // 字面量数组：多音时每音补 t:0（单音同时/接排等价，不动）
+      const inner = notesSrc.slice(1, -1)
+      const parts = splitTopLevel(inner)
+      if (parts === null || parts.length <= 1) return node
+      let touched = false
+      const patched = parts.map((p) => {
+        const el = p.trim()
+        if (!el.endsWith('}') || /\bt\s*:/.test(el)) return el
+        touched = true
+        return `${el.slice(0, -1).trimEnd()}, t: 0}`
+      })
+      if (!touched) return node
+      changed = true
+      return { ...node, args: rebuild(entries.map((e) => (e.key === 'notes' ? { ...e, source: `[${patched.join(', ')}]` } : e))) }
+    }
+    // 动态引用：显式化 chord 兼容键（单引号字符串字面量，与 script 往返规范化一致）
+    changed = true
+    return { ...node, args: rebuild([...entries, { key: 'mode', source: "'chord'" }]) }
+  })
+  return changed ? { ...logic, nodes } : logic
+}
 
 /**
  * 把每个组件的 bindings 编译为 set 命令节点，两个事件入口各持有一条独立链：

@@ -146,7 +146,7 @@
           "target": "sound1",
           "method": "play",
           "args": [
-            "{notes: q.data.listenNotes}"
+            "{ notes: q.data.listenNotes, mode: 'chord' }"
           ]
         },
         {
@@ -194,7 +194,7 @@
           "target": "sound1",
           "method": "play",
           "args": [
-            "{notes: q.data.listenNotes}"
+            "{ notes: q.data.listenNotes, mode: 'chord' }"
           ]
         },
         {
@@ -213,7 +213,7 @@
           "target": "sound1",
           "method": "play",
           "args": [
-            "{notes: q.data.rewardChord}"
+            "{ notes: q.data.rewardChord, mode: 'chord' }"
           ]
         },
         {

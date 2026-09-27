@@ -554,7 +554,7 @@
           "target": "synth1",
           "method": "play",
           "args": [
-            "{notes: q.data.notes, wave: 'triangle', mode: 'seq', tempo: 100}"
+            "{ notes: q.data.notes, wave: 'triangle', tempo: 100, mode: 'chord' }"
           ],
           "x": 260,
           "y": 600

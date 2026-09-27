@@ -1,9 +1,9 @@
 /**
  * 播放类命令（sound.play / synth.play）的音符可视化编辑器：
  * - 音符序列：NoteChipsEditor（音名/时值/频率换算，共用组件）
- * - synth 附加音色（wave）下拉；tempo/mode 数字与下拉
- * - notes 来自动态表达式（如 q.data.notes）时自动回落「高级」模式并保留原文
- * 解析/序列化为纯函数导出（可单测）。
+ * - synth 附加音色（wave）下拉；tempo 数字输入
+ * - notes 来自动态表达式（如 q.notes）时显示提示（列下拉接入见批次 3，docs/27）
+ * 解析/序列化为纯函数导出（可单测）；废弃的 mode 兼容键经 extraEntries 原样保留。
  */
 import { useMemo, useState } from 'react'
 import { splitObjectLiteral } from './exprBridge'
@@ -23,8 +23,7 @@ export interface ParsedPlayArgs {
   notes: PlayNote[]
   wave?: string
   tempo?: number
-  mode?: 'chord' | 'seq'
-  /** play 契约之外的键原样透传（如 attack/release/gain/cutoff 走高级编辑） */
+  /** play 契约之外的键原样透传（如 attack/release/gain/cutoff 与废弃的 mode 兼容键走高级编辑） */
   extraEntries: { key: string; source: string }[]
   /** notes 的原始源文本（dynamic 时回写用） */
   notesSource: string
@@ -95,8 +94,9 @@ function identLiteral(src: string): string | null {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(t) ? t : null
 }
 
-/** 解析 `[{midi: 60, dur: '4n'}, …]` 形态的音符数组；任何不符返回 null */
-export function parseNoteList(src: string): PlayNote[] | null {  const t = src.trim()
+/** 解析 `[{midi: 60, dur: '4n'}, …]` 形态的音符数组（支持 t/vel/rest 可选键）；任何不符返回 null */
+export function parseNoteList(src: string): PlayNote[] | null {
+  const t = src.trim()
   if (!t.startsWith('[') || !t.endsWith(']')) return null
   const inner = t.slice(1, -1)
   if (inner.trim() === '') return []
@@ -108,20 +108,46 @@ export function parseNoteList(src: string): PlayNote[] | null {  const t = src.t
     if (entries === null) return null
     let midi: number | null = null
     let dur = '4n'
+    let vel: number | undefined
+    let t: number | undefined
+    let rest = false
     for (const e of entries) {
       if (e.key === 'midi') midi = numberLiteral(e.source)
       else if (e.key === 'dur') dur = stringLiteral(e.source) ?? dur
-      // 其它键（vel 等）原样保留在序列化时…… 为简化：仅支持 midi/dur，出现其它键视为不可编辑
+      else if (e.key === 'vel') vel = numberLiteral(e.source) ?? undefined
+      else if (e.key === 't') t = numberLiteral(e.source) ?? undefined
+      else if (e.key === 'rest') rest = identLiteral(e.source) === 'true'
+      // 其它键视为不可静态编辑（vel/t/rest 之外的保留键走高级模式）
       else return null
     }
+    if (rest) {
+      out.push({ dur, ...(t !== undefined ? { t } : {}), rest: true })
+      continue
+    }
     if (midi === null || !Number.isFinite(midi)) return null
-    out.push({ midi: Math.round(midi), dur })
+    out.push({
+      midi: Math.round(midi),
+      dur,
+      ...(vel !== undefined ? { vel } : {}),
+      ...(t !== undefined ? { t } : {}),
+    })
   }
   return out
 }
 
+/** 音符数组 → 字面量文本（可选字段仅在有值时输出） */
 export function serializeNoteList(notes: PlayNote[]): string {
-  return `[${notes.map((n) => `{midi: ${n.midi}, dur: '${n.dur}'}`).join(', ')}]`
+  return `[${notes
+    .map((n) => {
+      const parts: string[] = []
+      if (n.rest === true) parts.push('rest: true')
+      else if (typeof n.midi === 'number') parts.push(`midi: ${n.midi}`)
+      parts.push(`dur: '${n.dur}'`)
+      if (typeof n.vel === 'number') parts.push(`vel: ${n.vel}`)
+      if (typeof n.t === 'number') parts.push(`t: ${n.t}`)
+      return `{${parts.join(', ')}}`
+    })
+    .join(', ')}]`
 }
 
 /** 解析 play 参数（args[0] 的对象字面量）；结构不符返回 null（调用方回落高级） */
@@ -134,7 +160,6 @@ export function parsePlayArgs(args: string[]): ParsedPlayArgs | null {
     notes: [],
     wave: undefined,
     tempo: undefined,
-    mode: undefined,
     extraEntries: [],
     notesSource: '',
     entries,
@@ -149,10 +174,8 @@ export function parsePlayArgs(args: string[]): ParsedPlayArgs | null {
       parsed.wave = stringLiteral(e.source) ?? identLiteral(e.source) ?? undefined
     } else if (e.key === 'tempo') {
       parsed.tempo = numberLiteral(e.source) ?? undefined
-    } else if (e.key === 'mode') {
-      const m = stringLiteral(e.source) ?? identLiteral(e.source)
-      parsed.mode = m === 'seq' ? 'seq' : m === 'chord' ? 'chord' : undefined
     } else {
+      // mode（废弃兼容键）/attack/release 等原样透传，序列化保留（docs/27：往返不丢）
       parsed.extraEntries.push(e)
     }
   }
@@ -165,7 +188,6 @@ export function serializePlayArgs(p: ParsedPlayArgs): string[] {
   parts.push(p.dynamic ? `notes: ${p.notesSource}` : `notes: ${serializeNoteList(p.notes)}`)
   if (p.wave !== undefined) parts.push(`wave: '${p.wave}'`)
   if (p.tempo !== undefined) parts.push(`tempo: ${p.tempo}`)
-  if (p.mode !== undefined) parts.push(`mode: '${p.mode}'`)
   for (const e of p.extraEntries) parts.push(`${e.key}: ${e.source}`)
   return [`{${parts.join(', ')}}`]
 }
@@ -226,13 +248,6 @@ export function PlayArgsEditor(props: {
               if (Number.isFinite(v)) write({ tempo: Math.min(300, Math.max(20, v)) })
             }}
           />
-        </label>
-        <label>
-          播放方式
-          <select value={parsed.mode ?? 'chord'} onChange={(e) => write({ mode: e.target.value as 'chord' | 'seq' })}>
-            <option value="chord">chord · 同时发声</option>
-            <option value="seq">seq · 按时值连奏</option>
-          </select>
         </label>
         {props.kind === 'synth' && (
           <label>

@@ -75,12 +75,11 @@ function RunnerCore({
         },
         runEffects: (effects) => {
           for (const eff of effects) {
-            if (eff.type === 'audio.play') playNotes(eff.notes, eff.tempo, eff.mode)
+            if (eff.type === 'audio.play') playNotes(eff.notes, eff.tempo)
             else if (eff.type === 'audio.synth')
               playSynth(eff.notes, {
                 wave: eff.wave,
                 tempo: eff.tempo,
-                mode: eff.mode,
                 attack: eff.attack,
                 release: eff.release,
                 gain: eff.gain,

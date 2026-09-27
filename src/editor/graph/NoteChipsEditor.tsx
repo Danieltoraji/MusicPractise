@@ -5,10 +5,15 @@
  */
 import { useState } from 'react'
 import { Note } from 'tonal'
+import type { Json } from '../../engine/expr'
 
+/** 音符串元素：休止符（rest: true）无 midi；t = 起始拍（缺省接排，docs/27） */
 export interface PlayNote {
-  midi: number
+  midi?: number
   dur: string
+  vel?: number
+  t?: number
+  rest?: boolean
 }
 
 export const DUR_OPTIONS = ['1n', '2n', '4n', '8n', '16n', '32n']
@@ -44,19 +49,25 @@ export function NoteChipsEditor(props: {
   return (
     <span className="play-notes">
       {notes.map((n, i) => (
-        <span key={`${n.midi}-${n.dur}-${i}`} className="play-note">
-          <select
-            value={n.midi}
-            title="音名"
-            onChange={(e) => {
-              set(notes.map((x, j) => (j === i ? { ...x, midi: Number(e.target.value) } : x)))
-            }}
-          >
-            {NOTE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-            {!NOTE_OPTIONS.some((o) => o.value === n.midi) && <option value={n.midi}>{`${n.midi}`}</option>}
-          </select>
+        <span key={`${n.rest ? 'r' : n.midi}-${n.dur}-${n.t ?? 'x'}-${i}`} className="play-note">
+          {n.rest === true || typeof n.midi !== 'number' ? (
+            <span className="play-note-rest" title="休止符（占时值不发声）">
+              𝄽
+            </span>
+          ) : (
+            <select
+              value={n.midi}
+              title="音名"
+              onChange={(e) => {
+                set(notes.map((x, j) => (j === i ? { ...x, midi: Number(e.target.value) } : x)))
+              }}
+            >
+              {NOTE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+              {!NOTE_OPTIONS.some((o) => o.value === n.midi) && <option value={n.midi}>{`${n.midi}`}</option>}
+            </select>
+          )}
           <select
             value={n.dur}
             title="时值"
@@ -110,23 +121,47 @@ export function NoteChipsEditor(props: {
 // Json ⇄ PlayNote：数据表 notes 列的结构化读写（不合规形态由调用方回落 json 编辑）
 // ---------------------------------------------------------------------------
 
-/** 单元格 Json 值 → 音符数组；结构不符返回 null（调用方回落 json 高级编辑） */
+/** 单元格 Json 值 → 音符数组；结构不符返回 null（调用方回落 json 高级编辑）。
+ * 已知键（midi/dur/vel/t/rest）完整往返，未知键拒绝（防静默丢数据） */
 export function notesFromCell(v: unknown): PlayNote[] | null {
   if (v === null || v === undefined) return []
   if (!Array.isArray(v)) return null
   const out: PlayNote[] = []
   for (const item of v) {
     if (item === null || typeof item !== 'object' || Array.isArray(item)) return null
-    const midi = (item as { midi?: unknown }).midi
-    const dur = (item as { dur?: unknown }).dur
-    if (typeof midi !== 'number' || !Number.isFinite(midi)) return null
+    const rec = item as Record<string, unknown>
+    for (const k of Object.keys(rec)) {
+      if (!['midi', 'dur', 'vel', 't', 'rest'].includes(k)) return null
+    }
+    const dur = rec.dur
     if (dur !== undefined && typeof dur !== 'string') return null
-    out.push({ midi: Math.round(midi), dur: typeof dur === 'string' ? dur : '4n' })
+    const t = rec.t
+    if (t !== undefined && (typeof t !== 'number' || !Number.isFinite(t))) return null
+    const vel = rec.vel
+    if (vel !== undefined && (typeof vel !== 'number' || !Number.isFinite(vel))) return null
+    const rest = rec.rest === true
+    const midi = rec.midi
+    if (!rest && (typeof midi !== 'number' || !Number.isFinite(midi))) return null
+    if (rest && midi !== undefined) return null
+    const note: PlayNote = { dur: typeof dur === 'string' ? dur : '4n' }
+    if (!rest) note.midi = Math.round(midi as number)
+    if (vel !== undefined) note.vel = vel
+    if (t !== undefined) note.t = t
+    if (rest) note.rest = true
+    out.push(note)
   }
   return out
 }
 
-/** 音符数组 → 单元格 Json 值 */
-export function notesToCell(notes: PlayNote[]): { midi: number; dur: string }[] {
-  return notes.map((n) => ({ midi: n.midi, dur: n.dur }))
+/** 音符数组 → 单元格 Json 值（可选字段仅在有值时输出） */
+export function notesToCell(notes: PlayNote[]): { [k: string]: Json }[] {
+  return notes.map((n) => {
+    const cell: { [k: string]: Json } = {}
+    if (n.rest === true) cell.rest = true
+    else if (typeof n.midi === 'number') cell.midi = n.midi
+    cell.dur = n.dur
+    if (typeof n.vel === 'number') cell.vel = n.vel
+    if (typeof n.t === 'number') cell.t = n.t
+    return cell
+  })
 }

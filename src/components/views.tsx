@@ -34,17 +34,24 @@ function boxStyle(spec: ComponentInstance): React.CSSProperties {
 const DUR_MAP: Record<string, string> = { '1n': 'w', '2n': 'h', '4n': 'q', '8n': '8', '16n': '16', '32n': '32' }
 const HIGHLIGHT_FILL: Record<string, string> = { correct: '#16a34a', wrong: '#dc2626' }
 
-/** MusicDoc → VexFlow 音符数组（纯函数，便于单测：音位/附点/升降号） */
+/** MusicDoc → VexFlow 音符数组（纯函数，便于单测：音位/附点/升降号/休止符） */
 export function toStaveNotes(doc: MusicDoc): StaveNote[] {
   const clef = doc.clef ?? 'treble'
   return doc.notes.map((n) => {
-    const info = Note.get(Note.fromMidi(n.midi) ?? 'C4')
     // 音位由 StaveNote 自身的 clef 决定（与 Stave 上画的谱号无关），必须显式传入
     const dur = n.dur ?? '4n'
     const dotted = dur.endsWith('.')
+    const base = DUR_MAP[dotted ? dur.slice(0, -1) : dur] ?? 'q'
+    if (n.rest === true || typeof n.midi !== 'number') {
+      // 休止符：VexFlow 记法 duration 'qr'（keys 仅为占位，渲染忽略）
+      const rest = new StaveNote({ keys: ['b/4'], duration: `${base}r`, clef })
+      if (dotted) rest.addModifier(new Dot(), 0)
+      return rest
+    }
+    const info = Note.get(Note.fromMidi(n.midi) ?? 'C4')
     const sn = new StaveNote({
       keys: [`${info.letter.toLowerCase()}${info.acc ?? ''}/${info.oct}`],
-      duration: DUR_MAP[dotted ? dur.slice(0, -1) : dur] ?? 'q',
+      duration: base,
       clef,
     })
     if (info.acc) sn.addModifier(new Accidental(info.acc), 0)
@@ -86,18 +93,22 @@ export function StaffView({ spec, store, emit }: ViewProps) {
 
     // 命中区域：VexFlow 5 不再暴露 attrs.el；voice.draw 按顺序把每个音符画成
     // SVG 根下的 g.vf-stavenote，用 DOM 顺序与 notes[] 对齐（v1 仅支持单声部）。
+    // 休止符也是 vf-stavenote（无音头）：数量对不齐时整体跳过命中区，防错位
     const noteGroups = el.querySelectorAll('svg > g.vf-stavenote')
-    noteGroups.forEach((svgEl, i) => {
-      const midi = doc.notes[i]?.midi
-      if (!svgEl || typeof midi !== 'number') return
-      svgEl.setAttribute('data-midi', String(midi))
-      if (!clickable) return
-      ;(svgEl as HTMLElement).style.cursor = 'pointer'
-      svgEl.addEventListener('click', () => {
-        store.applyCommand(spec.id, '__strike', { midi })
-        emit('noteClicked', { midi, name: Note.fromMidi(midi) })
+    if (noteGroups.length === doc.notes.length) {
+      noteGroups.forEach((svgEl, i) => {
+        const midi = doc.notes[i]?.midi
+        if (typeof midi !== 'number') return
+        if (!svgEl) return
+        svgEl.setAttribute('data-midi', String(midi))
+        if (!clickable) return
+        ;(svgEl as HTMLElement).style.cursor = 'pointer'
+        svgEl.addEventListener('click', () => {
+          store.applyCommand(spec.id, '__strike', { midi })
+          emit('noteClicked', { midi, name: Note.fromMidi(midi) })
+        })
       })
-    })
+    }
 
     // 高亮样式
     for (const [midiStr, style] of Object.entries(highlights ?? {})) {

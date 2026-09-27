@@ -19,7 +19,7 @@ describe('SYNTH_DEF（合成器契约）', () => {
     const s0 = SYNTH_DEF.initialState(spec({ wave: 'square', gain: 0.5 }))
     const r = SYNTH_DEF.applyCommand(s0, 'play', { notes: [{ midi: 60 }], tempo: 120 })
     expect(r.effects).toEqual([
-      { type: 'audio.synth', notes: [{ midi: 60 }], wave: 'square', tempo: 120, mode: 'chord', attack: undefined, release: undefined, gain: 0.5, cutoff: undefined },
+      { type: 'audio.synth', notes: [{ midi: 60 }], wave: 'square', tempo: 120, attack: undefined, release: undefined, gain: 0.5, cutoff: undefined },
     ])
     expect(r.state).toMatchObject({ playSeq: 1, lastPlay: [{ midi: 60 }] })
     // 传入 wave：本次效果用传入值，且状态持久化（后续 play 沿用）
@@ -28,7 +28,7 @@ describe('SYNTH_DEF（合成器契约）', () => {
     expect(r2.state.wave).toBe('bell')
   })
 
-  it('play 参数钳制：tempo/attack/release/gain/cutoff 越界收敛；mode 非法回退 chord', () => {
+  it('play 参数钳制：tempo/attack/release/gain/cutoff 越界收敛；废弃 mode 折算 chord（docs/27）', () => {
     const s0 = SYNTH_DEF.initialState(spec())
     const r = SYNTH_DEF.applyCommand(s0, 'play', {
       notes: [{ midi: 60 }],
@@ -39,7 +39,11 @@ describe('SYNTH_DEF（合成器契约）', () => {
       cutoff: 99999,
       mode: 'loop',
     })
-    expect(r.effects![0]).toMatchObject({ tempo: 300, attack: 2, release: 0.01, gain: 1, cutoff: 12000, mode: 'chord' })
+    expect(r.effects![0]).toMatchObject({ tempo: 300, attack: 2, release: 0.01, gain: 1, cutoff: 12000 })
+    expect(r.effects![0]).not.toHaveProperty('mode')
+    // mode:"chord" 兼容折算：全音 t:0 同时
+    const rc = SYNTH_DEF.applyCommand(s0, 'play', { notes: [{ midi: 60 }, { midi: 64 }], mode: 'chord' })
+    expect(rc.effects![0]).toMatchObject({ notes: [{ midi: 60, t: 0 }, { midi: 64, t: 0 }] })
   })
 
   it('play：notes 非数组时效果仍产出但音符为空，lastPlay 记 null', () => {

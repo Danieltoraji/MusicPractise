@@ -198,7 +198,54 @@ describe('docs/26：组件 bindings 编译为 set 命令节点', () => {
 
   it('幂等：带 bindings 的文档迁移一次后，二次迁移不再追加节点', () => {
     const raw = v1Doc()
-    ;(raw.content.components[0] as Record<string, unknown>).bindings = { text: '$q.prompt' }
+    ;(raw.content.components[0] as unknown as Record<string, unknown>).bindings = { text: '$q.prompt' }
+    const once = migrateDocToV3(raw)
+    const twice = migrateDocToV3(JSON.parse(JSON.stringify(once)))
+    expect(twice).toEqual(once)
+  })
+})
+
+describe('docs/27：play 调用 mode 兼容键显式化', () => {
+  function v1WithPlay(doActions: unknown[], extra?: { comps?: unknown[] }): ReturnType<typeof v1Doc> {
+    const raw = v1Doc({ rules: [{ id: 'p1', on: 'btn1.clicked', do: doActions as never }] })
+    const content = raw.content as Record<string, unknown>
+    content.components = [
+      { id: 'label1', type: 'label' },
+      { id: 'btn1', type: 'button' },
+      { id: 'sound1', type: 'sound' },
+      ...((extra?.comps ?? []) as unknown[]),
+    ]
+    return raw
+  }
+  const playArgsOf = (doc: { content: { logic: { nodes: { id: string; args?: string[] }[] } } }): string | undefined =>
+    doc.content.logic.nodes.find((n) => n.id.endsWith('p1_d0'))?.args?.[0]
+
+  it('缺 mode 的动态 notes → 补写 mode:\'chord\' 兼容键（旧缺省同时）', () => {
+    const doc = migrateDocToV3(v1WithPlay([{ cmd: 'sound1.play', args: { notes: '$q.data.notes', tempo: 90 } }]))
+    expect(playArgsOf(doc)).toBe("{ notes: q.data.notes, tempo: 90, mode: 'chord' }")
+  })
+
+  it('缺 mode 的多音字面量 → 每音补 t:0；单音不动', () => {
+    const doc = migrateDocToV3(
+      v1WithPlay([{ cmd: 'sound1.play', args: { notes: [{ midi: 60 }, { midi: 64, dur: '8n' }] } }]),
+    )
+    expect(playArgsOf(doc)).toBe("{ notes: [{midi: 60, t: 0}, {midi: 64, dur: '8n', t: 0}] }")
+    const single = migrateDocToV3(v1WithPlay([{ cmd: 'sound1.play', args: { notes: [{ midi: 60 }] } }]))
+    expect(playArgsOf(single)).toBe('{notes: [{midi: 60}]}') // 单音不动（含原字面量格式）
+  })
+
+  it('已有 mode 键原样保留（仅规范引号）；synth 同样处理；非 play 命令不触碰', () => {
+    const doc = migrateDocToV3(v1WithPlay([{ cmd: 'sound1.play', args: { notes: '$q.data.n', mode: 'seq', tempo: 96 } }]))
+    expect(playArgsOf(doc)).toBe("{ notes: q.data.n, mode: 'seq', tempo: 96 }")
+    const chordQuoted = migrateDocToV3(v1WithPlay([{ cmd: 'sound1.play', args: { notes: '$q.data.n', mode: 'chord' } }]))
+    expect(playArgsOf(chordQuoted)).toBe("{ notes: q.data.n, mode: 'chord' }")
+    const show = migrateDocToV3(v1WithPlay([{ cmd: 'label1.show', args: { text: '$q.prompt' } }]))
+    const showNode = show.content.logic.nodes.find((n) => n.id.endsWith('p1_d0')) as { args?: string[] } | undefined
+    expect(showNode?.args?.[0]).toBe('{text: q.prompt}')
+  })
+
+  it('幂等：mode 显式化后二次迁移不再变化', () => {
+    const raw = v1WithPlay([{ cmd: 'sound1.play', args: { notes: '$q.data.n' } }])
     const once = migrateDocToV3(raw)
     const twice = migrateDocToV3(JSON.parse(JSON.stringify(once)))
     expect(twice).toEqual(once)

@@ -95,7 +95,7 @@ describe('playSynth / stopSynth（mock AudioContext 回归）', () => {
     expect(ramps[ramps.length - 2].time!).toBeLessThan(ramps[ramps.length - 1].time!)
   })
 
-  it('chord 排程：多音 25ms 微琶音交错（与 playNotes 同语义）', () => {
+  it('接排排程：无 t 音符按 dur 连奏（与 playNotes 同语义，docs/27）', () => {
     const fake = getCtx() as unknown as FakeCtx
     const before = fake.oscs.length
     playSynth(
@@ -104,8 +104,23 @@ describe('playSynth / stopSynth（mock AudioContext 回归）', () => {
     )
     const starts = fake.oscs.slice(before).map((o) => o.startTime).filter((t): t is number => t !== null)
     expect(starts).toHaveLength(3)
-    expect(starts[1] - starts[0]).toBeCloseTo(0.025, 5)
-    expect(starts[2] - starts[1]).toBeCloseTo(0.025, 5)
+    const spb = 60 / 90 // 四分音符 = 1 拍
+    expect(starts[1] - starts[0]).toBeCloseTo(spb, 5)
+    expect(starts[2] - starts[1]).toBeCloseTo(spb, 5)
+  })
+
+  it('t 起始拍：相同 t 同时响；休止符占位推进游标（docs/27）', () => {
+    const fake = getCtx() as unknown as FakeCtx
+    const before = fake.oscs.length
+    playSynth(
+      [{ midi: 60, t: 0 }, { midi: 64, t: 0 }, { rest: true, dur: '4n' }, { midi: 67 }],
+      { wave: 'square', tempo: 90 },
+    )
+    const starts = fake.oscs.slice(before).map((o) => o.startTime).filter((t): t is number => t !== null)
+    expect(starts).toHaveLength(3) // 休止符不发声
+    const spb = 60 / 90
+    expect(starts[0]).toBe(starts[1]) // 相同 t = 和弦
+    expect(starts[2] - starts[0]).toBeCloseTo(2 * spb, 5) // 休止 1 拍后第 2 拍起
   })
 
   it('stopSynth：全部声部取消调度 + 50ms 淡出 + 短停振；二次调用无副作用', () => {

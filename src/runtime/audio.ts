@@ -36,45 +36,77 @@ function ensurePiano(): Promise<SplendidGrandPiano> {
   return pianoLoading
 }
 
-/** 时值记法（"4n"、"2n."…）→ 秒 */
-export function durToSeconds(dur: string, tempo = 90): number {
+/** 时值记法（"4n"、"2n."…）→ 四分音符拍数（tempo 无关） */
+export function durToQuarters(dur: string): number {
   const dotted = dur.endsWith('.')
   const base = dotted ? dur.slice(0, -1) : dur
   const map: Record<string, number> = { '1n': 4, '2n': 2, '4n': 1, '8n': 0.5, '16n': 0.25, '32n': 0.125 }
   const quarters = map[base]
   if (quarters === undefined) {
     console.warn(`[audio] 未知时值 "${dur}"，按四分音符处理`)
-    return 60 / tempo
+    return 1
   }
-  return (quarters * 60) / tempo * (dotted ? 1.5 : 1)
+  return quarters * (dotted ? 1.5 : 1)
+}
+
+/** 时值记法（"4n"、"2n."…）→ 秒 */
+export function durToSeconds(dur: string, tempo = 90): number {
+  return (durToQuarters(dur) * 60) / tempo
+}
+
+export interface ScheduledNote {
+  midi: number
+  vel: number
+  /** 起始拍（相对播放起点；四分音符 = 1 拍） */
+  startBeat: number
+  durBeats: number
 }
 
 /**
- * 播放一组音符。
- * - chord（缺省）：25ms 微琶音，适合和弦
- * - seq：按每个音的 dur 在 tempo 网格上逐音排程（旋律播放，听写类关卡用）
- * velocity 为 MIDI 尺度 1-127（smplr 语义）。
+ * 音符串 → 排程事件（docs/27 时序模型）：t 缺省接在前一音之后（旋律连排），
+ * 相同 t 同时响；休止符（rest / 缺 midi）只占时值推进游标不发声。
+ * 纯函数：与 AudioContext 无关，供钢琴/合成器两条播放通道共用与单测。
  */
-export function playNotes(notes: Note[], tempo = 90, mode: 'chord' | 'seq' = 'chord'): void {
+export function scheduleNoteEvents(notes: Note[]): ScheduledNote[] {
+  const out: ScheduledNote[] = []
+  let cursor = 0
+  for (const n of Array.isArray(notes) ? notes : []) {
+    if (n === null || typeof n !== 'object') continue
+    const durBeats = durToQuarters(n.dur ?? '4n')
+    const tBeat = n.t
+    const hasT = typeof tBeat === 'number' && Number.isFinite(tBeat)
+    if (n.rest === true || typeof n.midi !== 'number') {
+      cursor = hasT ? Math.max(cursor, tBeat + durBeats) : cursor + durBeats
+      continue
+    }
+    const vel = typeof n.vel === 'number' ? Math.min(127, Math.max(1, Math.round(n.vel))) : 100
+    out.push({ midi: n.midi, vel, startBeat: hasT ? tBeat : cursor, durBeats })
+    cursor = hasT ? Math.max(cursor, tBeat + durBeats) : cursor + durBeats
+  }
+  return out
+}
+
+/**
+ * 播放一组音符（钢琴）：时序完全由音符串表达——t 缺省接排、相同 t 同时、休止符占位。
+ * duration 在时值之外延长 0.4s 余韵（钢琴自然衰减），上限 3.5s。
+ */
+export function playNotes(notes: Note[], tempo = 90): void {
   if (!Array.isArray(notes) || notes.length === 0) return
+  const events = scheduleNoteEvents(notes)
+  if (events.length === 0) return
   getCtx()
   ensurePiano()
     .then((p) => {
       const t0 = getCtx().currentTime + 0.06
-      let t = t0
-      notes.forEach((n, i) => {
-        if (typeof n?.midi !== 'number') return
-        // smplr 的 velocity 是 0-127 MIDI 尺度；0 会被速度分层拒绝导致静音，钳到 1
-        const vel = typeof n.vel === 'number' ? Math.min(127, Math.max(1, Math.round(n.vel))) : 100
-        if (mode === 'seq') {
-          const dur = durToSeconds(n.dur ?? '4n', tempo)
-          p.start({ note: n.midi, velocity: vel, time: t, duration: Math.min(dur + 0.4, 3.5) })
-          t += dur
-        } else {
-          const dur = Math.min(durToSeconds(n.dur ?? '4n', tempo) + 0.5, 3.5)
-          p.start({ note: n.midi, velocity: vel, time: t0 + i * 0.025, duration: dur })
-        }
-      })
+      const spb = 60 / Math.min(300, Math.max(20, tempo))
+      for (const ev of events) {
+        p.start({
+          note: ev.midi,
+          velocity: ev.vel,
+          time: t0 + ev.startBeat * spb,
+          duration: Math.min(ev.durBeats * spb + 0.4, 3.5),
+        })
+      }
     })
     .catch((err) => console.error('[audio] 钢琴音色加载失败', err))
 }
@@ -108,7 +140,6 @@ export type SynthWave = 'sine' | 'triangle' | 'square' | 'sawtooth' | 'fm' | 'be
 export interface SynthParams {
   wave: string
   tempo?: number
-  mode?: 'chord' | 'seq'
   /** 攻击/释放（秒）；音量 0-1；低通截止 Hz（0/缺省 = 不滤波） */
   attack?: number
   release?: number
@@ -144,7 +175,7 @@ function pruneSynthVoices(c: AudioContext): void {
 }
 
 /** 生成单个声部：载波（FM 音色附加调制器）→ 可选低通 → 包络增益 → 输出 */
-function synthVoice(c: AudioContext, midi: number, vel: number, t: number, dur: number, p: Required<Omit<SynthParams, 'tempo' | 'mode' | 'cutoff'>> & { cutoff: number; fmRatio?: number; fmIndex?: number; decay?: boolean }): void {
+function synthVoice(c: AudioContext, midi: number, vel: number, t: number, dur: number, p: Required<Omit<SynthParams, 'tempo' | 'cutoff'>> & { cutoff: number; fmRatio?: number; fmIndex?: number; decay?: boolean }): void {
   const freq = midiToFreq(midi)
   // velocity（1-127）映射到 0.5-1 的增益系数
   const peak = Math.max(0.001, p.gain * (0.5 + 0.5 * (Math.min(127, Math.max(1, vel)) / 127)))
@@ -197,33 +228,33 @@ function synthVoice(c: AudioContext, midi: number, vel: number, t: number, dur: 
 }
 
 /**
- * 合成器播放：与 playNotes 相同的 chord/seq 排程语义，声部为振荡器包络。
+ * 合成器播放：与 playNotes 相同的 t/dur 排程语义（docs/27），声部为振荡器包络。
  * wave 不认识时回退 sawtooth；音色缺省参数见 SYNTH_VOICE_DEFAULTS。
  */
 export function playSynth(notes: Note[], params: SynthParams): void {
   if (!Array.isArray(notes) || notes.length === 0) return
+  const events = scheduleNoteEvents(notes)
+  if (events.length === 0) return
   const c = getCtx()
   const base = (SYNTH_VOICE_DEFAULTS as Record<string, (typeof SYNTH_VOICE_DEFAULTS)[SynthWave]>)[params.wave] ?? SYNTH_VOICE_DEFAULTS.sawtooth
   const attack = Math.min(2, Math.max(0, params.attack ?? base.attack))
   const release = Math.min(2.5, Math.max(0.01, params.release ?? base.release))
   const gain = Math.min(1, Math.max(0, params.gain ?? 0.35)) * base.gainMul
   const tempo = Math.min(300, Math.max(20, params.tempo ?? 90))
+  const spb = 60 / tempo
   const cutoff = Math.min(12000, Math.max(0, params.cutoff ?? 0))
   pruneSynthVoices(c)
   const t0 = c.currentTime + 0.05
-  let t = t0
-  notes.forEach((n, i) => {
-    if (typeof n?.midi !== 'number') return
-    const vel = typeof n.vel === 'number' ? Math.min(127, Math.max(1, Math.round(n.vel))) : 100
-    if (params.mode === 'seq') {
-      const dur = Math.min(3.5, durToSeconds(n.dur ?? '4n', tempo))
-      synthVoice(c, n.midi, vel, t, dur, { ...base, wave: params.wave, attack, release, gain, cutoff })
-      t += dur
-    } else {
-      const dur = Math.min(3.5, durToSeconds(n.dur ?? '4n', tempo) + 0.5)
-      synthVoice(c, n.midi, vel, t0 + i * 0.025, dur, { ...base, wave: params.wave, attack, release, gain, cutoff })
-    }
-  })
+  for (const ev of events) {
+    synthVoice(c, ev.midi, ev.vel, t0 + ev.startBeat * spb, Math.min(3.5, ev.durBeats * spb), {
+      ...base,
+      wave: params.wave,
+      attack,
+      release,
+      gain,
+      cutoff,
+    })
+  }
 }
 
 /** 静停全部已排程/进行中的合成器声部（synth.stop 命令；换视图不自动调用——合成器与计时器同为逻辑侧资源） */

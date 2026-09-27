@@ -9,13 +9,12 @@ import type { ComponentInstance, Note } from '../engine/level'
 import type { Json } from '../engine/expr'
 
 export type Effect =
-  | { type: 'audio.play'; notes: Note[]; tempo?: number; mode?: 'chord' | 'seq' }
+  | { type: 'audio.play'; notes: Note[]; tempo?: number }
   | {
       type: 'audio.synth'
       notes: Note[]
       wave: string
       tempo?: number
-      mode?: 'chord' | 'seq'
       /** 攻击/释放时间（秒）；音量 0-1；低通截止 Hz（0 = 不滤波） */
       attack?: number
       release?: number
@@ -26,6 +25,13 @@ export type Effect =
   | { type: 'timer.start'; ms: number; repeat: boolean }
   | { type: 'timer.stop' }
   | { type: 'none' }
+
+/** 旧档兼容：显式 mode:"chord"（迁移器显式化的旧缺省）→ 全部音同时（t:0）。
+ * 时序关系已内化为音符串的 t 字段（docs/27），mode 仅作运行时兼容键不再暴露给 UI */
+function foldLegacyMode(notes: Note[], mode: unknown): Note[] {
+  if (mode !== 'chord') return notes
+  return notes.map((n) => ({ ...n, t: 0 }))
+}
 
 export interface ContractDoc {
   type: string
@@ -268,7 +274,7 @@ export const STAFF_DEF: ComponentDef<StaffState> = {
     // 内部命令：点击音符立即发出该音高（对比式试听），判定音效仍由关卡规则决定
     if (cmd === '__strike') {
       if (typeof args.midi !== 'number') return { state: s }
-      return { state: s, effects: [{ type: 'audio.play', notes: [{ midi: args.midi, dur: '8n' }], mode: 'chord' }] }
+      return { state: s, effects: [{ type: 'audio.play', notes: [{ midi: args.midi, dur: '8n' }] }] }
     }
     return { state: s }
   },
@@ -280,22 +286,21 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
     displayName: '发声器',
     category: 'music',
     events: {},
-    commands: { play: '{ notes: Note[], tempo?: number, mode?: "chord"|"seq" }', stop: '无参数' },
+    // 时序关系由音符串的 t（起始拍）/dur 表达（docs/27）；mode 已废弃为运行时兼容键
+    commands: { play: '{ notes: Note[], tempo?: number }', stop: '无参数' },
     state: { lastPlay: 'Json' },
   },
   initialState: () => ({ lastPlay: null }),
   applyCommand: (s, cmd, args) => {
     if (cmd === 'play') {
-      const notes = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
+      const raw = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
+      if (args.mode === 'chord') console.warn('[sound] mode 参数已废弃：同时发声请用音符串 t 字段（相同 t），docs/27')
+      const notes = foldLegacyMode(raw, args.mode)
       // tempo 钳到常规音乐区间，防止 60/0=Infinity 把后续音符排到无穷远
       const tempo = typeof args.tempo === 'number' ? Math.min(300, Math.max(20, args.tempo)) : undefined
-      if (args.mode !== undefined && args.mode !== 'chord' && args.mode !== 'seq') {
-        console.warn(`[sound] 未知播放模式 "${String(args.mode)}"，按 chord 处理`)
-      }
-      const mode = args.mode === 'seq' ? 'seq' : 'chord'
       return {
         state: { lastPlay: args.notes ?? null },
-        effects: [{ type: 'audio.play', notes, tempo, mode }],
+        effects: [{ type: 'audio.play', notes, tempo }],
       }
     }
     return { state: s }
@@ -415,7 +420,7 @@ export const FINGERING_DEF: ComponentDef<FingeringState> = {
     if (cmd === 'clear') return { state: { ...s, highlights: {}, clearToken: s.clearToken + 1 } }
     if (cmd === '__strike') {
       if (typeof args.midi !== 'number') return { state: s }
-      return { state: s, effects: [{ type: 'audio.play', notes: [{ midi: args.midi, dur: '8n' }], mode: 'chord' }] }
+      return { state: s, effects: [{ type: 'audio.play', notes: [{ midi: args.midi, dur: '8n' }] }] }
     }
     return { state: s }
   },
@@ -476,7 +481,8 @@ export const SYNTH_DEF: ComponentDef<SynthState> = {
     category: 'music',
     events: {},
     commands: {
-      play: '{ notes: Note[], wave?: string, tempo?: number, mode?: "chord"|"seq", attack?: number, release?: number, gain?: number, cutoff?: number }',
+      // 时序关系由音符串的 t（起始拍）/dur 表达（docs/27）；mode 已废弃为运行时兼容键
+      play: '{ notes: Note[], wave?: string, tempo?: number, attack?: number, release?: number, gain?: number, cutoff?: number }',
       setWave: '{ wave: string }',
       stop: '无参数（静停已排程的合成器音符）',
     },
@@ -498,7 +504,9 @@ export const SYNTH_DEF: ComponentDef<SynthState> = {
   },
   applyCommand: (s, cmd, args) => {
     if (cmd === 'play') {
-      const notes = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
+      const raw = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
+      if (args.mode === 'chord') console.warn('[synth] mode 参数已废弃：同时发声请用音符串 t 字段（相同 t），docs/27')
+      const notes = foldLegacyMode(raw, args.mode)
       const wave = isSynthWave(args.wave) ? args.wave : s.wave
       // Number.isFinite 守卫：逻辑表达式算出 NaN 时直达 AudioParam 会产生浏览器相关的坏行为（评审 P2-3）
       const gain = clampNum(args.gain, 0, 1) ?? s.gain
@@ -507,10 +515,9 @@ export const SYNTH_DEF: ComponentDef<SynthState> = {
       const attack = clampNum(args.attack, 0, 2)
       const release = clampNum(args.release, 0.01, 2.5)
       const cutoff = clampNum(args.cutoff, 0, 12000)
-      const mode = args.mode === 'seq' ? 'seq' : args.mode === 'chord' ? 'chord' : (console.warn('[synth] 未知播放模式，按 chord 处理'), 'chord')
       return {
         state: { ...s, wave, gain, lastPlay: Array.isArray(args.notes) ? (args.notes as unknown as Json) : null, playSeq: s.playSeq + 1 },
-        effects: [{ type: 'audio.synth', notes, wave, tempo, mode, attack, release, gain, cutoff }],
+        effects: [{ type: 'audio.synth', notes, wave, tempo, attack, release, gain, cutoff }],
       }
     }
     if (cmd === 'setWave') {

@@ -29,32 +29,43 @@ afterEach(() => {
 })
 
 describe('parseNoteList / serializeNoteList', () => {
-  it('音符数组解析（midi/dur）', () => {
+  it('音符数组解析（midi/dur/vel/t/rest）', () => {
     expect(parseNoteList("[{midi: 60, dur: '4n'}, {midi: 64}]")).toEqual([
       { midi: 60, dur: '4n' },
       { midi: 64, dur: '4n' },
     ])
     expect(parseNoteList('[]')).toEqual([])
-    expect(parseNoteList("[{midi: 60, vel: 100}]")).toBeNull() // 未知键不可编辑
+    expect(parseNoteList("[{midi: 60, vel: 100, t: 2}]")).toEqual([{ midi: 60, dur: '4n', vel: 100, t: 2 }])
+    expect(parseNoteList("[{rest: true, dur: '4n'}, {midi: 64, dur: '8n'}]")).toEqual([
+      { dur: '4n', rest: true },
+      { midi: 64, dur: '8n' },
+    ])
     expect(parseNoteList('q.data.notes')).toBeNull()
     expect(parseNoteList('[{midi: x}]')).toBeNull()
+    expect(parseNoteList('[{midi: 60, wave: "sine"}]')).toBeNull() // 未知键不可编辑
     expect(serializeNoteList([{ midi: 60, dur: '4n' }, { midi: 64, dur: '8n' }])).toBe("[{midi: 60, dur: '4n'}, {midi: 64, dur: '8n'}]")
+    expect(serializeNoteList([{ midi: 60, dur: '2n', t: 4 }, { dur: '4n', rest: true }])).toBe(
+      "[{midi: 60, dur: '2n', t: 4}, {rest: true, dur: '4n'}]",
+    )
   })
 })
 
 describe('parsePlayArgs / serializePlayArgs', () => {
-  it('完整解析：notes/wave/tempo/mode + 未知键透传', () => {
-    const p = parsePlayArgs(["{notes: [{midi: 60, dur: '4n'}], wave: 'fm', tempo: 96, mode: 'seq', gain: 0.5}"])
+  it('完整解析：notes/wave/tempo + 未知键（含废弃 mode 兼容键）透传', () => {
+    const p = parsePlayArgs(["{notes: [{midi: 60, dur: '4n'}], wave: 'fm', tempo: 96, mode: 'chord', gain: 0.5}"])
     expect(p).not.toBeNull()
     expect(p!.dynamic).toBe(false)
     expect(p!.notes).toEqual([{ midi: 60, dur: '4n' }])
     expect(p!.wave).toBe('fm')
     expect(p!.tempo).toBe(96)
-    expect(p!.mode).toBe('seq')
-    expect(p!.extraEntries).toEqual([{ key: 'gain', source: '0.5' }])
+    expect(p!.extraEntries).toEqual([
+      { key: 'mode', source: "'chord'" },
+      { key: 'gain', source: '0.5' },
+    ])
     const args = serializePlayArgs(p!)
     expect(args[0]).toContain('notes: [{midi: 60, dur: \'4n\'}]')
     expect(args[0]).toContain("wave: 'fm'")
+    expect(args[0]).toContain("mode: 'chord'") // 兼容键往返不丢
     expect(args[0]).toContain('gain: 0.5')
   })
 

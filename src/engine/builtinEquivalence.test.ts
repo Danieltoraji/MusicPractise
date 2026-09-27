@@ -151,6 +151,29 @@ describe('行为等价 golden：内置关卡 v1 vs v3（表格行 + 行门控装
         cs
           .filter((c) => !dataApply.has(c.path))
           .map((c) => ({ ...c, path: c.path === 'level.next' ? 'question.next' : c.path }))
+          .map((c) => ({
+            ...c,
+            // docs/27：play 的 mode（废弃兼容键）与音符 t（起始拍）是迁移显式化的表示层差异，
+            // 调度语义等价——对比前从两侧剥掉
+            args:
+              c.path.endsWith('.play') && c.args !== null && typeof c.args === 'object' && !Array.isArray(c.args)
+                ? (() => {
+                    const a = { ...(c.args as Record<string, Json>) }
+                    delete a.mode
+                    if (Array.isArray(a.notes)) {
+                      a.notes = a.notes.map((n) => {
+                        if (n !== null && typeof n === 'object' && !Array.isArray(n)) {
+                          const note = { ...(n as Record<string, Json>) }
+                          delete note.t
+                          return note as Json
+                        }
+                        return n
+                      })
+                    }
+                    return a as Json
+                  })()
+                : c.args,
+          }))
       expect(canon(recV3.commands)).toEqual(canon(recV1.commands))
       expect(recV3.commands.some((c) => c.path === 'level.next')).toBe(false) // 改名后 v3 侧不允许残留旧名
       // 同样的表达式错误在两引擎中发生同样次数（规则跳过 vs 处理器中断，单规则等价）

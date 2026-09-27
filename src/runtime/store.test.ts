@@ -56,13 +56,16 @@ describe('ComponentStore', () => {
     expect(() => store.query('ghost', 'getValue', [])).toThrow(/不存在/)
   })
 
-  it('sound.play 产出 audio.play 效果（含 tempo 与 mode）', () => {
+  it('sound.play 产出 audio.play 效果（含 tempo；废弃 mode 折算/忽略）', () => {
     const store = new ComponentStore()
     store.init([spec('s1', 'sound')])
     const effects = store.applyCommand('s1', 'play', { notes: [{ midi: 60 }], tempo: 120 })
-    expect(effects).toEqual([{ type: 'audio.play', notes: [{ midi: 60 }], tempo: 120, mode: 'chord' }])
+    expect(effects).toEqual([{ type: 'audio.play', notes: [{ midi: 60 }], tempo: 120 }])
+    // 旧档兼容：mode:"chord" → 全音 t:0 同时；"seq" 接排 = 新缺省语义，忽略（docs/27）
+    const chord = store.applyCommand('s1', 'play', { notes: [{ midi: 60 }, { midi: 64 }], mode: 'chord' })
+    expect(chord).toEqual([{ type: 'audio.play', notes: [{ midi: 60, t: 0 }, { midi: 64, t: 0 }] }])
     const seq = store.applyCommand('s1', 'play', { notes: [{ midi: 60 }], mode: 'seq' })
-    expect(seq).toEqual([{ type: 'audio.play', notes: [{ midi: 60 }], mode: 'seq' }])
+    expect(seq).toEqual([{ type: 'audio.play', notes: [{ midi: 60 }] }])
   })
 
   it('timer：start 产出效果、__tick 更新计数、stop 停止', () => {
@@ -107,7 +110,7 @@ describe('ComponentStore', () => {
   it('staff/fingering __strike 产出单击音符效果（点击即发该音）', () => {
     const store = new ComponentStore()
     store.init([spec('st1', 'staff'), spec('k1', 'fingering')])
-    const expected = (midi: number) => [{ type: 'audio.play', notes: [{ midi, dur: '8n' }], mode: 'chord' }]
+    const expected = (midi: number) => [{ type: 'audio.play', notes: [{ midi, dur: '8n' }] }]
     expect(store.applyCommand('st1', '__strike', { midi: 64 })).toEqual(expected(64))
     expect(store.applyCommand('k1', '__strike', { midi: 60 })).toEqual(expected(60))
     expect(store.applyCommand('st1', '__strike', {})).toEqual([]) // 非 midi 参数静默忽略

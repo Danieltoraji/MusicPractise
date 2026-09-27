@@ -2,9 +2,19 @@
 import type { Json } from './expr'
 
 export interface Note {
-  midi: number
+  /** 音高（MIDI 0-127）；休止符（rest: true）可缺省 */
+  midi?: number
+  /** 时值记法（"4n"、"2n."…）；缺省四分音符 */
   dur?: string
+  /** 力度（MIDI 1-127） */
   vel?: number
+  /**
+   * 起始拍（四分音符 = 1 拍，相对播放起点）。缺省接在前一音之后（旋律连排），
+   * 相同 t = 同时响（和弦）——音符串的时序关系全部由数据表达（docs/27，mode 参数已废弃）
+   */
+  t?: number
+  /** 休止符：占时值不发声 */
+  rest?: boolean
 }
 
 export interface MusicDoc {
@@ -58,7 +68,7 @@ export const DATA_APPLY_COMMANDS: Record<string, Record<string, { method: string
 export const DATA_APPLY_ACCEPTED_TYPES: Record<string, { accept: ColumnType[]; soft?: ColumnType[]; hint: string }> = {
   setText: { accept: ['text', 'number', 'boolean'], hint: '文本标签需要 文本/数字/布尔 列（对象/数组无法显示）' },
   setOptions: { accept: ['list'], soft: ['json'], hint: '选择器选项需要 文本列表 列（json 列需存字符串数组）' },
-  setMusic: { accept: ['json'], hint: '五线谱需要 JSON 列（存乐谱对象 MusicDoc）' },
+  setMusic: { accept: ['json', 'notes'], hint: '五线谱需要 JSON 列（乐谱对象 MusicDoc）或音符串列（音符数组）' },
 }
 
 /** 列类型的中文显示名（lint 消息 / 编辑器下拉共用） */

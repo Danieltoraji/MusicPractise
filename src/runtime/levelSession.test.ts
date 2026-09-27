@@ -520,7 +520,7 @@ describe('LevelSession', () => {
     // 模拟视图层点击琴键：不经逻辑引擎，直接 applyCommand
     session.store.applyCommand('keys1', '__strike', { midi: 60 })
     expect(rec.effects).toEqual([
-      { type: 'audio.play', notes: [{ midi: 60, dur: '8n' }], mode: 'chord' },
+      { type: 'audio.play', notes: [{ midi: 60, dur: '8n' }] },
     ])
   })
 

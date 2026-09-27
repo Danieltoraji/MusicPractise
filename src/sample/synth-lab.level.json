@@ -200,7 +200,7 @@
           "target": "synth1",
           "method": "play",
           "args": [
-            "{notes: q.notes, wave: q.wave, tempo: 96, mode: 'seq'}"
+            "{ notes: q.notes, wave: q.wave, tempo: 96, mode: 'chord' }"
           ],
           "x": 260,
           "y": 150
@@ -256,7 +256,7 @@
           "target": "synth1",
           "method": "play",
           "args": [
-            "{notes: [{midi: 60}, {midi: 64}, {midi: 67}, {midi: 72}], wave: 'bell', tempo: 90}"
+            "{ notes: [{midi: 60, t: 0}, {midi: 64, t: 0}, {midi: 67, t: 0}, {midi: 72, t: 0}], wave: 'bell', tempo: 90 }"
           ],
           "x": 780,
           "y": 450
