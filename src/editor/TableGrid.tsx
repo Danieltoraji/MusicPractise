@@ -283,6 +283,10 @@ function CellEditor(props: {
   }
 
   if (type === 'number') {
+    // 非标量值（历史脏数据/类型误标）不再 String() 出 [object Object]：回落 JSON 弹层修正
+    if (value !== null && value !== undefined && typeof value === 'object') {
+      return <JsonFallbackCell value={value} expect="数值" onOpenJson={props.onOpenJson} />
+    }
     const text = typeof value === 'number' ? String(value) : value === null || value === undefined ? '' : String(value)
     return (
       <input
@@ -342,7 +346,11 @@ function CellEditor(props: {
     )
   }
 
-  // text（缺省）：字符串直存；清空 → null（与「无数据」语义一致）
+  // text（缺省）：字符串直存；清空 → null（与「无数据」语义一致）。
+  // 非标量值（对象/数组）不再 String() 出 [object Object]：回落 JSON 弹层修正（docs/27）
+  if (value !== null && value !== undefined && typeof value === 'object') {
+    return <JsonFallbackCell value={value} expect="文本" onOpenJson={props.onOpenJson} />
+  }
   const text = value === null || value === undefined ? '' : String(value)
   return (
     <input

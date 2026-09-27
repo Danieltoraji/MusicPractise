@@ -239,7 +239,7 @@
           "kind": "assign",
           "target": "score",
           "value": {
-            "expr": "v.score + q.scoring.max"
+            "expr": "v.score + q.scoring"
           }
         },
         {
@@ -523,7 +523,7 @@
         {
           "key": "scoring",
           "label": "分值",
-          "type": "json"
+          "type": "number"
         },
         {
           "key": "hints",
@@ -669,9 +669,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "范围：F3 到 E5，全部半音可用"
@@ -855,9 +853,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "范围：G2 到 F5，全部半音可用"
@@ -1041,9 +1037,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "范围：A1 到 G4，全部半音可用"

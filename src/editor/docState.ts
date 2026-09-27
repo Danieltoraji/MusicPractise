@@ -36,11 +36,12 @@ export function blankLevelDoc(): LevelDoc {
         edges: [{ id: 'e1', from: 'on_correct', to: 'add_score' }],
       },
       table: {
+        // 列声明 type（docs/27）：新表即结构化编辑，无 [object Object] 兜底渲染
         columns: [
-          { key: 'data', label: '数据' },
-          { key: 'scoring', label: '分值' },
+          { key: 'data', label: '数据', type: 'json' },
+          { key: 'scoring', label: '分值', type: 'number' },
         ],
-        rows: [{ data: {}, scoring: { max: 10 } }],
+        rows: [{ data: {}, scoring: 10 }],
       },
       flow: { order: 'sequential', pass: { expr: 'v.score >= 10' } },
     },

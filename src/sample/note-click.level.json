@@ -229,7 +229,7 @@
           "kind": "assign",
           "target": "score",
           "value": {
-            "expr": "v.score + q.scoring.max"
+            "expr": "v.score + q.scoring"
           }
         },
         {
@@ -636,7 +636,7 @@
         {
           "key": "scoring",
           "label": "分值",
-          "type": "json"
+          "type": "number"
         },
         {
           "key": "hints",
@@ -705,9 +705,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "中央C 右边相邻的跳进音"
@@ -762,9 +760,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "第三线上的音"
@@ -819,9 +815,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "比第三间高一个八度的 C"

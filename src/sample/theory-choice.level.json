@@ -211,7 +211,7 @@
           "kind": "assign",
           "target": "score",
           "value": {
-            "expr": "v.score + q.scoring.max"
+            "expr": "v.score + q.scoring"
           }
         },
         {
@@ -532,7 +532,7 @@
         {
           "key": "scoring",
           "label": "分值",
-          "type": "json"
+          "type": "number"
         },
         {
           "key": "hints",
@@ -593,9 +593,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "明亮、欢快的色彩"
@@ -647,9 +645,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "暗淡、略带忧伤的色彩"

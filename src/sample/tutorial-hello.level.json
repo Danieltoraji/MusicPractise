@@ -589,7 +589,7 @@
           "kind": "assign",
           "target": "score",
           "value": {
-            "expr": "v.score + q.scoring.max"
+            "expr": "v.score + q.scoring"
           },
           "x": 1080,
           "y": 640
@@ -875,9 +875,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          }
+          "scoring": 10
         }
       ]
     },

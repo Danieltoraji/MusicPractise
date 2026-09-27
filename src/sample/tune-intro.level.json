@@ -224,7 +224,7 @@
           "kind": "assign",
           "target": "score",
           "value": {
-            "expr": "v.score + q.scoring.max"
+            "expr": "v.score + q.scoring"
           }
         },
         {
@@ -494,7 +494,7 @@
         {
           "key": "scoring",
           "label": "分值",
-          "type": "json"
+          "type": "number"
         }
       ],
       "rows": [
@@ -503,18 +503,14 @@
             "text": "把声音稳定在 A4 附近"
           },
           "data": {},
-          "scoring": {
-            "max": 10
-          }
+          "scoring": 10
         },
         {
           "prompt": {
             "text": "再来一次：这次用更低的音"
           },
           "data": {},
-          "scoring": {
-            "max": 10
-          }
+          "scoring": 10
         }
       ]
     }

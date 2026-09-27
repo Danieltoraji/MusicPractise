@@ -184,7 +184,7 @@
           "kind": "assign",
           "target": "score",
           "value": {
-            "expr": "v.score + round(event.score * q.scoring.max)"
+            "expr": "v.score + round(event.score * q.scoring)"
           }
         },
         {
@@ -437,7 +437,7 @@
         {
           "key": "scoring",
           "label": "分值",
-          "type": "json"
+          "type": "number"
         }
       ],
       "rows": [
@@ -458,9 +458,7 @@
             ],
             "bpm": 80
           },
-          "scoring": {
-            "max": 10
-          }
+          "scoring": 10
         },
         {
           "prompt": {
@@ -479,9 +477,7 @@
             ],
             "bpm": 104
           },
-          "scoring": {
-            "max": 10
-          }
+          "scoring": 10
         }
       ]
     }

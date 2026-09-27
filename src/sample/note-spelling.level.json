@@ -268,7 +268,7 @@
           "kind": "assign",
           "target": "score",
           "value": {
-            "expr": "v.score + q.scoring.max"
+            "expr": "v.score + q.scoring"
           }
         },
         {
@@ -627,7 +627,7 @@
         {
           "key": "scoring",
           "label": "分值",
-          "type": "json"
+          "type": "number"
         },
         {
           "key": "hints",
@@ -680,9 +680,7 @@
             ],
             "hint": "从 C 开始：C + 大三度 + 小三度"
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "C 大三和弦"
@@ -729,9 +727,7 @@
             ],
             "hint": "从 F 开始的大三和弦"
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "F 大三和弦"
@@ -778,9 +774,7 @@
             ],
             "hint": "从 G 开始的大三和弦"
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "G 大三和弦"

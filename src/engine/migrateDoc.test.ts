@@ -252,6 +252,28 @@ describe('docs/27：play 调用 mode 兼容键显式化', () => {
   })
 })
 
+describe('docs/27：scoring 列数值化', () => {
+  it('{max:N} 形态的 scoring 行值改写为数值 N，列 type 置 number；图中 q.scoring.max 同步改写', () => {
+    const raw = v1Doc({
+      rules: [{ id: 'r1', on: 'btn1.clicked', do: [{ cmd: 'sound1.play', args: {} }, { set: 'score', expr: 'q.scoring.max' }] }],
+    })
+    // v1Doc 的 questions.scoring = { max: 10 } / { max: 5 }
+    const doc = migrateDocToV3(raw)
+    const scoringCol = doc.content.table.columns.find((c) => c.key === 'scoring')
+    expect(scoringCol).toMatchObject({ type: 'number' })
+    expect(doc.content.table.rows.map((r) => r.scoring)).toEqual([10, 5])
+    const assign = doc.content.logic.nodes.find((n) => n.kind === 'assign') as { value: { expr: string } }
+    expect(assign.value.expr).toBe('q.scoring')
+  })
+
+  it('幂等：数值化后二次迁移不再变化', () => {
+    const raw = v1Doc()
+    const once = migrateDocToV3(raw)
+    const twice = migrateDocToV3(JSON.parse(JSON.stringify(once)))
+    expect(twice).toEqual(once)
+  })
+})
+
 describe('jsonToExprSource（Json → 表达式字面量）', () => {
   it('标量 / 数组 / 对象（键为标识符）', () => {
     expect(jsonToExprSource(null)).toBe('null')

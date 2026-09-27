@@ -349,7 +349,7 @@
           "kind": "assign",
           "target": "score",
           "value": {
-            "expr": "v.score + q.scoring.max"
+            "expr": "v.score + q.scoring"
           }
         },
         {
@@ -755,7 +755,7 @@
         {
           "key": "scoring",
           "label": "分值",
-          "type": "json"
+          "type": "number"
         },
         {
           "key": "hints",
@@ -814,9 +814,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "do re mi，三个音都在白键上"
@@ -869,9 +867,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "do mi sol，三度跳进"
@@ -921,9 +917,7 @@
               }
             ]
           },
-          "scoring": {
-            "max": 10
-          },
+          "scoring": 10,
           "hints": [
             {
               "text": "从 mi 开始：mi sol la"

@@ -48,9 +48,21 @@ function makeRecorder() {
   return { commands, errors }
 }
 
-/** 表达式里会读 q.data.* / q.scoring.max：两引擎统一用迁移后的表格首行作为作用域 q */
+/** 表达式里会读 q.data.*：v3 侧用迁移后的表格首行作为作用域 q（scoring 已数值化，docs/27） */
 function firstRow(v1Doc: V1Doc): Json {
   return migrateDocToV3(v1Doc).content.table.rows[0] ?? null
+}
+
+/** v1 侧行数据：保持原始形态（scoring = {max} 对象，配 v1 表达式 q.scoring.max）——docs/27 语义等价双跑 */
+function rawFirstRow(v1Doc: V1Doc): Json {
+  const q0 = v1Doc.content.questions[0]
+  if (!q0) return null
+  const row: Record<string, Json> = {}
+  for (const [k, v] of Object.entries(q0)) {
+    if (k === 'id' || k === 'logicPatch') continue
+    row[k] = (v ?? null) as Json
+  }
+  return row
 }
 
 /** 收集 v1 程序的事件入口并生成派发脚本（空 payload；生命周期事件用真实负载；row=0 供行门控） */
@@ -128,13 +140,14 @@ describe('行为等价 golden：内置关卡 v1 vs v3（表格行 + 行门控装
       expect(v3Doc.content.logic).toEqual(program)
 
       const script = eventScript(v1logic)
-      const row = firstRow(v1Doc)
+      const rowV1 = rawFirstRow(v1Doc) // v1 侧原始行（scoring 对象）
+      const rowV3 = firstRow(v1Doc) // v3 侧迁移行（scoring 数值）
       const patchVars = v1Doc.content.questions[0]?.logicPatch?.variables
 
       const recV1 = makeRecorder()
-      const varsV1 = runV1(v1logic, row, script, recV1.commands, recV1.errors, patchVars)
+      const varsV1 = runV1(v1logic, rowV1, script, recV1.commands, recV1.errors, patchVars)
       const recV3 = makeRecorder()
-      const varsV3 = await runV3(program, row, script, recV3.commands, recV3.errors)
+      const varsV3 = await runV3(program, rowV3, script, recV3.commands, recV3.errors)
       delete varsV3.__row // 运行时簿记变量（行门控用），v1 侧无此键，不参与终态对比
 
       expect(varsV3).toEqual(varsV1)

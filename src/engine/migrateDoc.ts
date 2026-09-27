@@ -29,6 +29,9 @@
  * 时序关系内化为音符串的 t（起始拍）字段；已有 mode 键保留为运行时兼容键（仅规范引号），
  * 缺失时按旧缺省 chord 显式化。规则详见 normalizePlayModes。
  *
+ * docs/27 scoring 数值化（幂等）：{max:N} 形态的 scoring 列改写为数值 N（列 type 置 number），
+ * 图上表达式 q.scoring.max 同步改写为 q.scoring——「分值」对作者即是一个数字。
+ *
  * 纯函数、确定性：同输入逐字段同输出（golden 断言依赖）。
  */
 import type { ColumnType, ComponentInstance, DataTable, LevelDoc, TableRow, ViewDef } from './level'
@@ -206,9 +209,10 @@ export function inferColumnType(values: Json[]): ColumnType {
 
 /** v3 内容规范化：剥 template、改写 question.*、列类型缺省补全、bindings 编译为 set 命令节点、播放 mode 显式化（不 mutate 输入） */
 function normalizeV3Content(content: LevelDoc['content']): LevelDoc['content'] {
-  const rows = content.table?.rows ?? []
+  const table = structureScoringColumn(content.table ?? { columns: [], rows: [] })
+  const rows = table.rows
   const { logic: logicBound, components } = compileBindingsToNodes(normalizeLogic(content.logic), content.components ?? [])
-  const logic = normalizePlayModes(logicBound, new Map(components.map((c) => [c.id, c.type])))
+  const logic = rewriteScoringExpr(normalizePlayModes(logicBound, new Map(components.map((c) => [c.id, c.type]))))
   return {
     ...content,
     views: (content.views ?? []).map((v) => {
@@ -218,13 +222,87 @@ function normalizeV3Content(content: LevelDoc['content']): LevelDoc['content'] {
     logic,
     components,
     table: {
-      ...content.table,
-      columns: (content.table?.columns ?? []).map((c) => ({
+      ...table,
+      columns: table.columns.map((c) => ({
         ...c,
         type: c.type ?? inferColumnType(rows.map((r) => r[c.key] ?? null)),
       })),
     },
   }
+}
+
+// ---------------------------------------------------------------------------
+// docs/27：scoring 列数值化（{max:N} → N）+ 表达式 q.scoring.max → q.scoring 改写（幂等）
+// ---------------------------------------------------------------------------
+
+/** scoring 列结构化：行值 {max:N} 形态改写为数值 N；改写后非空值全为数值时列 type 置 number */
+function structureScoringColumn(table: DataTable): DataTable {
+  if (!table.columns.some((c) => c.key === 'scoring')) return table
+  let touched = false
+  const rows = table.rows.map((row) => {
+    const v = row.scoring
+    if (v !== null && typeof v === 'object' && !Array.isArray(v) && typeof (v as { max?: unknown }).max === 'number') {
+      touched = true
+      return { ...row, scoring: (v as { max: number }).max }
+    }
+    return row
+  })
+  if (!touched) return table
+  const vs = rows.map((r) => r.scoring).filter((v) => v !== null && v !== undefined)
+  const allNumber = vs.length > 0 && vs.every((v) => typeof v === 'number')
+  const columns = table.columns.map((c) => (c.key === 'scoring' && allNumber ? { ...c, type: 'number' as const } : c))
+  return { ...table, rows, columns }
+}
+
+/** 图上全部表达式文本的 q.scoring.max → q.scoring 改写（call args / cond / assign / loop / wait / emit payload） */
+function rewriteScoringExpr(logic: GraphProgram): GraphProgram {
+  let changed = false
+  const fix = (src: string): string => {
+    const next = src.split('q.scoring.max').join('q.scoring')
+    if (next !== src) changed = true
+    return next
+  }
+  const nodes = logic.nodes.map((node): GNode => {
+    switch (node.kind) {
+      case 'call': {
+        if (!node.args?.some((a) => typeof a === 'string' && a.includes('q.scoring.max'))) return node
+        return { ...node, args: node.args.map((a) => (typeof a === 'string' ? fix(a) : a)) }
+      }
+      case 'assign': {
+        if ('expr' in node.value) {
+          if (!node.value.expr.includes('q.scoring.max')) return node
+          return { ...node, value: { expr: fix(node.value.expr) } }
+        }
+        if (!node.value.call.args.some((a) => a.includes('q.scoring.max'))) return node
+        return { ...node, value: { call: { ...node.value.call, args: node.value.call.args.map(fix) } } }
+      }
+      case 'branch': {
+        if (!node.cond.includes('q.scoring.max')) return node
+        return { ...node, cond: fix(node.cond) }
+      }
+      case 'loop': {
+        if (node.mode === 'while') {
+          if (!node.cond || !node.cond.includes('q.scoring.max')) return node
+          return { ...node, cond: fix(node.cond) }
+        }
+        if (!node.times || !node.times.includes('q.scoring.max')) return node
+        return { ...node, times: fix(node.times) }
+      }
+      case 'wait': {
+        if (!node.ms.includes('q.scoring.max')) return node
+        return { ...node, ms: fix(node.ms) }
+      }
+      case 'emit': {
+        if (!node.payload || !Object.values(node.payload).some((v) => v.includes('q.scoring.max'))) return node
+        const payload: Record<string, string> = {}
+        for (const [k, v] of Object.entries(node.payload)) payload[k] = fix(v)
+        return { ...node, payload }
+      }
+      default:
+        return node
+    }
+  })
+  return changed ? { ...logic, nodes } : logic
 }
 
 // ---------------------------------------------------------------------------
