@@ -1,6 +1,6 @@
-// 五线谱编辑器纯函数：diatonic↔midi 换算 / 时序游标 / 附点（docs/27）
+// 五线谱编辑器纯函数：diatonic↔midi 换算 / 时序游标 / 附点 / 音名输入与音高步进（docs/27 + MuseScore 风格输入）
 import { describe, expect, it } from 'vitest'
-import { cursorBeat, dnToMidi, midiToDn, nearestWhiteBelow, startBeats, withDot } from './StaffEditor'
+import { cursorBeat, dnToMidi, midiToDn, nearestWhiteBelow, startBeats, stepDiatonic, whiteMidiFromLetter, withDot } from './StaffEditor'
 
 describe('diatonic 换算', () => {
   it('dnToMidi：C4=28→60、F5=38→77（高音谱顶线）、C6=42→84', () => {
@@ -44,5 +44,22 @@ describe('withDot（附点时值）', () => {
     expect(withDot('4n', true)).toBe('4n.')
     expect(withDot('4n.', true)).toBe('4n.')
     expect(withDot('4n', false)).toBe('4n')
+  })
+})
+
+describe('MuseScore 风格输入（音名键与音高步进）', () => {
+  it('whiteMidiFromLetter：取与参考音最近的同名白键（跨 B→C 自然换八度）', () => {
+    expect(whiteMidiFromLetter('c', 64)).toBe(60) // E4 参考 → C4
+    expect(whiteMidiFromLetter('c', 69)).toBe(72) // A4 参考 → C5（更近）
+    expect(whiteMidiFromLetter('b', 60)).toBe(59) // C4 参考 → B3
+    expect(whiteMidiFromLetter('f', 64)).toBe(65)
+  })
+
+  it('stepDiatonic：白键走音级；黑键 ↑ 进上白键、↓ 退本位白键', () => {
+    expect(stepDiatonic(60, 1)).toBe(62) // C4 → D4
+    expect(stepDiatonic(60, -1)).toBe(59) // C4 → B3
+    expect(stepDiatonic(61, 1)).toBe(62) // C♯4 ↑ → D4
+    expect(stepDiatonic(61, -1)).toBe(60) // C♯4 ↓ → C4（本位）
+    expect(stepDiatonic(66, 1)).toBe(67) // F♯4 ↑ → G4
   })
 })
