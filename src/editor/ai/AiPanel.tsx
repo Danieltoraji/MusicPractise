@@ -19,6 +19,16 @@ interface Props {
   doc: LevelDoc
   selection: AiSelectionContext
   onClose: () => void
+  /** 节点图入坞形态：列内定高（列内非末位面板） */
+  style?: React.CSSProperties
+  /** 追加到根（drag-src 拖拽源半透明等） */
+  className?: string
+  /** 标题栏拖拽手柄（跨列槽移动，GraphEditor DnD 统一管理；可选） */
+  headerDrag?: {
+    onDragStart: () => void
+    onDragEnd: () => void
+    onDragOver: (e: React.DragEvent) => void
+  }
 }
 
 function activeProfile(): AiProfileConfig | null {
@@ -28,7 +38,7 @@ function activeProfile(): AiProfileConfig | null {
   return { baseUrl: p.baseUrl, model: p.model, apiKey: p.apiKey }
 }
 
-export function AiPanel({ doc, selection, onClose }: Props) {
+export function AiPanel({ doc, selection, onClose, style, className, headerDrag }: Props) {
   const session = useSyncExternalStore(subscribeAiSession, () => getSession(doc.id))
   // 工具 ctx 走 ref：agent 循环跨 await 期间始终读到最新 doc（保存副本换 id 会重挂面板，无碍）
   const docRef = useRef(doc)
@@ -65,8 +75,15 @@ export function AiPanel({ doc, selection, onClose }: Props) {
   const empty = session.messages.length === 0
 
   return (
-    <aside className="ai-panel">
-      <div className="ai-panel-head">
+    <aside className={`ai-panel${className ? ` ${className}` : ''}`} style={style}>
+      <div
+        className={`ai-panel-head${headerDrag ? ' is-draggable' : ''}`}
+        draggable={!!headerDrag}
+        title={headerDrag ? 'AI 助手：拖动标题栏可移动到其它列或调整顺序' : undefined}
+        onDragStart={() => headerDrag?.onDragStart()}
+        onDragEnd={() => headerDrag?.onDragEnd()}
+        onDragOver={(e) => headerDrag?.onDragOver(e)}
+      >
         <b>AI 助手</b>
         <span className="ai-mode-chip" title="只读问答：AI 可读取脚本/文档/校验/日志，不会修改关卡">
           ask

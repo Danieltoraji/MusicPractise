@@ -178,55 +178,145 @@ describe('工作台面板化（docs/29）', () => {
     if (!btn) throw new Error(`找不到面板切换按钮 ${label}`)
     return btn as HTMLButtonElement
   }
+  const titles = (container: HTMLElement): string[] =>
+    [...container.querySelectorAll('.gdock-title, .ai-panel-head b')].map((e) => e.textContent ?? '')
 
-  it('默认渲染五个 dock 面板与工具栏切换按钮', () => {
+  /** 真实浏览器/合成事件通用的分隔条拖拽（pointerdown→moves→up，window 级监听） */
+  function dragSplit(split: Element, deltas: number[], axis: 'x' | 'y' = 'x'): void {
+    const r = split.getBoundingClientRect()
+    const start = axis === 'x' ? r.left + r.width / 2 : r.top + r.height / 2
+    const at = axis === 'x' ? (v: number) => ({ clientX: start + v, clientY: 0 }) : (v: number) => ({ clientX: 0, clientY: start + v })
+    act(() => {
+      split.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 7, ...at(0) }))
+      for (const d of deltas) split.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 7, ...at(d) }))
+      split.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 7, ...at(deltas.at(-1) ?? 0) }))
+    })
+  }
+  const dockOf = (container: HTMLElement, title: string): Element => {
+    // 按标题精确匹配（面板正文的「变量赋值」等组名会误匹配子串）
+    const el = [...container.querySelectorAll('.gdock')].find((d) => {
+      const t = d.querySelector('.gdock-title')
+      return t?.textContent?.includes(title)
+    })
+    if (!el) throw new Error(`找不到面板 ${title}`)
+    return el
+  }
+
+  it('默认渲染五个 dock 面板（左栏堆叠+右侧两列）与工具栏切换按钮', () => {
     const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
     expect(container.querySelectorAll('.gdock')).toHaveLength(4) // 组件库/事件管理/变量/属性
-    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).toEqual([
-      '🧩 组件库',
-      '⚡ 事件管理',
-      '🧮 变量',
-      '⚙ 属性',
-    ])
-    expect(container.querySelectorAll('.gsplit')).toHaveLength(2) // 左栏 + 属性（AI 关闭）
+    expect(titles(container)).toEqual(['🧩 组件库', '⚡ 事件管理', '🧮 变量', '⚙ 属性'])
+    expect(container.querySelectorAll('.graph-dock-col')).toHaveLength(2) // 左 + 右A（AI 关闭）
+    expect(container.querySelectorAll('.gsplit:not(.gsplit-h)')).toHaveLength(2) // 左列尾 + 右A列头（AI 关）
+    expect(container.querySelectorAll('.gsplit-h')).toHaveLength(2) // 左栏内两道高度条
   })
 
-  it('工具栏切换：事件面板隐藏再显示；✕ 关闭后按钮取消激活，再点恢复', () => {
+  it('工具栏切换：事件面板隐藏再显示；✕ 关闭后按钮取消激活，再点恢复；持久化到 graph-dock', () => {
     const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
-    // 工具栏切换隐藏
     act(() => toggleBtn(container, '事件').click())
-    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).not.toContain('⚡ 事件管理')
-    expect(localStorage.getItem('graph-panels')).toContain('"events":false')
-    // 再点恢复
+    expect(titles(container)).not.toContain('⚡ 事件管理')
+    expect(localStorage.getItem('graph-dock')).toContain('"events":true')
     act(() => toggleBtn(container, '事件').click())
-    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).toContain('⚡ 事件管理')
+    expect(titles(container)).toContain('⚡ 事件管理')
     // 面板 ✕ 关闭 → 按钮取消激活；按钮再点 → 恢复
-    const dock = [...container.querySelectorAll('.gdock')].find((d) => d.textContent?.includes('事件管理'))!
-    act(() => (dock.querySelector('.gdock-close') as HTMLElement).click())
-    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).not.toContain('⚡ 事件管理')
+    act(() => (dockOf(container, '事件管理').querySelector('.gdock-close') as HTMLElement).click())
+    expect(titles(container)).not.toContain('⚡ 事件管理')
     expect(toggleBtn(container, '事件').classList.contains('active')).toBe(false)
     act(() => toggleBtn(container, '事件').click())
-    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).toContain('⚡ 事件管理')
+    expect(titles(container)).toContain('⚡ 事件管理')
   })
 
   it('左栏三面板全隐时左栏与分隔条消失；显隐配置从 localStorage 恢复', () => {
-    localStorage.setItem('graph-panels', JSON.stringify({ library: false, events: false, vars: false, inspector: true }))
+    localStorage.setItem('graph-dock', JSON.stringify({ hidden: { library: true, events: true, vars: true } }))
     const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
-    expect(container.querySelector('.graph-left')).toBeNull()
-    expect(container.querySelectorAll('.gsplit')).toHaveLength(1) // 只剩属性列的
-    // 恢复一个
+    expect(container.querySelectorAll('.graph-dock-col')).toHaveLength(1) // 只剩右A
+    expect(container.querySelectorAll('.gsplit:not(.gsplit-h)')).toHaveLength(1)
     act(() => toggleBtn(container, '组件库').click())
-    expect(container.querySelector('.graph-left')).toBeTruthy()
+    expect(container.querySelectorAll('.graph-dock-col')).toHaveLength(2)
   })
 
   it('宽度持久化：localStorage 中的列宽驱动内联样式并钳制', () => {
     localStorage.setItem('graph-panel-w-left', '260')
     localStorage.setItem('graph-panel-w-insp', '9999')
     const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
-    const left = container.querySelector('.graph-left') as HTMLElement
-    expect(left.style.width).toBe('260px')
-    const insp = container.querySelector('.graph-right-col') as HTMLElement
-    expect(insp.style.width).toBe('460px') // 超上限被钳到 460
+    const cols = [...container.querySelectorAll('.graph-dock-col')] as HTMLElement[]
+    expect(cols[0].style.width).toBe('260px')
+    expect(cols[1].style.width).toBe('460px') // 超上限被钳到 460
+  })
+
+  it('拖拽方向：左栏右拖变宽；右列左拖变宽（原符号反了的回归）', () => {
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    const [leftSplit, inspSplit] = [...container.querySelectorAll('.gsplit:not(.gsplit-h)')]
+    // 左栏分隔条：向右 +60 → 左栏 260
+    dragSplit(leftSplit, [30, 60])
+    expect((container.querySelector('.graph-dock-col') as HTMLElement).style.width).toBe('260px')
+    // 属性列（右A）分隔条：向左 -60 → 300+60=360（向左拖变宽）
+    dragSplit(inspSplit, [-30, -60])
+    const cols = [...container.querySelectorAll('.graph-dock-col')] as HTMLElement[]
+    expect(cols[1].style.width).toBe('360px')
+  })
+
+  it('拖拽跟手：连续多帧位移按「起始值+总位移」收敛，无复利漂移（回归）', () => {
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    const [leftSplit] = [...container.querySelectorAll('.gsplit:not(.gsplit-h)')]
+    // 5 帧累计 +100：正确结果 300（若按逐帧累加当前值会得到远超 300 的漂移值）
+    dragSplit(leftSplit, [20, 40, 60, 80, 100])
+    expect((container.querySelector('.graph-dock-col') as HTMLElement).style.width).toBe('300px')
+    expect(localStorage.getItem('graph-panel-w-left')).toBe('300')
+  })
+
+  it('面板自由调换：拖「事件管理」标题栏到 AI 列 → 落位右B 并持久化', async () => {
+    const onToggleAi = vi.fn()
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen onToggleAi={onToggleAi} />)
+    // AiPanel 为 lazy：先等它渲染（列与标题栏都在其后出现）
+    await act(async () => {
+      for (let i = 0; i < 50 && !container.querySelector('.ai-panel-head'); i++) {
+        await new Promise((r) => setTimeout(r, 10))
+      }
+    })
+    // 拖拽源：事件管理标题栏
+    const evHead = dockOf(container, '事件管理').querySelector('.gdock-head') as HTMLElement
+    act(() => evHead.dispatchEvent(new Event('dragstart', { bubbles: true })))
+    // 目标：AI 面板标题栏 dragover（jsdom 中 rect 全 0 → 判定插入其后）再 drop 到其列
+    const cols = [...container.querySelectorAll('.graph-dock-col')]
+    const aiCol = cols[2]
+    act(() => {
+      const aiHead = aiCol.querySelector('.ai-panel-head') as HTMLElement
+      aiHead.dispatchEvent(new Event('dragover', { bubbles: true }))
+      aiCol.dispatchEvent(new Event('dragover', { bubbles: true }))
+      aiCol.dispatchEvent(new Event('drop', { bubbles: true }))
+    })
+    // 布局更新：事件管理移入右B 并持久化
+    const stored = JSON.parse(localStorage.getItem('graph-dock')!) as { layout: { left: string[]; rightB: string[] } }
+    expect(stored.layout.left).not.toContain('events')
+    expect(stored.layout.rightB).toContain('events')
+    // DOM：右B 列现在有两个面板
+    const newCols = [...container.querySelectorAll('.graph-dock-col')]
+    expect([...newCols[2].querySelectorAll('.gdock-title, .ai-panel-head b')].map((e) => e.textContent)).toEqual(
+      expect.arrayContaining(['AI 助手', '⚡ 事件管理']),
+    )
+  })
+
+  it('列内重排：拖「变量」到本列首位（插入线在组件库之前）', () => {
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    const varsHead = dockOf(container, '变量').querySelector('.gdock-head') as HTMLElement
+    const libHead = dockOf(container, '组件库').querySelector('.gdock-head') as HTMLElement
+    // dragstart 单独一个 act：dragId 状态先 flush，后续 dragover 处理器才读得到
+    act(() => varsHead.dispatchEvent(new Event('dragstart', { bubbles: true })))
+    // jsdom rect 全 0：clientY=-10 < 0 → before → 变量插到组件库之前
+    act(() => libHead.dispatchEvent(new MouseEvent('dragover', { bubbles: true, clientY: -10 })))
+    const leftCol = container.querySelector('.graph-dock-col') as HTMLElement
+    act(() => leftCol.dispatchEvent(new Event('drop', { bubbles: true })))
+    expect([...leftCol.querySelectorAll('.gdock-title')].map((e) => e.textContent)).toEqual(['🧮 变量', '🧩 组件库', '⚡ 事件管理'])
+  })
+
+  it('列内高度拖拽：面板间水平分隔条调整上方面板高度并持久化', () => {
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    const [hSplit] = [...container.querySelectorAll('.gsplit-h')]
+    dragSplit(hSplit, [40], 'y')
+    const lib = dockOf(container, '组件库') as HTMLElement
+    expect(lib.style.height).toBe('340px')
+    expect((JSON.parse(localStorage.getItem('graph-dock-h')!) as Record<string, number>).library).toBe(340)
   })
 
   it('AI 入坞：aiOpen=true 时 AI 面板渲染在 .graph-editor 内（主题作用域），列宽可配；onToggleAi 由工具栏按钮触发', async () => {
@@ -239,12 +329,11 @@ describe('工作台面板化（docs/29）', () => {
         await new Promise((r) => setTimeout(r, 10))
       }
     })
-    const aiCol = container.querySelector('.graph-ai-col') as HTMLElement
-    expect(aiCol).toBeTruthy()
-    expect(aiCol.style.width).toBe('400px')
+    const cols = [...container.querySelectorAll('.graph-dock-col')] as HTMLElement[]
+    expect(cols[2].style.width).toBe('400px')
     // 主题作用域：AI 面板是 .graph-editor.ge-dark 的后代
     expect(container.querySelector('.graph-editor.ge-dark .ai-panel')).toBeTruthy()
-    expect(container.querySelectorAll('.gsplit')).toHaveLength(3) // 左栏 + 属性 + AI
+    expect(container.querySelectorAll('.gsplit:not(.gsplit-h)')).toHaveLength(3) // 左栏 + 右A + 右B
     act(() => toggleBtn(container, 'AI').click())
     expect(onToggleAi).toHaveBeenCalled()
   })

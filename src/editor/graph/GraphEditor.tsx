@@ -7,7 +7,7 @@
  * 布局持久化在 localStorage（graph-panels / graph-panel-w-*）；AI 面板与属性平级挂在画布右侧并随主题换肤。
  * 默认导出（React.lazy 懒加载 @xyflow/react，不进主包）。
  */
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -65,34 +65,91 @@ interface Props {
 const AiPanel = lazy(() => import('../ai/AiPanel').then((m) => ({ default: m.AiPanel })))
 
 // ---------------------------------------------------------------------------
-// dock 布局状态：显隐 + 三列宽度，localStorage 持久化（沿 graph-theme 惯例）
+// dock 布局（docs/29 追加：面板自由调换）：三个列槽 × 五面板归属 + 显隐 + 列宽/面板高，localStorage 持久化
 // ---------------------------------------------------------------------------
 
-interface PanelVisibility {
-  library: boolean
-  events: boolean
-  vars: boolean
-  inspector: boolean
-}
+type PanelId = 'library' | 'events' | 'vars' | 'inspector' | 'ai'
+type ColKey = 'left' | 'rightA' | 'rightB'
+type DockLayout = Record<ColKey, PanelId[]>
 
-const PANELS_KEY = 'graph-panels'
+const ALL_PANELS: PanelId[] = ['library', 'events', 'vars', 'inspector', 'ai']
+const DEFAULT_LAYOUT: DockLayout = { left: ['library', 'events', 'vars'], rightA: ['inspector'], rightB: ['ai'] }
+const DEFAULT_COL_OF: Record<PanelId, ColKey> = { library: 'left', events: 'left', vars: 'left', inspector: 'rightA', ai: 'rightB' }
+
+const DOCK_KEY = 'graph-dock'
+const HEIGHTS_KEY = 'graph-dock-h'
+const DEFAULT_PANEL_H = 300
 const W_LEFT_KEY = 'graph-panel-w-left'
 const W_INSP_KEY = 'graph-panel-w-insp'
 const W_AI_KEY = 'graph-panel-w-ai'
 
+interface DockState {
+  layout: DockLayout
+  hidden: Partial<Record<PanelId, boolean>>
+}
+
 const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v))
 
-function loadPanels(): PanelVisibility {
-  const fallback: PanelVisibility = { library: true, events: true, vars: true, inspector: true }
+/** 布局自愈：未知面板剔除、缺失面板回落默认槽、去重，保证五面板恰好各出现一次 */
+function sanitizeLayout(raw: unknown): DockLayout {
+  const out: DockLayout = { left: [], rightA: [], rightB: [] }
+  if (typeof raw === 'object' && raw !== null) {
+    const seen = new Set<PanelId>()
+    for (const col of ['left', 'rightA', 'rightB'] as ColKey[]) {
+      const ids = (raw as Record<string, unknown>)[col]
+      if (!Array.isArray(ids)) continue
+      for (const id of ids) {
+        if (ALL_PANELS.includes(id as PanelId) && !seen.has(id as PanelId)) {
+          seen.add(id as PanelId)
+          out[col].push(id as PanelId)
+        }
+      }
+    }
+    for (const id of ALL_PANELS) if (!seen.has(id)) out[DEFAULT_COL_OF[id]].push(id)
+  } else {
+    return { left: [...DEFAULT_LAYOUT.left], rightA: [...DEFAULT_LAYOUT.rightA], rightB: [...DEFAULT_LAYOUT.rightB] }
+  }
+  return out
+}
+
+function loadDock(): DockState {
+  const state: DockState = { layout: sanitizeLayout(null), hidden: {} }
   try {
-    const raw = JSON.parse(localStorage.getItem(PANELS_KEY) ?? '') as Partial<PanelVisibility>
-    return { ...fallback, ...raw }
+    // 旧键 graph-panels（面板化首版的显隐布尔）迁移
+    const legacy = JSON.parse(localStorage.getItem('graph-panels') ?? 'null') as Record<string, unknown> | null
+    if (legacy) {
+      for (const id of ALL_PANELS) if (legacy[id] === false) state.hidden[id] = true
+    }
+    const raw = JSON.parse(localStorage.getItem(DOCK_KEY) ?? 'null') as { layout?: unknown; hidden?: unknown } | null
+    if (raw) {
+      state.layout = sanitizeLayout(raw.layout)
+      if (typeof raw.hidden === 'object' && raw.hidden !== null) {
+        for (const id of ALL_PANELS) if ((raw.hidden as Record<string, unknown>)[id] === false) state.hidden[id] = false
+        for (const id of ALL_PANELS) if ((raw.hidden as Record<string, unknown>)[id] === true) state.hidden[id] = true
+      }
+    }
   } catch {
-    return fallback
+    // 毒数据：回落默认
+  }
+  return state
+}
+
+function loadHeights(): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(HEIGHTS_KEY) ?? 'null') as Record<string, unknown> | null
+    if (!raw) return {}
+    const out: Record<string, number> = {}
+    for (const id of ALL_PANELS) {
+      const v = Number(raw[id])
+      if (Number.isFinite(v) && v > 0) out[id] = clamp(Math.round(v), 140, 900)
+    }
+    return out
+  } catch {
+    return {}
   }
 }
 
-/** 宽度持久化：读时钳制防坏数据，写时随拖拽 write-through（值小、频次可接受） */
+/** 列宽持久化：读时钳制防坏数据，写时随拖拽 write-through（值小、频次可接受） */
 function usePanelWidth(key: string, def: number, min: number, max: number): [number, (w: number) => void] {
   const [w, setW] = useState<number>(() => {
     const raw = Number(localStorage.getItem(key))
@@ -113,9 +170,13 @@ function usePanelWidth(key: string, def: number, min: number, max: number): [num
   return [w, update]
 }
 
-/** 列宽拖拽分隔条：window 级监听（setPointerCapture 仅作指针出界保险，失败不阻断——
- *  合成事件/特殊环境下 capture 会因非活跃 pointerId 抛错）；dir=1 向右拖变宽，-1 变窄（右列用） */
-function startSplitDrag(e: React.PointerEvent<HTMLDivElement>, dir: 1 | -1, onDelta: (dx: number) => void): void {
+/**
+ * 拖拽分隔条（垂直/水平通用）：window 级监听（setPointerCapture 仅作保险，失败不阻断——
+ * 合成事件/特殊环境下 capture 会因非活跃 pointerId 抛错）。
+ * onTotal 回调收「自按下起点的总位移」；调用方必须在 pointerdown 时捕获起始尺寸——
+ * 逐事件把总位移累加到已更新的当前值上，会在 React 渲染滞后时复利漂移（边缘跑得比鼠标快）。
+ */
+function startSplitDrag(e: React.PointerEvent<HTMLDivElement>, axis: 'x' | 'y', onTotal: (d: number) => void): void {
   e.preventDefault()
   const el = e.currentTarget
   el.classList.add('is-dragging')
@@ -124,8 +185,8 @@ function startSplitDrag(e: React.PointerEvent<HTMLDivElement>, dir: 1 | -1, onDe
   } catch {
     // 非活跃指针（自动化合成事件等）：window 监听已足够
   }
-  const startX = e.clientX
-  const move = (ev: PointerEvent): void => onDelta(dir * (ev.clientX - startX))
+  const start = axis === 'x' ? e.clientX : e.clientY
+  const move = (ev: PointerEvent): void => onTotal((axis === 'x' ? ev.clientX : ev.clientY) - start)
   const up = (): void => {
     el.classList.remove('is-dragging')
     try {
@@ -167,8 +228,9 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     })
   }
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  // dock 面板显隐与三列宽度（docs/29：跨会话记住工作台布局）
-  const [panels, setPanels] = useState<PanelVisibility>(loadPanels)
+  // dock 布局：列槽归属 + 显隐 + 列宽/面板高（docs/29 追加：跨会话记住工作台布局）
+  const [dock, setDock] = useState<DockState>(loadDock)
+  const [heights, setHeights] = useState<Record<string, number>>(loadHeights)
   const [leftW, setLeftW] = usePanelWidth(W_LEFT_KEY, 200, 150, 360)
   const [inspW, setInspW] = usePanelWidth(W_INSP_KEY, 300, 240, 460)
   const [aiW, setAiW] = usePanelWidth(W_AI_KEY, 360, 280, 520)
@@ -178,18 +240,115 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
   inspWRef.current = inspW
   const aiWRef = useRef(aiW)
   aiWRef.current = aiW
+  const heightsRef = useRef(heights)
+  heightsRef.current = heights
 
-  const togglePanel = (key: keyof PanelVisibility): void => {
-    setPanels((p) => {
-      const next = { ...p, [key]: !p[key] }
-      try {
-        localStorage.setItem(PANELS_KEY, JSON.stringify(next))
-      } catch {
-        // 布局持久化降级
+  const saveDock = useCallback((next: DockState): void => {
+    setDock(next)
+    try {
+      localStorage.setItem(DOCK_KEY, JSON.stringify(next))
+    } catch {
+      // 布局持久化降级
+    }
+  }, [])
+  const togglePanel = useCallback(
+    (id: PanelId): void => {
+      saveDock({ ...dock, hidden: { ...dock.hidden, [id]: !dock.hidden[id] } })
+    },
+    [dock, saveDock],
+  )
+  const setPanelH = useCallback((id: PanelId, h: number): void => {
+    const next = { ...heightsRef.current, [id]: clamp(Math.round(h), 140, 900) }
+    heightsRef.current = next
+    setHeights(next)
+    try {
+      localStorage.setItem(HEIGHTS_KEY, JSON.stringify(next))
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  // 面板拖换（HTML5 DnD）：dragId = 拖动中的面板；hint = 插入线位置（列 + 可见序）
+  const [dragId, setDragId] = useState<PanelId | null>(null)
+  const [hint, setHint] = useState<{ col: ColKey; index: number } | null>(null)
+  const panelVisible = useCallback(
+    (id: PanelId): boolean => (id === 'ai' ? aiOpen : !dock.hidden[id]),
+    [aiOpen, dock.hidden],
+  )
+  const visibleIn = useCallback(
+    (col: ColKey): PanelId[] => dock.layout[col].filter(panelVisible),
+    [dock.layout, panelVisible],
+  )
+  const colOf = useCallback(
+    (id: PanelId): ColKey => (['left', 'rightA', 'rightB'] as ColKey[]).find((c) => dock.layout[c].includes(id)) ?? 'left',
+    [dock.layout],
+  )
+  const movePanel = useCallback(
+    (id: PanelId, col: ColKey, visIndex: number): void => {
+      // 可见序 → 全量数组插入位（跳过隐藏面板）
+      const fullIndex = (target: ColKey): number => {
+        let count = 0
+        for (let i = 0; i < dock.layout[target].length; i++) {
+          if (panelVisible(dock.layout[target][i])) {
+            if (count === visIndex) return i
+            count++
+          }
+        }
+        return dock.layout[target].length
       }
-      return next
-    })
-  }
+      const from = colOf(id)
+      const layout: DockLayout = { left: [...dock.layout.left], rightA: [...dock.layout.rightA], rightB: [...dock.layout.rightB] }
+      if (from === col) {
+        const ids = layout[col]
+        const oldIdx = ids.indexOf(id)
+        const idx = fullIndex(col)
+        ids.splice(oldIdx, 1)
+        ids.splice(oldIdx < idx ? idx - 1 : idx, 0, id)
+      } else {
+        layout[from] = layout[from].filter((x) => x !== id)
+        layout[col].splice(Math.min(fullIndex(col), layout[col].length), 0, id)
+      }
+      if (JSON.stringify(layout) !== JSON.stringify(dock.layout)) saveDock({ ...dock, layout })
+    },
+    [dock, colOf, panelVisible, saveDock],
+  )
+  const onPanelDragStart = useCallback((id: PanelId): void => setDragId(id), [])
+  const onPanelDragEnd = useCallback((): void => {
+    setDragId(null)
+    setHint(null)
+  }, [])
+  const headerDragOver = useCallback(
+    (e: React.DragEvent, id: PanelId): void => {
+      if (!dragId || dragId === id) return
+      e.preventDefault()
+      e.stopPropagation()
+      const col = colOf(id)
+      const ids = visibleIn(col)
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      const after = e.clientY >= rect.top + rect.height / 2
+      setHint({ col, index: ids.indexOf(id) + (after ? 1 : 0) })
+    },
+    [dragId, colOf, visibleIn],
+  )
+  const colDragOver = useCallback(
+    (e: React.DragEvent, col: ColKey): void => {
+      if (!dragId) return
+      e.preventDefault()
+      setHint((cur) => (cur && cur.col === col ? cur : { col, index: visibleIn(col).length }))
+    },
+    [dragId, visibleIn],
+  )
+  const colDrop = useCallback(
+    (e: React.DragEvent, col: ColKey): void => {
+      e.preventDefault()
+      if (!dragId) return
+      const index = hint && hint.col === col ? hint.index : visibleIn(col).length
+      movePanel(dragId, col, index)
+      setDragId(null)
+      setHint(null)
+    },
+    [dragId, hint, movePanel, visibleIn],
+  )
   const [error, setError] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
   const [dragPos, setDragPos] = useState<Map<string, { x: number; y: number }>>(new Map())
@@ -450,19 +609,127 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
   const runLog = useMemo(() => readRunLog(doc.id).slice().reverse(), [doc.id, logTick])
   const errorCount = runLog.filter((e) => e.kind === 'error').length
 
+  // dock 列渲染：面板堆叠 + 面板间水平分隔条（上方面板定高可调，末面板填充剩余高度）+ DnD 插入线
+  const colWidth = (col: ColKey): number => (col === 'left' ? leftW : col === 'rightA' ? inspW : aiW)
+  const colWRefOf = (col: ColKey): { current: number } => (col === 'left' ? leftWRef : col === 'rightA' ? inspWRef : aiWRef)
+  const colSetW = (col: ColKey, n: number): void => (col === 'left' ? setLeftW(n) : col === 'rightA' ? setInspW(n) : setAiW(n))
+
+  const renderDockPanel = (id: PanelId, fixedHeight: boolean): React.ReactNode => {
+    const style = fixedHeight ? { height: heights[id] ?? DEFAULT_PANEL_H } : undefined
+    const srcClass = dragId === id ? 'drag-src' : ''
+    const drag = {
+      dragId: id,
+      onDragStart: () => onPanelDragStart(id),
+      onDragEnd: onPanelDragEnd,
+      onHeaderDragOver: (e: React.DragEvent) => headerDragOver(e, id),
+    }
+    switch (id) {
+      case 'library':
+        return (
+          <DockPanel key={id} icon="🧩" title="组件库" {...drag} style={style} className={srcClass} onClose={() => togglePanel('library')}>
+            <NodeLibraryPanel
+              groups={palette}
+              templates={templates}
+              onPick={(item) => addFromPalette(item)}
+              onPickTemplate={(tpl) => addTemplate(tpl)}
+            />
+          </DockPanel>
+        )
+      case 'events':
+        return (
+          <DockPanel key={id} icon="⚡" title="事件管理" {...drag} style={style} className={srcClass} onClose={() => togglePanel('events')}>
+            <EventManagerPanel doc={doc} onAddOn={addOnNode} onAddEmit={addEmitNode} onFocusNode={focusNode} />
+          </DockPanel>
+        )
+      case 'vars':
+        return (
+          <DockPanel key={id} icon="🧮" title="变量" {...drag} style={style} className={srcClass} onClose={() => togglePanel('vars')}>
+            <VariablesPanel
+              prog={program}
+              onSet={(name, value) => apply((prog) => setGraphVariable(prog, name, value))}
+              onRename={(oldName, newName) => apply((prog) => renameGraphVariable(prog, oldName, newName))}
+              onRemove={(name) => apply((prog) => removeGraphVariable(prog, name))}
+            />
+          </DockPanel>
+        )
+      case 'inspector':
+        return (
+          <DockPanel key={id} icon="⚙" title="属性" {...drag} style={style} className={srcClass} onClose={() => togglePanel('inspector')}>
+            <NodeInspector
+              node={selected}
+              doc={doc}
+              issues={selectedIssues}
+              onPatch={(patch) => selectedId && apply((prog) => updateNode(prog, selectedId, patch))}
+              onRemove={() => {
+                if (selectedId) apply((prog) => removeNode(prog, selectedId))
+                setSelectedId(null)
+              }}
+            />
+          </DockPanel>
+        )
+      case 'ai':
+        return (
+          <Suspense key={id} fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
+            <AiPanel
+              doc={doc}
+              selection={{ tab: 'graph', nodeId: selectedId }}
+              onClose={onToggleAi}
+              style={style}
+              className={srcClass}
+              headerDrag={{
+                onDragStart: () => onPanelDragStart('ai'),
+                onDragEnd: onPanelDragEnd,
+                onDragOver: (e) => headerDragOver(e, 'ai'),
+              }}
+            />
+          </Suspense>
+        )
+    }
+  }
+
+  const renderDockCol = (col: ColKey): React.ReactNode => {
+    const ids = visibleIn(col)
+    return (
+      <div
+        className={`graph-dock-col${dragId ? ' drop-target' : ''}`}
+        style={{ width: colWidth(col) }}
+        onDragOver={(e) => colDragOver(e, col)}
+        onDrop={(e) => colDrop(e, col)}
+      >
+        {ids.map((id, i) => (
+          <Fragment key={id}>
+            {hint && hint.col === col && hint.index === i && <div className="gdock-insert" />}
+            {renderDockPanel(id, i < ids.length - 1)}
+            {i < ids.length - 1 && (
+              <div
+                className="gsplit gsplit-h"
+                title="拖拽调整上方面板高度"
+                onPointerDown={(e) => {
+                  const base = heightsRef.current[id] ?? DEFAULT_PANEL_H
+                  startSplitDrag(e, 'y', (d) => setPanelH(id, base + d))
+                }}
+              />
+            )}
+          </Fragment>
+        ))}
+        {hint && hint.col === col && hint.index === ids.length && <div className="gdock-insert" />}
+      </div>
+    )
+  }
+
   return (
     <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`}>
       <div className="graph-toolbar">
-        <button type="button" className={`gtoggle${panels.library ? ' active' : ''}`} onClick={() => togglePanel('library')} title="组件库面板（节点/模板菜单）">
+        <button type="button" className={`gtoggle${panelVisible('library') ? ' active' : ''}`} onClick={() => togglePanel('library')} title="组件库面板（节点/模板菜单）">
           🧩 组件库
         </button>
-        <button type="button" className={`gtoggle${panels.events ? ' active' : ''}`} onClick={() => togglePanel('events')} title="事件管理面板（系统/组件/内部事件 → 一键落节点）">
+        <button type="button" className={`gtoggle${panelVisible('events') ? ' active' : ''}`} onClick={() => togglePanel('events')} title="事件管理面板（系统/组件/内部事件 → 一键落节点）">
           ⚡ 事件
         </button>
-        <button type="button" className={`gtoggle${panels.vars ? ' active' : ''}`} onClick={() => togglePanel('vars')} title="变量面板（声明/初值）">
+        <button type="button" className={`gtoggle${panelVisible('vars') ? ' active' : ''}`} onClick={() => togglePanel('vars')} title="变量面板（声明/初值）">
           🧮 变量
         </button>
-        <button type="button" className={`gtoggle${panels.inspector ? ' active' : ''}`} onClick={() => togglePanel('inspector')} title="节点属性面板">
+        <button type="button" className={`gtoggle${panelVisible('inspector') ? ' active' : ''}`} onClick={() => togglePanel('inspector')} title="节点属性面板">
           ⚙ 属性
         </button>
         <button type="button" className={`gtoggle${aiOpen ? ' active' : ''}`} onClick={onToggleAi} title="AI 助手面板（统一对话，随主题换肤）">
@@ -554,40 +821,15 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         </div>
       )}
       <div className="graph-layout">
-        {(panels.library || panels.events || panels.vars) && (
-          <div className="graph-left" style={{ width: leftW }}>
-            {panels.library && (
-              <DockPanel icon="🧩" title="组件库" className="gdock--lib" onClose={() => togglePanel('library')}>
-                <NodeLibraryPanel
-                  groups={palette}
-                  templates={templates}
-                  onPick={(item) => addFromPalette(item)}
-                  onPickTemplate={(tpl) => addTemplate(tpl)}
-                />
-              </DockPanel>
-            )}
-            {panels.events && (
-              <DockPanel icon="⚡" title="事件管理" className="gdock--events" onClose={() => togglePanel('events')}>
-                <EventManagerPanel doc={doc} onAddOn={addOnNode} onAddEmit={addEmitNode} onFocusNode={focusNode} />
-              </DockPanel>
-            )}
-            {panels.vars && (
-              <DockPanel icon="🧮" title="变量" className="gdock--vars" onClose={() => togglePanel('vars')}>
-                <VariablesPanel
-                  prog={program}
-                  onSet={(name, value) => apply((prog) => setGraphVariable(prog, name, value))}
-                  onRename={(oldName, newName) => apply((prog) => renameGraphVariable(prog, oldName, newName))}
-                  onRemove={(name) => apply((prog) => removeGraphVariable(prog, name))}
-                />
-              </DockPanel>
-            )}
-          </div>
-        )}
-        {(panels.library || panels.events || panels.vars) && (
+        {visibleIn('left').length > 0 && renderDockCol('left')}
+        {visibleIn('left').length > 0 && (
           <div
             className="gsplit"
             title="拖拽调整左栏宽度"
-            onPointerDown={(e) => startSplitDrag(e, 1, (dx) => setLeftW(leftWRef.current + dx))}
+            onPointerDown={(e) => {
+              const base = leftWRef.current
+              startSplitDrag(e, 'x', (d) => setLeftW(base + d))
+            }}
           />
         )}
         <div
@@ -664,44 +906,20 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
             </div>
           )}
         </div>
-        {panels.inspector && <div
-          className="gsplit"
-          title="拖拽调整属性列宽度"
-          onPointerDown={(e) => startSplitDrag(e, -1, (dx) => setInspW(inspWRef.current - dx))}
-        />}
-        {panels.inspector && (
-          <div className="graph-right-col" style={{ width: inspW }}>
-            <DockPanel icon="⚙" title="属性" onClose={() => togglePanel('inspector')}>
-              <NodeInspector
-                node={selected}
-                doc={doc}
-                issues={selectedIssues}
-                onPatch={(patch) => selectedId && apply((prog) => updateNode(prog, selectedId, patch))}
-                onRemove={() => {
-                  if (selectedId) apply((prog) => removeNode(prog, selectedId))
-                  setSelectedId(null)
+        {(['rightA', 'rightB'] as ColKey[]).map((col) =>
+          visibleIn(col).length === 0 ? null : (
+            <Fragment key={col}>
+              <div
+                className="gsplit"
+                title="拖拽调整该列宽度（向左拖变宽）"
+                onPointerDown={(e) => {
+                  const base = colWRefOf(col).current
+                  startSplitDrag(e, 'x', (d) => colSetW(col, base - d))
                 }}
               />
-            </DockPanel>
-          </div>
-        )}
-        {aiOpen && (
-          <div
-            className="gsplit"
-            title="拖拽调整 AI 面板宽度"
-            onPointerDown={(e) => startSplitDrag(e, -1, (dx) => setAiW(aiWRef.current - dx))}
-          />
-        )}
-        {aiOpen && (
-          <div className="graph-right-col graph-ai-col" style={{ width: aiW }}>
-            <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
-              <AiPanel
-                doc={doc}
-                selection={{ tab: 'graph', nodeId: selectedId }}
-                onClose={onToggleAi}
-              />
-            </Suspense>
-          </div>
+              {renderDockCol(col)}
+            </Fragment>
+          ),
         )}
       </div>
       {showLog && (
