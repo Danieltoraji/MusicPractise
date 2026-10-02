@@ -7,10 +7,12 @@
 
 import { lintGraphProgramDetailed, type GraphLintCtx } from '../engine/graphProgram'
 import type { LevelDoc } from '../engine/level'
+import type { Json } from '../engine/expr'
 import { loadLevelDoc } from '../library/validate'
 import { readRunLog } from '../runtime/runLog'
 import { generateScript } from '../engine/script'
 import { describeGNode } from './prompts'
+import { formatRunReport, runLevelHeadless, type RunEventStep } from './runHarness'
 
 export interface ToolContext {
   /** 读最新 doc（经 ref 转发，跨轮次看到其它工具/用户的修改） */
@@ -172,5 +174,41 @@ const readRunLogTool: AiTool = {
   },
 }
 
+/** 无头试运行（批次3）：不修改 doc，属诊断——全模式可用 */
+const runLevelTool: AiTool = {
+  name: 'run_level',
+  description:
+    '无头试运行当前关卡（不打开游玩页）：自动跑 level.started/question.loaded 等启动流程，' +
+    '可注入 events 模拟用户操作（如 {event:"button1.clicked"} 或 {event:"keys1.keyClicked",payload:{midi:60},waitMs:300}），' +
+    '返回视图/行轨迹、运行错误（带节点 id）、结算结果与变量终态。修改逻辑/数据后建议跑一次验证',
+  parameters: {
+    type: 'object',
+    properties: {
+      events: {
+        type: 'array',
+        description: '依次注入的组件事件剧本（可选）。每步 {event, payload?, waitMs?}；waitMs 默认 120ms',
+      },
+      timeoutMs: { type: 'number', description: '总超时毫秒（默认 5000，超时说明有卡死风险）' },
+    },
+  },
+  exec: async (args, ctx) => {
+    const events = Array.isArray(args.events)
+      ? (args.events as Record<string, unknown>[]).map((e) => ({
+          event: typeof e.event === 'string' ? e.event : '',
+          payload: (e.payload ?? {}) as Json,
+          waitMs: typeof e.waitMs === 'number' ? e.waitMs : undefined,
+        }))
+      : []
+    for (const step of events) {
+      if (!step.event) return '修改失败（未应用）：events 中存在缺少 event 字段的步骤'
+    }
+    const report = await runLevelHeadless(ctx.getDoc(), {
+      events: events as RunEventStep[],
+      timeoutMs: typeof args.timeoutMs === 'number' ? args.timeoutMs : undefined,
+    })
+    return formatRunReport(report, { events: events as RunEventStep[] })
+  },
+}
+
 /** 只读工具集：ask 模式（以及后续 plan 模式）可用 */
-export const READONLY_TOOLS: AiTool[] = [readScriptTool, readDocTool, readJsonTool, lintTool, readRunLogTool]
+export const READONLY_TOOLS: AiTool[] = [readScriptTool, readDocTool, readJsonTool, lintTool, readRunLogTool, runLevelTool]

@@ -77,6 +77,7 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'a
         '（write_script / edit_table / edit_components / edit_meta / edit_views / edit_flow / set_variable），每次修改都会先过校验再应用。',
       '修改守则：保持最小必要修改；先 read_script / read_doc 了解现状再动手；数据表行的 key 必须与现有列完全一致；' +
         '逻辑修改用 write_script 全文交付（不是增量补丁）；新增组件后用返回的新 id 在逻辑中引用；每次写入后以返回的校验结果为准，被拒绝就修正重试。',
+      '验证守则：修改后用 run_level 无头试运行验证（events 注入用户操作，如点按钮/按键），依据运行错误与变量终态继续修正，直到结算符合预期。',
       '',
     )
   } else if (mode === 'plan') {

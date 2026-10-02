@@ -10,6 +10,7 @@
 import type { LevelDoc, TableRow, ViewDef } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { GraphEngine } from '../engine/graphEngine'
+import type { GraphBudgets } from '../engine/graphEngine'
 import { isGraphProgram, lintGraphProgram, QUESTION_LOADED_EVENT, ROW_POINTER_VAR, type GraphProgram } from '../engine/graphProgram'
 import { migrateLogicV1toV2 } from '../engine/migrate'
 import { ComponentStore } from './store'
@@ -32,6 +33,8 @@ export interface SessionHost {
   getNowSeconds?(): number
   /** 可选：逻辑运行事件（错误/命令轨迹），供「运行日志」面板收集 */
   onLogicEvent?(e: LogicRunEvent): void
+  /** 可选：引擎预算覆写（AI 无头试运行收紧看门狗用；缺省用引擎默认值） */
+  budgets?: GraphBudgets
 }
 
 export class LevelSession {
@@ -70,6 +73,7 @@ export class LevelSession {
 
     this.baseProgram = isGraphProgram(content.logic) ? content.logic : migrateLogicV1toV2(content.logic)
     this.engine = new GraphEngine(this.baseProgram, {
+      budgets: host.budgets,
       getQuestion: () => this.row as unknown as Json,
       dispatchCommand: (path, args, context) => this.handleCommand(path, args, context),
       // 行指针赋值 = 跳转题目行（docs/25）：clamp 到有效行区间，重复行 no-op 防事件环
