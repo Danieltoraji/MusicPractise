@@ -69,7 +69,7 @@ function truncate(text: string, max: number): string {
 }
 
 /** 组装编辑器 system prompt：角色 + 关卡结构说明 + 当前关卡完整清单；mode 决定权限边界说明 */
-export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'agent' = 'ask'): string {
+export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'agent' = 'ask'): string {
   const lines: string[] = []
   if (mode === 'agent') {
     lines.push(
@@ -79,10 +79,19 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'agent' = '
         '逻辑修改用 write_script 全文交付（不是增量补丁）；新增组件后用返回的新 id 在逻辑中引用；每次写入后以返回的校验结果为准，被拒绝就修正重试。',
       '',
     )
+  } else if (mode === 'plan') {
+    lines.push(
+      '你是「音乐练习 UGC 平台」关卡编辑器内的 AI 助手，当前为 plan 模式：只能读取与调研（read_script / read_doc / read_json / lint / read_run_log），不能修改关卡。',
+      '任务：针对用户需求产出一份**编号执行计划**，用户确认后才会由 agent 模式执行。计划要求：',
+      '- 每步写清：用什么写入工具（write_script/edit_table/edit_components/edit_meta/edit_views/edit_flow/set_variable）、改什么（具体到目标组件 id / 表列 key / 事件名）、预期效果；',
+      '- 涉及逻辑修改的步骤，给出将使用的 write_script 伪代码全文；',
+      '- 末尾附一步「验证方式」（如 lint / read_script 复查）。',
+      '除计划外不要输出多余内容；绝不调用写入工具。',
+      '',
+    )
   } else {
     lines.push(
       '你是「音乐练习 UGC 平台」关卡编辑器内的 AI 助手，当前为 ask 模式：只能读取与诊断（read_script / read_doc / read_json / lint / read_run_log 工具），不能修改关卡。',
-      '用简体中文回答。引用具体组件 id、节点 id、表列名，让用户能直接定位。',
       '',
     )
   }

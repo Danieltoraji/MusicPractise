@@ -6,7 +6,7 @@
  * 只读工具（read_script/read_doc/read_json/lint/read_run_log），
  * 选中上下文由挂载方传入（graph：节点 id；script：选区；canvas：组件 id）。
  */
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { runAgentTurn, stopAgent } from '../../ai/agent'
 import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
 import type { AiProfileConfig, ChatMessage } from '../../ai/client'
@@ -44,6 +44,7 @@ function activeProfile(): AiProfileConfig | null {
 
 const MODE_META: Record<AiMode, { label: string; tip: string }> = {
   ask: { label: 'ask', tip: '只读问答：AI 可读取脚本/文档/校验/日志，不会修改关卡' },
+  plan: { label: 'plan', tip: '规划模式：AI 调研后产出编号执行计划，确认后一键转 agent 执行' },
   agent: { label: 'agent', tip: '代理修改：AI 可直接修改关卡（发送时自动存检查点，可一键回滚）' },
 }
 
@@ -68,9 +69,15 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
   const send = async (): Promise<void> => {
     const text = input.trim()
     if (!text || session.busy) return
+    await sendText(text)
+  }
+
+  /** 实际发送（send 的内 guts；执行计划/开场自动发送复用）。mode 直读 store 真源（executePlan 先切模式再发送，快照会滞后） */
+  const sendText = async (text: string): Promise<void> => {
+    if (!text || session.busy) return
     const prof = profile ?? activeProfile()
     if (!prof) return
-    const mode = session.mode
+    const mode = getSession(doc.id).mode
     setInput('')
     // agent 模式：发送即存检查点（回滚 = 回到本轮 AI 动手前）
     if (mode === 'agent') {
@@ -88,6 +95,24 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       ctx: { getDoc: () => docRef.current, applyDoc: (next) => applyRef.current(next), levelId: doc.id },
       maxTurns: mode === 'agent' ? 8 : 6,
     })
+  }
+
+  /** plan 模式确认流：把最近一条 assistant 回复（执行计划）转交 agent 执行 */
+  const lastPlan = useMemo(() => {
+    if (session.mode !== 'plan' || session.busy) return null
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      const m = session.messages[i]
+      if (m.role === 'user') return null
+      if (m.role === 'assistant' && m.content.trim() !== '') return m.content
+    }
+    return null
+  }, [session.mode, session.busy, session.messages])
+
+  const executePlan = async (): Promise<void> => {
+    if (!lastPlan || session.busy) return
+    const at = saveCheckpoint(doc.id, docRef.current)
+    patchSession(doc.id, { mode: 'agent', checkpointAt: at })
+    await sendText(`请严格按以下计划执行修改（不要重新规划，逐项落实后汇报结果）：\n\n${lastPlan}`)
   }
 
   const rollback = (): void => {
@@ -179,6 +204,15 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         {session.messages.map((m, i) => renderMsg(m, i))}
         {session.busy && <p className="muted ai-msg ai-busy">思考中…</p>}
       </div>
+
+      {lastPlan && (
+        <div className="ai-plan-bar">
+          <span>上方回复包含执行计划</span>
+          <button type="button" className="ai-plan-run" onClick={() => void executePlan()}>
+            ▶ 执行计划
+          </button>
+        </div>
+      )}
 
       {session.error && (
         <div className="ai-panel-error">

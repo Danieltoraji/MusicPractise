@@ -264,3 +264,73 @@ describe('AiPanel agent 模式（批次2a）', () => {
     expect(c.textContent).toContain('已回滚')
   })
 })
+
+describe('AiPanel plan 模式（批次2b）', () => {
+  function setKey(): void {
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
+    const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
+    stored.profiles.deepseek.apiKey = 'sk-t'
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
+  }
+
+  const PLAN_TEXT = '1. write_script：把 on level.started 的初始分改为 100\n2. 验证方式：lint 复查'
+
+  it('plan 全流程：请求无写工具 → 计划回复出现「▶ 执行计划」→ 点击转 agent 执行写入', async () => {
+    setKey()
+    clearSession(DOC.id)
+    const applyDoc = vi.fn()
+    let call = 0
+    const fetchMock = vi.fn(async () => {
+      let payload: unknown
+      if (call === 0) payload = { choices: [{ message: { content: PLAN_TEXT } }] }
+      else if (call === 1) {
+        payload = {
+          choices: [
+            {
+              message: {
+                content: '',
+                tool_calls: [
+                  { id: 'p1', type: 'function', function: { name: 'write_script', arguments: JSON.stringify({ script: 'on level.started {\n  v.score = 100\n}' }) } },
+                ],
+              },
+            },
+          ],
+        }
+      } else payload = { choices: [{ message: { content: '计划已执行完毕。' } }] }
+      call += 1
+      return bodyResponse(payload)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
+    // 切 plan 模式并发送需求
+    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'plan') as HTMLElement).click())
+    await type((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement), '把初始分改成 100')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.textContent!.includes('执行计划') || c.querySelector('.ai-plan-bar') !== null)
+
+    // plan 请求体不含写工具
+    const body1 = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
+    const names1 = (body1.tools as { function: { name: string } }[]).map((t) => t.function.name)
+    expect(names1).not.toContain('write_script')
+    // 计划确认条出现
+    expect(c.querySelector('.ai-plan-bar')).toBeTruthy()
+
+    // 点击「▶ 执行计划」→ 转 agent、带计划文本与写工具执行
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '▶ 执行计划')!.click()
+    })
+    await flushUntil(() => c.textContent!.includes('计划已执行完毕'))
+
+    expect(getSession(DOC.id).mode).toBe('agent')
+    const body2 = JSON.parse(((fetchMock.mock.calls[1] as unknown[])[1] as { body: string }).body)
+    const lastUser = [...body2.messages].reverse().find((m: { role: string }) => m.role === 'user')
+    expect(lastUser.content).toContain(PLAN_TEXT)
+    const names2 = (body2.tools as { function: { name: string } }[]).map((t) => t.function.name)
+    expect(names2).toContain('write_script')
+    // 写入落地 + agent 检查点已存
+    expect(applyDoc).toHaveBeenCalledTimes(1)
+    expect(getSession(DOC.id).checkpointAt).not.toBeNull()
+  })
+})

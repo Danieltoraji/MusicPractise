@@ -9,7 +9,7 @@ import type { ChatMessage } from './client'
 
 export type { ChatMessage } from './client'
 
-export type AiMode = 'ask' | 'agent'
+export type AiMode = 'ask' | 'plan' | 'agent'
 
 export interface AiSession {
   /** 完整多轮消息（user/assistant/tool），不含 system——system 每次请求现组装 */

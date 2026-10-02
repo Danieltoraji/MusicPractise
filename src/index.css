@@ -3567,3 +3567,88 @@ a.lib-title:hover {
 .ge-dark .graph-dock-col.drop-target {
   outline-color: var(--ge-accent);
 }
+
+/* AI 模式分段切换 + 检查点回滚（批次2a） */
+.ai-mode-tabs {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  flex: none;
+}
+.ai-mode-tab {
+  border: none;
+  background: none;
+  font-size: 11px;
+  padding: 1px 9px;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.ai-mode-tab.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.ai-mode-tab:disabled:not(.active) {
+  cursor: default;
+  opacity: 0.55;
+}
+.ai-panel-rollback {
+  flex: none;
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  background: #fffbeb;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.ai-panel-rollback:hover:not(:disabled) {
+  background: #fef3c7;
+}
+.ge-dark .ai-mode-tabs {
+  border-color: var(--ge-line);
+}
+.ge-dark .ai-mode-tab {
+  color: var(--ge-muted);
+}
+.ge-dark .ai-mode-tab.active {
+  background: var(--ge-accent);
+  color: #0b1622;
+  font-weight: 600;
+}
+.ge-dark .ai-panel-rollback {
+  border-color: rgba(217, 119, 6, 0.6);
+  color: var(--warn);
+  background: rgba(217, 119, 6, 0.08);
+}
+
+/* plan 模式执行计划确认条（批次2b） */
+.ai-plan-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--accent);
+  background: #eef2ff;
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+.ai-plan-bar span {
+  flex: 1;
+}
+.ai-plan-run {
+  flex: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 7px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ge-dark .ai-plan-bar {
+  border-color: var(--ge-accent);
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--ge-ink);
+}
