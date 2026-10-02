@@ -8,17 +8,21 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { runAgentTurn, stopAgent } from '../../ai/agent'
+import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
 import type { AiProfileConfig, ChatMessage } from '../../ai/client'
 import { buildEditorSystemPrompt, formatSelectionContext, type AiSelectionContext } from '../../ai/prompts'
-import { clearSession, getSession, patchSession, subscribeAiSession } from '../../ai/session'
+import { appendMessage, clearSession, getSession, patchSession, subscribeAiSession, type AiMode } from '../../ai/session'
 import { loadAiSettings } from '../../ai/settings'
 import { READONLY_TOOLS } from '../../ai/tools'
+import { WRITE_TOOLS } from '../../ai/tools-write'
 import type { LevelDoc } from '../../engine/level'
 
 interface Props {
   doc: LevelDoc
   selection: AiSelectionContext
   onClose: () => void
+  /** 应用 AI 修改后的 doc（编辑器唯一写路径 update——全视图自动刷新+标脏）；agent 模式必经 */
+  onApplyDoc: (doc: LevelDoc) => void
   /** 节点图入坞形态：列内定高（列内非末位面板） */
   style?: React.CSSProperties
   /** 追加到根（drag-src 拖拽源半透明等） */
@@ -38,11 +42,18 @@ function activeProfile(): AiProfileConfig | null {
   return { baseUrl: p.baseUrl, model: p.model, apiKey: p.apiKey }
 }
 
-export function AiPanel({ doc, selection, onClose, style, className, headerDrag }: Props) {
+const MODE_META: Record<AiMode, { label: string; tip: string }> = {
+  ask: { label: 'ask', tip: '只读问答：AI 可读取脚本/文档/校验/日志，不会修改关卡' },
+  agent: { label: 'agent', tip: '代理修改：AI 可直接修改关卡（发送时自动存检查点，可一键回滚）' },
+}
+
+export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className, headerDrag }: Props) {
   const session = useSyncExternalStore(subscribeAiSession, () => getSession(doc.id))
   // 工具 ctx 走 ref：agent 循环跨 await 期间始终读到最新 doc（保存副本换 id 会重挂面板，无碍）
   const docRef = useRef(doc)
   docRef.current = doc
+  const applyRef = useRef(onApplyDoc)
+  applyRef.current = onApplyDoc
   const [input, setInput] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -59,17 +70,36 @@ export function AiPanel({ doc, selection, onClose, style, className, headerDrag 
     if (!text || session.busy) return
     const prof = profile ?? activeProfile()
     if (!prof) return
+    const mode = session.mode
     setInput('')
+    // agent 模式：发送即存检查点（回滚 = 回到本轮 AI 动手前）
+    if (mode === 'agent') {
+      const at = saveCheckpoint(doc.id, docRef.current)
+      patchSession(doc.id, { checkpointAt: at })
+    }
     const ctxText = formatSelectionContext(selection, docRef.current)
     const userText = ctxText ? `[上下文] ${ctxText}\n\n${text}` : text
     await runAgentTurn({
       docId: doc.id,
       profile: prof,
-      systemPrompt: buildEditorSystemPrompt(docRef.current),
+      systemPrompt: buildEditorSystemPrompt(docRef.current, mode),
       userText,
-      tools: READONLY_TOOLS,
-      ctx: { getDoc: () => docRef.current, levelId: doc.id },
+      tools: mode === 'agent' ? [...READONLY_TOOLS, ...WRITE_TOOLS] : READONLY_TOOLS,
+      ctx: { getDoc: () => docRef.current, applyDoc: (next) => applyRef.current(next), levelId: doc.id },
+      maxTurns: mode === 'agent' ? 8 : 6,
     })
+  }
+
+  const rollback = (): void => {
+    const cp = getCheckpoint(doc.id)
+    if (!cp || session.busy) return
+    applyRef.current(cp.doc)
+    appendMessage(doc.id, {
+      role: 'assistant',
+      content: `↩ 已回滚到 AI 修改前的版本（检查点 ${new Date(cp.at).toLocaleTimeString()}）。`,
+    })
+    clearCheckpoint(doc.id)
+    patchSession(doc.id, { checkpointAt: null })
   }
 
   const empty = session.messages.length === 0
@@ -85,9 +115,31 @@ export function AiPanel({ doc, selection, onClose, style, className, headerDrag 
         onDragOver={(e) => headerDrag?.onDragOver(e)}
       >
         <b>AI 助手</b>
-        <span className="ai-mode-chip" title="只读问答：AI 可读取脚本/文档/校验/日志，不会修改关卡">
-          ask
+        <span className="ai-mode-tabs" role="tablist">
+          {(Object.keys(MODE_META) as AiMode[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`ai-mode-tab${session.mode === m ? ' active' : ''}`}
+              title={MODE_META[m].tip}
+              disabled={session.busy || session.mode === m}
+              onClick={() => patchSession(doc.id, { mode: m, checkpointAt: m === 'ask' ? null : session.checkpointAt })}
+            >
+              {MODE_META[m].label}
+            </button>
+          ))}
         </span>
+        {session.checkpointAt !== null && (
+          <button
+            type="button"
+            className="ai-panel-rollback"
+            title="撤销本轮 AI 的全部修改：恢复到 agent 模式发送前的版本"
+            onClick={rollback}
+            disabled={session.busy}
+          >
+            ↩ 回滚
+          </button>
+        )}
         <button
           type="button"
           className="ai-panel-clear"
@@ -110,9 +162,17 @@ export function AiPanel({ doc, selection, onClose, style, className, headerDrag 
               <li>这个关卡的逻辑是怎么走的？</li>
               <li>帮我检查有没有悬空引用或类型问题</li>
               <li>试运行报错了，帮我看看日志（先点「▶ 试运行」）</li>
+              {session.mode === 'agent' && (
+                <>
+                  <li>把过关条件改成 v.score &gt;= 60</li>
+                  <li>再加 3 道选择题（数据表加行 + 逻辑改判定）</li>
+                </>
+              )}
             </ul>
             <p className="muted">
-              AI 可读取脚本、文档、校验结果与运行日志。先在画布/节点图/脚本页选中一个元素再提问，会自动附带上下文。
+              {session.mode === 'agent'
+                ? 'agent 模式：AI 会直接修改关卡（每次写入都过校验；发送时已存检查点，可随时「↩ 回滚」）。'
+                : 'AI 可读取脚本、文档、校验结果与运行日志。先在画布/节点图/脚本页选中一个元素再提问，会自动附带上下文。'}
             </p>
           </div>
         )}
@@ -137,7 +197,13 @@ export function AiPanel({ doc, selection, onClose, style, className, headerDrag 
       <div className="ai-panel-form">
         <textarea
           rows={2}
-          placeholder={profile ? '询问当前关卡…（Enter 发送，Shift+Enter 换行）' : '请先在设置中配置 AI 供应商'}
+          placeholder={
+            profile
+              ? session.mode === 'agent'
+                ? '让 AI 修改关卡…（Enter 发送；发送时自动存检查点）'
+                : '询问当前关卡…（Enter 发送，Shift+Enter 换行）'
+              : '请先在设置中配置 AI 供应商'
+          }
           value={input}
           disabled={!profile}
           onChange={(e) => setInput(e.target.value)}

@@ -291,6 +291,7 @@ export function EditorPage({ id }: Props) {
                 componentId: tab === 'canvas' ? selected : null,
                 scriptRange: tab === 'script' ? scriptRange : null,
               }}
+              onApplyDoc={update}
               onClose={() => setAiOpen(false)}
             />
           </Suspense>

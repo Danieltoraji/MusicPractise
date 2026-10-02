@@ -215,6 +215,13 @@ export function setTable(doc: LevelDoc, table: DataTable): LevelDoc {
   return next
 }
 
+/** 推进配置（AI 写入工具批次2a；patch 中显式给出的键才覆盖） */
+export function setFlow(doc: LevelDoc, patch: Partial<NonNullable<LevelDoc['content']['flow']>>): LevelDoc {
+  const next = structuredClone(doc)
+  next.content.flow = { ...(next.content.flow ?? {}), ...patch }
+  return next
+}
+
 export function setMeta(doc: LevelDoc, patch: Partial<LevelDoc['meta']>): LevelDoc {
   const next = structuredClone(doc)
   Object.assign(next.meta, patch)

@@ -35,7 +35,7 @@ function makeDoc(): LevelDoc {
   return doc
 }
 
-const ctxFor = (doc: LevelDoc): ToolContext => ({ getDoc: () => doc, levelId: doc.id })
+const ctxFor = (doc: LevelDoc): ToolContext => ({ getDoc: () => doc, applyDoc: () => {}, levelId: doc.id })
 
 function tool(name: string) {
   const t = READONLY_TOOLS.find((x) => x.name === name)

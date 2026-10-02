@@ -674,6 +674,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
               doc={doc}
               selection={{ tab: 'graph', nodeId: selectedId }}
               onClose={onToggleAi}
+              onApplyDoc={onChange}
               style={style}
               className={srcClass}
               headerDrag={{

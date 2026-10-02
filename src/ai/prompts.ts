@@ -68,12 +68,26 @@ function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}\n…（已截断，可用 read_json 看更多）` : text
 }
 
-/** 组装编辑器 system prompt：角色 + 关卡结构说明 + 当前关卡完整清单 */
-export function buildEditorSystemPrompt(doc: LevelDoc): string {
+/** 组装编辑器 system prompt：角色 + 关卡结构说明 + 当前关卡完整清单；mode 决定权限边界说明 */
+export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'agent' = 'ask'): string {
   const lines: string[] = []
+  if (mode === 'agent') {
+    lines.push(
+      '你是「音乐练习 UGC 平台」关卡编辑器内的 AI 助手，当前为 agent 模式：可以通过写入工具直接修改关卡' +
+        '（write_script / edit_table / edit_components / edit_meta / edit_views / edit_flow / set_variable），每次修改都会先过校验再应用。',
+      '修改守则：保持最小必要修改；先 read_script / read_doc 了解现状再动手；数据表行的 key 必须与现有列完全一致；' +
+        '逻辑修改用 write_script 全文交付（不是增量补丁）；新增组件后用返回的新 id 在逻辑中引用；每次写入后以返回的校验结果为准，被拒绝就修正重试。',
+      '',
+    )
+  } else {
+    lines.push(
+      '你是「音乐练习 UGC 平台」关卡编辑器内的 AI 助手，当前为 ask 模式：只能读取与诊断（read_script / read_doc / read_json / lint / read_run_log 工具），不能修改关卡。',
+      '用简体中文回答。引用具体组件 id、节点 id、表列名，让用户能直接定位。',
+      '',
+    )
+  }
   lines.push(
-    '你是「音乐练习 UGC 平台」关卡编辑器内的 AI 助手，当前为 ask 模式：只能读取与诊断（read_script / read_doc / read_json / lint / read_run_log 工具），不能修改关卡。',
-    '用简体中文回答。引用具体组件 id、节点 id、表列名，让用户能直接定位。',
+    '用简体中文回答；引用具体组件 id、节点 id、表列名，让用户能直接定位。',
     '',
     '## 关卡结构（LevelDoc v3）',
     '- content.views：互斥视图；content.components：组件实例（id/type/view/layout/props）；content.logic：GraphProgram v2 事件驱动节点图（on 事件处理器 → call/assign/branch/loop/wait/emit 节点）；content.table：题目数据表（q.* 指向当前行，行指针 v.__row）；content.flow：推进与过关条件（pass.expr）。',

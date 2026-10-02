@@ -2,9 +2,11 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearCheckpoint } from '../../ai/checkpoint'
 import { AI_SETTINGS_KEY, defaultAiSettings } from '../../ai/settings'
 import { clearSession, getSession } from '../../ai/session'
 import { blankLevelDoc } from '../docState'
+import type { LevelDoc } from '../../engine/level'
 import { AiPanel } from './AiPanel'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -35,6 +37,15 @@ async function flushUntil(predicate: () => boolean, timeoutMs = 2000): Promise<v
   }
 }
 
+/** 受控 textarea 输入（React 原生 value setter + input 事件） */
+async function type(el: HTMLTextAreaElement, value: string): Promise<void> {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+    setter.call(el, value)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
 const DOC = blankLevelDoc()
 const noop = (): void => {}
 
@@ -55,7 +66,7 @@ afterEach(() => {
 
 describe('AiPanel（jsdom）', () => {
   it('未配置 Key：显示去设置引导，发送被禁用', () => {
-    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onClose={noop} />)
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
     expect(c.textContent).toContain('前往设置')
     const send = [...c.querySelectorAll('button')].find((b) => b.textContent === '发送') as HTMLButtonElement
     expect(send.disabled).toBe(true)
@@ -80,7 +91,7 @@ describe('AiPanel（jsdom）', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const c = renderEl(
-      <AiPanel doc={DOC} selection={{ tab: 'graph', nodeId: null, componentId: null, scriptRange: null }} onClose={noop} />,
+      <AiPanel doc={DOC} selection={{ tab: 'graph', nodeId: null, componentId: null, scriptRange: null }} onApplyDoc={vi.fn()} onClose={noop} />,
     )
     const input = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
     await act(async () => {
@@ -113,7 +124,7 @@ describe('AiPanel（jsdom）', () => {
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
     vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: 'hi' } }] })))
 
-    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onClose={noop} />)
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
     const input = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
@@ -138,7 +149,7 @@ describe('AiPanel（jsdom）', () => {
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
     vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ error: { message: 'bad key' } }, 401)))
 
-    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onClose={noop} />)
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
     const input = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
@@ -152,5 +163,104 @@ describe('AiPanel（jsdom）', () => {
     expect(c.querySelector('.ai-panel-error')?.textContent).toContain('鉴权失败')
     await act(async () => (c.querySelector('.ai-panel-error-close') as HTMLElement).click())
     expect(c.querySelector('.ai-panel-error')).toBeNull()
+  })
+})
+
+describe('AiPanel agent 模式（批次2a）', () => {
+  beforeEach(() => {
+    clearCheckpoint('res_agent_ui')
+  })
+
+  function setKey(): void {
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
+    const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
+    stored.profiles.deepseek.apiKey = 'sk-t'
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
+  }
+
+  it('模式切换：agent 分段按钮切换会话模式并持久（按 doc.id）', () => {
+    setKey()
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    const agentTab = [...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'agent') as HTMLButtonElement
+    act(() => agentTab.click())
+    expect(getSession(DOC.id).mode).toBe('agent')
+    expect(agentTab.classList.contains('active')).toBe(true)
+    // 切回 ask
+    const askTab = [...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'ask') as HTMLButtonElement
+    act(() => askTab.click())
+    expect(getSession(DOC.id).mode).toBe('ask')
+  })
+
+  it('ask 模式：请求体只带只读工具（不含 write_script）', async () => {
+    setKey()
+    const fetchMock = vi.fn(async () => bodyResponse({ choices: [{ message: { content: '好的' } }] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await type((c.querySelector(".ai-panel-form textarea") as HTMLTextAreaElement), '这个关卡是干嘛的')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.textContent!.includes('好的'))
+    const body = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
+    const names = (body.tools as { function: { name: string } }[]).map((t) => t.function.name)
+    expect(names).not.toContain('write_script')
+    expect(names).toContain('read_script')
+  })
+
+  it('agent 模式：write_script 调用落地 onApplyDoc；发送存检查点；回滚恢复原 doc', async () => {
+    setKey()
+    clearSession(DOC.id)
+    const applyDoc = vi.fn()
+    const original = blankLevelDoc() // 独立 doc（可变引用，检查点对照用）
+    let call = 0
+    const fetchMock = vi.fn(async () => {
+      const payload =
+        call === 0
+          ? {
+              choices: [
+                {
+                  message: {
+                    content: '',
+                    tool_calls: [
+                      { id: 'w1', type: 'function', function: { name: 'write_script', arguments: JSON.stringify({ script: 'on level.started {\n  v.score = 100\n}' }) } },
+                    ],
+                  },
+                },
+              ],
+            }
+          : { choices: [{ message: { content: '已把初始分改为 100。' } }] }
+      call += 1
+      return bodyResponse(payload)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const c = renderEl(<AiPanel doc={original} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
+    // 切 agent 模式
+    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'agent') as HTMLElement).click())
+    await type((c.querySelector(".ai-panel-form textarea") as HTMLTextAreaElement), '把初始分改成 100')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.textContent!.includes('已把初始分改为 100'))
+
+    // 写入落地：applyDoc 收到的 doc 含新逻辑节点
+    expect(applyDoc).toHaveBeenCalledTimes(1)
+    const applied = applyDoc.mock.calls[0][0] as LevelDoc
+    expect(applied.content.logic.nodes.some((n: { kind: string; target?: string }) => n.kind === 'assign' && (n as { target: string }).target === 'score')).toBe(true)
+    // 第二次请求带上了 tool 结果
+    const body2 = JSON.parse(((fetchMock.mock.calls[1] as unknown[])[1] as { body: string }).body)
+    expect(body2.messages.some((m: { role: string; tool_call_id?: string }) => m.role === 'tool' && m.tool_call_id === 'w1')).toBe(true)
+    // agent 请求体含 write_script 工具
+    const body1 = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
+    expect((body1.tools as { function: { name: string } }[]).some((t) => t.function.name === 'write_script')).toBe(true)
+
+    // 回滚按钮出现 → 点击恢复原 doc、按钮消失
+    expect(getSession(original.id).checkpointAt).not.toBeNull()
+    const rollback = [...c.querySelectorAll('button')].find((b) => b.textContent === '↩ 回滚') as HTMLButtonElement
+    expect(rollback).toBeTruthy()
+    await act(async () => rollback.click())
+    expect(applyDoc).toHaveBeenCalledTimes(2)
+    expect((applyDoc.mock.calls[1][0] as LevelDoc).meta.title).toBe(original.meta.title)
+    expect(getSession(original.id).checkpointAt).toBeNull()
+    expect(c.textContent).toContain('已回滚')
   })
 })

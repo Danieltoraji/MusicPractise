@@ -15,6 +15,8 @@ import { describeGNode } from './prompts'
 export interface ToolContext {
   /** 读最新 doc（经 ref 转发，跨轮次看到其它工具/用户的修改） */
   getDoc(): LevelDoc
+  /** 应用修改后的 doc（走编辑器唯一写路径 update → 全视图自动刷新+标脏）；写入工具专用 */
+  applyDoc(next: LevelDoc): void
   /** 运行日志按关卡 id 存取 */
   levelId: string
 }

@@ -33,7 +33,7 @@ const fakeTool: AiTool = {
   exec: () => '工具结果文本',
 }
 
-const ctx: ToolContext = { getDoc: () => ({}) as LevelDoc, levelId: 'res_agent' }
+const ctx: ToolContext = { getDoc: () => ({}) as LevelDoc, applyDoc: () => {}, levelId: 'res_agent' }
 
 beforeEach(() => {
   clearSession('res_agent')
