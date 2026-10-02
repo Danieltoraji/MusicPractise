@@ -88,3 +88,38 @@ describe('AI 调试工具组（批次5）', () => {
     expect(result).toContain('不支持截图')
   })
 })
+
+describe('update_plan（plan-act 进度工具）', () => {
+  it('标记进度/非法标记拒绝/全部完成自动置 done/无计划报错', async () => {
+    const { getSession, patchSession } = await import('./session')
+    const { PLAN_TOOLS } = await import('./tools-plan')
+    const up = PLAN_TOOLS.find((t) => t.name === 'update_plan')!
+    const doc = loaded()
+    const ctx = harness(doc)
+    // 无计划
+    const noPlan = (await up.exec({ marks: [{ index: 0, status: 'done' }] }, ctx)) as string
+    expect(noPlan).toContain('没有执行中的计划')
+
+    // 造 executing 计划
+    patchSession(doc.id, {
+      plan: {
+        raw: '',
+        status: 'executing',
+        items: [
+          { text: '甲', status: 'pending', enabled: true },
+          { text: '乙', status: 'pending', enabled: true },
+        ],
+      },
+    })
+    const bad = (await up.exec({ marks: [{ index: 0, status: 'weird' }] }, ctx)) as string
+    expect(bad).toContain('没有合法的标记')
+
+    const ok = (await up.exec({ marks: [{ index: 0, status: 'in_progress' }] }, ctx)) as string
+    expect(ok).toContain('1.→')
+    const done = (await up.exec({ marks: [{ index: 0, status: 'done' }, { index: 1, status: 'skipped' }] }, ctx)) as string
+    expect(done).toContain('计划全部完成')
+    expect(getSession(doc.id).plan!.status).toBe('done')
+    expect(getSession(doc.id).plan!.items[1].status).toBe('skipped')
+    stopDebugRun()
+  })
+})

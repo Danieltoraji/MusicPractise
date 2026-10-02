@@ -265,7 +265,7 @@ describe('AiPanel agent 模式（批次2a）', () => {
   })
 })
 
-describe('AiPanel plan 模式（批次2b）', () => {
+describe('AiPanel plan 模式 + plan-act 工作流（批次2b 完成）', () => {
   function setKey(): void {
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
     const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
@@ -273,9 +273,9 @@ describe('AiPanel plan 模式（批次2b）', () => {
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
   }
 
-  const PLAN_TEXT = '1. write_script：把 on level.started 的初始分改为 100\n2. 验证方式：lint 复查'
+  const PLAN_TEXT = '1. [write_script] 把 on level.started 的初始分改为 100\n2. [run_level] 验证：无头试运行'
 
-  it('plan 全流程：请求无写工具 → 计划回复出现「▶ 执行计划」→ 点击转 agent 执行写入', async () => {
+  it('plan 全流程：无写工具请求 → 计划卡清单 → 勾选排除 → 执行 → update_plan 进度 → 完成', async () => {
     setKey()
     clearSession(DOC.id)
     const applyDoc = vi.fn()
@@ -290,51 +290,63 @@ describe('AiPanel plan 模式（批次2b）', () => {
               message: {
                 content: '',
                 tool_calls: [
-                  { id: 'p1', type: 'function', function: { name: 'write_script', arguments: JSON.stringify({ script: 'on level.started {\n  v.score = 100\n}' }) } },
+                  { id: 'p1', type: 'function', function: { name: 'update_plan', arguments: JSON.stringify({ marks: [{ index: 0, status: 'done' }] }) } },
                 ],
               },
             },
           ],
         }
-      } else payload = { choices: [{ message: { content: '计划已执行完毕。' } }] }
+      } else payload = { choices: [{ message: { content: '计划执行完毕。' } }] }
       call += 1
       return bodyResponse(payload)
     })
     vi.stubGlobal('fetch', fetchMock)
+
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
-    // 切 plan 模式并发送需求
     act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'plan') as HTMLElement).click())
     await type((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement), '把初始分改成 100')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
-    await flushUntil(() => c.textContent!.includes('执行计划') || c.querySelector('.ai-plan-bar') !== null)
+    await flushUntil(() => c.querySelector('.ai-plan-card') !== null)
 
     // plan 请求体不含写工具
     const body1 = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
     const names1 = (body1.tools as { function: { name: string } }[]).map((t) => t.function.name)
     expect(names1).not.toContain('write_script')
-    // 计划确认条出现
-    expect(c.querySelector('.ai-plan-bar')).toBeTruthy()
 
-    // 点击「▶ 执行计划」→ 转 agent、带计划文本与写工具执行
+    // 计划卡：2 项清单 + 勾选框
+    expect(c.querySelectorAll('.ai-plan-item')).toHaveLength(2)
+    expect(c.textContent).toContain('[write_script] 把 on level.started 的初始分改为 100')
+
+    // 勾选排除第 2 项（index 1）
+    const boxes = [...c.querySelectorAll('.ai-plan-item input[type=checkbox]')] as HTMLInputElement[]
+    await act(async () => boxes[1].click())
+    expect(boxes[1].checked).toBe(false)
+
+    // 执行计划 → 转 agent、update_plan 可用、指令只含未排除项
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '▶ 执行计划')!.click()
     })
-    await flushUntil(() => c.textContent!.includes('计划已执行完毕'))
+    await flushUntil(() => c.textContent!.includes('计划执行完毕'))
 
     expect(getSession(DOC.id).mode).toBe('agent')
     const body2 = JSON.parse(((fetchMock.mock.calls[1] as unknown[])[1] as { body: string }).body)
     const lastUser = [...body2.messages].reverse().find((m: { role: string }) => m.role === 'user')
-    expect(lastUser.content).toContain(PLAN_TEXT)
+    expect(lastUser.content).toContain('write_script] 把 on level.started')
+    expect(lastUser.content).not.toContain('run_level] 验证')
     const names2 = (body2.tools as { function: { name: string } }[]).map((t) => t.function.name)
     expect(names2).toContain('write_script')
-    // 写入落地 + agent 检查点已存
-    expect(applyDoc).toHaveBeenCalledTimes(1)
-    expect(getSession(DOC.id).checkpointAt).not.toBeNull()
+    expect(names2).toContain('update_plan')
+
+    // update_plan 落地：第 1 项 done、第 2 项 skipped、计划完成
+    const plan = getSession(DOC.id).plan!
+    expect(plan.status).toBe('done')
+    expect(plan.items[0].status).toBe('done')
+    expect(plan.items[1].status).toBe('skipped')
+    expect(c.textContent).toContain('✅ 计划完成')
   })
 })
-
 describe('AiPanel 开场自动发送与预设（批次4）', () => {
   function setKey(): void {
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))

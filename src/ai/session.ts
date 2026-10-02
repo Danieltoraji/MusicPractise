@@ -6,8 +6,10 @@
  */
 
 import type { ChatMessage } from './client'
+import type { PlanState } from './plan'
 
 export type { ChatMessage } from './client'
+export type { PlanState, PlanItem, PlanItemStatus } from './plan'
 
 export type AiMode = 'ask' | 'plan' | 'agent'
 
@@ -18,10 +20,12 @@ export interface AiSession {
   busy: boolean
   /** 最近一次错误的可读文案；null = 无错误 */
   error: string | null
-  /** 助手模式（批次2a：ask=只读诊断 / agent=可写工具直接修改）；按关卡记忆 */
+  /** 助手模式（ask=只读诊断 / plan=产出计划 / agent=可写工具直接修改）；按关卡记忆 */
   mode: AiMode
   /** agent 模式检查点时间戳（ms）；非空 = 面板显示「↩ 回滚」 */
   checkpointAt: number | null
+  /** plan-act 工作流的计划（draft=待确认 / executing=逐项执行中 / done=完成）；null = 无计划 */
+  plan: PlanState | null
 }
 
 const sessions = new Map<string, AiSession>()
@@ -40,7 +44,7 @@ export function subscribeAiSession(fn: () => void): () => void {
 export function getSession(docId: string): AiSession {
   let s = sessions.get(docId)
   if (!s) {
-    s = { messages: [], busy: false, error: null, mode: 'ask', checkpointAt: null }
+    s = { messages: [], busy: false, error: null, mode: 'ask', checkpointAt: null, plan: null }
     sessions.set(docId, s)
   }
   return s
@@ -61,5 +65,5 @@ export function appendMessage(docId: string, msg: ChatMessage): void {
 }
 
 export function clearSession(docId: string): void {
-  setSession(docId, { messages: [], busy: false, error: null, mode: 'ask', checkpointAt: null })
+  setSession(docId, { messages: [], busy: false, error: null, mode: 'ask', checkpointAt: null, plan: null })
 }

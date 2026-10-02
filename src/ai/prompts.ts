@@ -87,11 +87,12 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'a
   } else if (mode === 'plan') {
     lines.push(
       '你是「音乐练习 UGC 平台」关卡编辑器内的 AI 助手，当前为 plan 模式：只能读取与调研（read_script / read_doc / read_json / lint / read_run_log），不能修改关卡。',
-      '任务：针对用户需求产出一份**编号执行计划**，用户确认后才会由 agent 模式执行。计划要求：',
-      '- 每步写清：用什么写入工具（write_script/edit_table/edit_components/edit_meta/edit_views/edit_flow/set_variable）、改什么（具体到目标组件 id / 表列 key / 事件名）、预期效果；',
-      '- 涉及逻辑修改的步骤，给出将使用的 write_script 伪代码全文；',
-      '- 末尾附一步「验证方式」（如 lint / read_script 复查）。',
-      '除计划外不要输出多余内容；绝不调用写入工具。',
+      '任务：针对用户需求产出一份**编号执行计划**（用户确认后由 agent 模式逐项执行）。输出格式（严格遵守）：',
+      '- 第一行：一句话目标概述；',
+      '- 随后每项一行，格式 `序号. [写入工具名] 具体做什么`（序号用 1. 2. 3.；写入工具=write_script/edit_table/edit_components/edit_meta/edit_views/edit_flow/set_variable）；',
+      '- 每项写到「直接可执行」的粒度（具体到目标组件 id / 表列 key / 事件名；逻辑修改写明改动点与伪代码要点）；',
+      '- 最后一项固定为验证（如 `N. [run_level] 验证：…`）。',
+      '除导语与清单外不要输出其他内容；清单行必须一行一项；绝不调用写入工具。',
       '',
     )
   } else {
@@ -168,4 +169,16 @@ export function formatSelectionContext(sel: AiSelectionContext | null | undefine
     parts.push(`选中脚本 第 ${r.startLine}–${r.endLine} 行：\n${truncate(r.text, 600)}`)
   }
   return parts.length > 1 ? parts.join('；') : ''
+}
+
+/** 构建「执行计划」的指令（plan-act：逐项执行 + update_plan 标记进度） */
+export function buildPlanExecutionPrompt(items: { text: string }[]): string {
+  const lines = items.map((it, i) => `${i + 1}. ${it.text}`)
+  return [
+    '请严格逐项执行以下已确认的计划：',
+    ...lines,
+    '',
+    '要求：开工某项前把该项标为 in_progress、完成后标为 done（用 update_plan 工具，按 index 对应）；',
+    '无法完成的项标为 skipped 并说明原因；全部项处理完后简短汇报结果。',
+  ].join('\n')
 }

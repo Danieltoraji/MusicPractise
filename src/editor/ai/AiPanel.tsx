@@ -11,10 +11,13 @@ import { toPng } from 'html-to-image'
 import { runAgentTurn, stopAgent } from '../../ai/agent'
 import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
 import type { AiProfileConfig, ChatMessage } from '../../ai/client'
-import { buildEditorSystemPrompt, formatSelectionContext, type AiSelectionContext } from '../../ai/prompts'
-import { appendMessage, clearSession, getSession, patchSession, subscribeAiSession, type AiMode } from '../../ai/session'
+import { buildEditorSystemPrompt, buildPlanExecutionPrompt, formatSelectionContext, type AiSelectionContext } from '../../ai/prompts'
+import { appendMessage, clearSession, getSession, patchSession, subscribeAiSession, type AiMode, type PlanItemStatus } from '../../ai/session'
+import { buildPlan } from '../../ai/plan'
+import type { PlanState } from '../../ai/plan'
 import { loadAiSettings } from '../../ai/settings'
 import { READONLY_TOOLS } from '../../ai/tools'
+import { PLAN_TOOLS } from '../../ai/tools-plan'
 import { DEBUG_TOOLS } from '../../ai/tools-debug'
 import { WRITE_TOOLS } from '../../ai/tools-write'
 import type { LevelDoc } from '../../engine/level'
@@ -115,7 +118,12 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       userText,
       tools:
         mode === 'agent'
-          ? [...READONLY_TOOLS, ...WRITE_TOOLS, ...DEBUG_TOOLS]
+          ? [
+              ...READONLY_TOOLS,
+              ...WRITE_TOOLS,
+              ...DEBUG_TOOLS,
+              ...(getSession(doc.id).plan?.status === 'executing' ? PLAN_TOOLS : []),
+            ]
           : READONLY_TOOLS,
       ctx: {
         getDoc: () => docRef.current,
@@ -142,8 +150,8 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     })
   }
 
-  /** plan 模式确认流：把最近一条 assistant 回复（执行计划）转交 agent 执行 */
-  const lastPlan = useMemo(() => {
+  /** plan 模式确认流：解析最近回复为计划清单（不可解析回退纯文本执行条） */
+  const lastAssistantText = useMemo(() => {
     if (session.mode !== 'plan' || session.busy) return null
     for (let i = session.messages.length - 1; i >= 0; i--) {
       const m = session.messages[i]
@@ -152,12 +160,32 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     }
     return null
   }, [session.mode, session.busy, session.messages])
+  const draftPlan = useMemo(() => (lastAssistantText === null ? null : buildPlan(lastAssistantText)), [lastAssistantText])
+  const [excluded, setExcluded] = useState<ReadonlySet<number>>(new Set())
+  useEffect(() => {
+    setExcluded(new Set()) // 新计划生成时重置勾选
+  }, [lastAssistantText])
 
   const executePlan = async (): Promise<void> => {
-    if (!lastPlan || session.busy) return
+    if (session.busy) return
+    // 结构化计划：按勾选组装（排除项标 skipped 不下发）；回退：纯文本计划
+    if (draftPlan) {
+      const items = draftPlan.items.map((it, i) => (excluded.has(i) ? { ...it, status: 'skipped' as const } : it))
+      const enabled = items.filter((it) => it.status !== 'skipped')
+      if (enabled.length === 0) return
+      const at = saveCheckpoint(doc.id, docRef.current)
+      patchSession(doc.id, { checkpointAt: at, mode: 'agent', plan: { ...draftPlan, items, status: 'executing' } })
+      await sendText(buildPlanExecutionPrompt(enabled))
+      return
+    }
+    if (!lastAssistantText || session.busy) return
     const at = saveCheckpoint(doc.id, docRef.current)
-    patchSession(doc.id, { mode: 'agent', checkpointAt: at })
-    await sendText(`请严格按以下计划执行修改（不要重新规划，逐项落实后汇报结果）：\n\n${lastPlan}`)
+    patchSession(doc.id, { checkpointAt: at, mode: 'agent' })
+    await sendText(`请严格按以下计划执行修改（不要重新规划，逐项落实后汇报结果）：\n\n${lastAssistantText}`)
+  }
+
+  const abandonPlan = (): void => {
+    patchSession(doc.id, { plan: null, mode: 'ask' })
   }
 
   const rollback = (): void => {
@@ -261,7 +289,55 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         {session.busy && <p className="muted ai-msg ai-busy">思考中…</p>}
       </div>
 
-      {lastPlan && (
+      {session.plan && session.plan.status !== 'draft' && (
+        <PlanCard
+          plan={session.plan}
+          onAbandon={session.plan.status === 'executing' && !session.busy ? abandonPlan : undefined}
+        />
+      )}
+      {!session.plan && draftPlan && (
+        <div className="ai-plan-card">
+          <div className="ai-plan-head">
+            <span>执行计划（{draftPlan.items.length} 项）——勾选要执行的项</span>
+            <button
+              type="button"
+              className="ai-plan-run"
+              disabled={excluded.size === draftPlan.items.length}
+              onClick={() => void executePlan()}
+            >
+              ▶ 执行计划
+            </button>
+            <button
+              type="button"
+              className="ai-plan-abandon"
+              title="放弃这份计划"
+              onClick={() => setExcluded(new Set(draftPlan.items.map((_, i) => i)))}
+            >
+              放弃
+            </button>
+          </div>
+          <div className="ai-plan-items">
+            {draftPlan.items.map((it, i) => (
+              <label key={i} className="ai-plan-item">
+                <input
+                  type="checkbox"
+                  checked={!excluded.has(i)}
+                  onChange={(e) =>
+                    setExcluded((prev) => {
+                      const next = new Set(prev)
+                      if (e.target.checked) next.delete(i)
+                      else next.add(i)
+                      return next
+                    })
+                  }
+                />
+                <span>{it.text}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      {!session.plan && !draftPlan && lastAssistantText && session.mode === 'plan' && !session.busy && (
         <div className="ai-plan-bar">
           <span>上方回复包含执行计划</span>
           <button type="button" className="ai-plan-run" onClick={() => void executePlan()}>
@@ -315,6 +391,35 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         )}
       </div>
     </aside>
+  )
+}
+
+/** 计划卡（executing/done）：逐项状态实时显示（update_plan 工具驱动） */
+function PlanCard({ plan, onAbandon }: { plan: PlanState; onAbandon?: () => void }) {
+  const done = plan.items.filter((it) => it.status === 'done' || it.status === 'skipped').length
+  const icon = (s: PlanItemStatus): string =>
+    s === 'done' ? '✓' : s === 'in_progress' ? '→' : s === 'skipped' ? '—' : '○'
+  return (
+    <div className="ai-plan-card">
+      <div className="ai-plan-head">
+        <span>
+          {plan.status === 'done' ? '✅ 计划完成' : `⚙ 执行计划中（${done}/${plan.items.length}）`}
+        </span>
+        {onAbandon && (
+          <button type="button" className="ai-plan-abandon" title="放弃计划（已执行的修改用「↩ 回滚」撤销）" onClick={onAbandon}>
+            放弃
+          </button>
+        )}
+      </div>
+      <div className="ai-plan-items">
+        {plan.items.map((it, i) => (
+          <div key={i} className={`ai-plan-item st-${it.status}`}>
+            <span className="ai-plan-icon">{icon(it.status)}</span>
+            <span className={it.status === 'skipped' ? 'muted' : ''}>{it.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
