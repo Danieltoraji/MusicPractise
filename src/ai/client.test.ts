@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AiClientError, chatComplete, testConnection, type AiProfileConfig } from './client'
+import { AiClientError, chatComplete, chatCompleteRaw, testConnection, type AiProfileConfig } from './client'
 
 const profile: AiProfileConfig = {
   baseUrl: 'https://api.example.com/v1',
@@ -121,5 +121,61 @@ describe('testConnection', () => {
     const fn = vi.fn(async () => new Response('gateway says no', { status: 403 }))
     vi.stubGlobal('fetch', fn)
     await expect(testConnection(profile)).rejects.toMatchObject({ kind: 'auth' })
+  })
+})
+
+describe('chatCompleteRaw（function calling）', () => {
+  it('tools 声明进入请求体；tool_calls 被结构化解析', async () => {
+    const fn = mockFetch({
+      choices: [
+        {
+          message: {
+            content: '',
+            tool_calls: [
+              { id: 'call1', type: 'function', function: { name: 'read_script', arguments: '{}' } },
+              { id: 'call2', type: 'function', function: { name: 'lint', arguments: '{"a":1}' } },
+              { broken: true }, // 非法项被过滤
+            ],
+          },
+        },
+      ],
+    })
+    const res = await chatCompleteRaw(profile, [{ role: 'user', content: '看看' }], {
+      tools: [{ type: 'function', function: { name: 'read_script', description: '读脚本', parameters: { type: 'object', properties: {} } } }],
+    })
+    const body = JSON.parse(calledInit(fn).body as string)
+    expect(body.tools).toHaveLength(1)
+    expect(body.tools[0].function.name).toBe('read_script')
+    expect(res.content).toBe('')
+    expect(res.toolCalls).toHaveLength(2)
+    expect(res.toolCalls![0]).toEqual({ id: 'call1', type: 'function', function: { name: 'read_script', arguments: '{}' } })
+    expect(res.toolCalls![1].function.arguments).toBe('{"a":1}')
+  })
+
+  it('无 tools 参数时请求体不含 tools 键；纯文本响应 toolCalls 为 undefined', async () => {
+    const fn = mockFetch({ choices: [{ message: { content: '你好' } }] })
+    const res = await chatCompleteRaw(profile, [{ role: 'user', content: 'hi' }])
+    expect(JSON.parse(calledInit(fn).body as string).tools).toBeUndefined()
+    expect(res).toEqual({ content: '你好' })
+  })
+
+  it('tool 角色消息序列化带 tool_call_id', async () => {
+    const fn = mockFetch({ choices: [{ message: { content: 'ok' } }] })
+    await chatCompleteRaw(
+      profile,
+      [
+        { role: 'assistant', content: '', toolCalls: [{ id: 'c1', type: 'function', function: { name: 'lint', arguments: '{}' } }] },
+        { role: 'tool', toolCallId: 'c1', name: 'lint', content: '结果' },
+      ],
+      { tools: [{ type: 'function', function: { name: 'lint', description: '', parameters: {} } }] },
+    )
+    const body = JSON.parse(calledInit(fn).body as string)
+    expect(body.messages[1]).toMatchObject({ role: 'tool', tool_call_id: 'c1', name: 'lint' })
+  })
+
+  it('content 与 tool_calls 双缺 → response 错误', async () => {
+    mockFetch({ choices: [{ message: {} }] })
+    await expect(chatCompleteRaw(profile, [])).rejects.toMatchObject({ kind: 'response' })
+    await expect(chatComplete(profile, [])).rejects.toMatchObject({ kind: 'response' })
   })
 })

@@ -37,6 +37,15 @@ type Tab = 'canvas' | 'graph' | 'script' | 'table' | 'json'
 const GraphEditor = lazy(() => import('./graph/GraphEditor'))
 /** 脚本页与节点图同包域（依赖 script 引擎，体量小；保持同目录一致管理） */
 const ScriptTab = lazy(() => import('./graph/ScriptTab'))
+/** AI 助手面板（批次1 ask 模式）：全 tab 共享的统一对话右栏，懒加载不进主包 */
+const AiPanel = lazy(() => import('./ai/AiPanel').then((m) => ({ default: m.AiPanel })))
+
+/** 脚本页选区上报（行号 1 起，随 AI 提问附带上下文） */
+interface ScriptRangeReport {
+  startLine: number
+  endLine: number
+  text: string
+}
 
 /** 预览层的空事件发射器（模块级稳定引用，避免内联箭头导致子组件反复重渲染） */
 const noopEmit = (): void => {}
@@ -70,6 +79,10 @@ export function EditorPage({ id }: Props) {
   const [doc, setDoc] = useState<LevelDoc | null>(null)
   const [tab, setTab] = useState<Tab>('canvas')
   const [selected, setSelected] = useState<string | null>(null)
+  // AI 助手：面板开关 + 跨视图选中上下文（画布 selected 复用；节点图/脚本页经可选 prop 上报）
+  const [aiOpen, setAiOpen] = useState(true)
+  const [graphSelected, setGraphSelected] = useState<string | null>(null)
+  const [scriptRange, setScriptRange] = useState<ScriptRangeReport | null>(null)
   const [saveErrors, setSaveErrors] = useState<string[]>([])
   const [lintWarnings, setLintWarnings] = useState<string[]>([])
   // 一次性提示：跨重挂载传达（内置另存副本后 hash 切换会重建本组件，评审 P2-2）
@@ -226,38 +239,63 @@ export function EditorPage({ id }: Props) {
             {label}
           </button>
         ))}
+        <button
+          type="button"
+          className={`editor-ai-toggle${aiOpen ? ' active' : ''}`}
+          title="AI 助手（统一对话，跨视图共享上下文）"
+          onClick={() => setAiOpen((v) => !v)}
+        >
+          🤖 AI
+        </button>
       </div>
 
-      <ErrorBoundary>
-        {tab === 'canvas' && (
-          <EditorCanvas
-            doc={doc}
-            selected={selected}
-            onSelect={setSelected}
-            onChange={update}
-            onRemove={() => {
-              update(removeComponent(doc, selected ?? ''))
-              setSelected(null)
-            }}
-          />
-        )}
+      <div className="editor-body">
+        <ErrorBoundary>
+          {tab === 'canvas' && (
+            <EditorCanvas
+              doc={doc}
+              selected={selected}
+              onSelect={setSelected}
+              onChange={update}
+              onRemove={() => {
+                update(removeComponent(doc, selected ?? ''))
+                setSelected(null)
+              }}
+            />
+          )}
 
-        {tab === 'graph' && (
-          <Suspense fallback={<p className="muted">节点图加载中…</p>}>
-            <GraphEditor doc={doc} onChange={update} />
+          {tab === 'graph' && (
+            <Suspense fallback={<p className="muted">节点图加载中…</p>}>
+              <GraphEditor doc={doc} onChange={update} onSelectedChange={setGraphSelected} />
+            </Suspense>
+          )}
+
+          {tab === 'script' && (
+            <Suspense fallback={<p className="muted">脚本加载中…</p>}>
+              <ScriptTab doc={doc} onChange={update} onSelectionReport={setScriptRange} />
+            </Suspense>
+          )}
+
+          {tab === 'table' && <TableEditor doc={doc} onChange={update} />}
+
+          {tab === 'json' && <JsonTab doc={doc} onApply={update} />}
+        </ErrorBoundary>
+
+        {aiOpen && (
+          <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
+            <AiPanel
+              doc={doc}
+              selection={{
+                tab,
+                componentId: tab === 'canvas' ? selected : null,
+                nodeId: tab === 'graph' ? graphSelected : null,
+                scriptRange: tab === 'script' ? scriptRange : null,
+              }}
+              onClose={() => setAiOpen(false)}
+            />
           </Suspense>
         )}
-
-        {tab === 'script' && (
-          <Suspense fallback={<p className="muted">脚本加载中…</p>}>
-            <ScriptTab doc={doc} onChange={update} />
-          </Suspense>
-        )}
-
-        {tab === 'table' && <TableEditor doc={doc} onChange={update} />}
-
-        {tab === 'json' && <JsonTab doc={doc} onApply={update} />}
-      </ErrorBoundary>
+      </div>
     </div>
   )
 }

@@ -7,8 +7,26 @@
  */
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  /** assistant 消息携带的工具调用请求（OpenAI 格式原样透传） */
+  toolCalls?: ToolCall[]
+  /** role='tool' 时对应请求的调用 id */
+  toolCallId?: string
+  /** role='tool' 时对应的工具名（部分供应商要求） */
+  name?: string
+}
+
+/** 工具声明（OpenAI function calling 格式，主流供应商兼容） */
+export interface AiToolSpec {
+  type: 'function'
+  function: { name: string; description: string; parameters: Record<string, unknown> }
+}
+
+export interface ToolCall {
+  id: string
+  type: 'function'
+  function: { name: string; arguments: string }
 }
 
 export interface AiProfileConfig {
@@ -38,6 +56,8 @@ export interface ChatCompleteOptions {
   temperature?: number
   /** 限制补全长度（测试连接用小值） */
   maxTokens?: number
+  /** function calling 工具声明；agent 循环使用 */
+  tools?: AiToolSpec[]
 }
 
 function assertConfig(profile: AiProfileConfig): void {
@@ -54,11 +74,27 @@ function chatUrl(baseUrl: string): string {
 }
 
 interface ChatChoice {
-  message?: { content?: unknown }
+  message?: { content?: unknown; tool_calls?: unknown }
 }
 interface ChatResponseShape {
   choices?: ChatChoice[]
   error?: { message?: unknown }
+}
+
+function parseToolCalls(raw: unknown): ToolCall[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const calls: ToolCall[] = []
+  for (const item of raw) {
+    const c = item as { id?: unknown; type?: unknown; function?: { name?: unknown; arguments?: unknown } }
+    if (typeof c.id === 'string' && typeof c.function?.name === 'string') {
+      calls.push({
+        id: c.id,
+        type: 'function',
+        function: { name: c.function.name, arguments: typeof c.function.arguments === 'string' ? c.function.arguments : '' },
+      })
+    }
+  }
+  return calls.length > 0 ? calls : undefined
 }
 
 /** 把 fetch/HTTP 层的失败翻译成类别 + 可读中文 */
@@ -83,11 +119,28 @@ async function raiseForResponse(res: Response): Promise<void> {
   throw new AiClientError('bad-request', `请求被拒绝（${res.status}）：请检查模型名与 API 地址。${detail}`, res.status)
 }
 
-export async function chatComplete(
+/** 把会话消息序列化成 OpenAI 兼容请求体（tool 角色附 tool_call_id） */
+function serializeMessage(m: ChatMessage): Record<string, unknown> {
+  const out: Record<string, unknown> = { role: m.role, content: m.content }
+  if (m.toolCalls) out.tool_calls = m.toolCalls
+  if (m.toolCallId) out.tool_call_id = m.toolCallId
+  if (m.name) out.name = m.name
+  return out
+}
+
+export interface ChatCompletionResult {
+  /** 助手文本（可能为空串——纯工具调用轮） */
+  content: string
+  /** 非空 = 模型请求调用工具，调用方执行后以 role='tool' 消息回填继续 */
+  toolCalls?: ToolCall[]
+}
+
+/** 完整版补全：保留 tool_calls 与原始结构，agent 循环使用 */
+export async function chatCompleteRaw(
   profile: AiProfileConfig,
   messages: ChatMessage[],
   opts: ChatCompleteOptions = {},
-): Promise<string> {
+): Promise<ChatCompletionResult> {
   assertConfig(profile)
 
   const controller = new AbortController()
@@ -106,10 +159,11 @@ export async function chatComplete(
         },
         body: JSON.stringify({
           model: profile.model.trim(),
-          messages,
+          messages: messages.map(serializeMessage),
           stream: false,
           ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
           ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
+          ...(opts.tools && opts.tools.length > 0 ? { tools: opts.tools } : {}),
         }),
         signal: controller.signal,
       })
@@ -125,15 +179,26 @@ export async function chatComplete(
     await raiseForResponse(res)
 
     const data = (await res.json().catch(() => null)) as ChatResponseShape | null
-    const content = data?.choices?.[0]?.message?.content
-    if (typeof content !== 'string') {
-      throw new AiClientError('response', '供应商返回了无法解析的响应（缺少 choices[0].message.content）')
+    const message = data?.choices?.[0]?.message
+    const content = typeof message?.content === 'string' ? message.content : ''
+    const toolCalls = parseToolCalls(message?.tool_calls)
+    if (!content && !toolCalls) {
+      throw new AiClientError('response', '供应商返回了无法解析的响应（缺少 choices[0].message 内容）')
     }
-    return content
+    return { content, toolCalls }
   } finally {
     clearTimeout(timer)
     opts.signal?.removeEventListener('abort', forward)
   }
+}
+
+export async function chatComplete(
+  profile: AiProfileConfig,
+  messages: ChatMessage[],
+  opts: ChatCompleteOptions = {},
+): Promise<string> {
+  const result = await chatCompleteRaw(profile, messages, opts)
+  return result.content
 }
 
 export interface TestConnectionResult {

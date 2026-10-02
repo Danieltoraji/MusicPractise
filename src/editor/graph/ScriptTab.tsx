@@ -9,9 +9,18 @@ import type { LevelDoc } from '../../engine/level'
 import type { GraphProgram } from '../../engine/graphProgram'
 import { generateScript, parseScript, ScriptError } from '../../engine/script'
 
+/** 脚本选区上报（行号 1 起；编辑器 AI 面板附带上下文用） */
+export interface ScriptSelectionReport {
+  startLine: number
+  endLine: number
+  text: string
+}
+
 interface Props {
   doc: LevelDoc
   onChange: (doc: LevelDoc) => void
+  /** 文本选区变化上报（可选）；收起选区时上报 null */
+  onSelectionReport?: (range: ScriptSelectionReport | null) => void
 }
 
 /** 应用解析产物的节点 id 前缀（脚本重建的图与节点图手搭的 n1、迁移的 rule_on 可区分来源） */
@@ -47,7 +56,7 @@ function genDraft(prog: GraphProgram): ScriptDraft {
   }
 }
 
-export function ScriptTab({ doc, onChange }: Props) {
+export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
   const program = doc.content.logic
 
   const [draft, setDraft] = useState<ScriptDraft>(() => {
@@ -111,6 +120,23 @@ export function ScriptTab({ doc, onChange }: Props) {
     [],
   )
 
+  // 选区上报（AI 面板上下文）：拖选/双击/Shift 方向键都会触发 select 事件
+  const onTextareaSelect = useCallback(
+    (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
+      if (!onSelectionReport) return
+      const el = e.currentTarget
+      const { selectionStart, selectionEnd, value } = el
+      if (selectionStart === selectionEnd) {
+        onSelectionReport(null)
+        return
+      }
+      const startLine = value.slice(0, selectionStart).split('\n').length
+      const endLine = startLine + value.slice(selectionStart, selectionEnd).split('\n').length - 1
+      onSelectionReport({ startLine, endLine, text: value.slice(selectionStart, selectionEnd) })
+    },
+    [onSelectionReport],
+  )
+
   const stats = useMemo(() => {
     const handlers = (text.match(/^on /gm) ?? []).length
     return { handlers, lines: text.split('\n').length }
@@ -166,6 +192,7 @@ export function ScriptTab({ doc, onChange }: Props) {
           setParseError(null) // 编辑即清除旧错误定位（P2-1）
         }}
         onKeyDown={onTextareaKeyDown}
+        onSelect={onTextareaSelect}
       />
     </div>
   )

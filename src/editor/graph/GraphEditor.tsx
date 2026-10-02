@@ -52,11 +52,13 @@ import { clearRunLog, readRunLog } from '../../runtime/runLog'
 interface Props {
   doc: LevelDoc
   onChange: (doc: LevelDoc) => void
+  /** 选中节点变化上报（编辑器 AI 面板附带上下文用；可选） */
+  onSelectedChange?: (id: string | null) => void
 }
 
 const NO_POSITIONS = new Map<string, { x: number; y: number }>()
 
-function GraphEditorInner({ doc, onChange }: Props) {
+function GraphEditorInner({ doc, onChange, onSelectedChange }: Props) {
   const program = doc.content.logic
   const rf = useReactFlow()
   // 深色工作台 / 浅色主题，与节点摘要中英文显示模式（均记忆在 localStorage）
@@ -79,6 +81,10 @@ function GraphEditorInner({ doc, onChange }: Props) {
     })
   }
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // 选中变化上报给父层（AI 面板上下文）；unmount 不专门清空——父层按当前 tab 取值
+  useEffect(() => {
+    onSelectedChange?.(selectedId)
+  }, [selectedId, onSelectedChange])
   const [error, setError] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
   const [dragPos, setDragPos] = useState<Map<string, { x: number; y: number }>>(new Map())
