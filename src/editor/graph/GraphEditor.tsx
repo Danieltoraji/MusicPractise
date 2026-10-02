@@ -7,7 +7,7 @@
  * 布局持久化在 localStorage（graph-panels / graph-panel-w-*）；AI 面板与属性平级挂在画布右侧并随主题换肤。
  * 默认导出（React.lazy 懒加载 @xyflow/react，不进主包）。
  */
-import { Suspense, lazy, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -47,7 +47,9 @@ import { generateScript } from '../../engine/script'
 import { graphCardNodeTypes, type GraphCardData, type GraphTheme, type SummaryMode } from './nodeTypes'
 import { NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
 import { DockPanel } from './DockPanel'
+import { DebugPanel } from './DebugPanel'
 import { EventManagerPanel } from './EventManagerPanel'
+import { getDebugSnapshot, subscribeDebugRun, toggleDebugBreakpoint } from './debugRun'
 import { NodeInspector } from './NodeInspector'
 import { VariablesPanel } from './VariablesPanel'
 import { CanvasMap } from './CanvasMap'
@@ -68,13 +70,22 @@ const AiPanel = lazy(() => import('../ai/AiPanel').then((m) => ({ default: m.AiP
 // dock 布局（docs/29 追加：面板自由调换）：三个列槽 × 五面板归属 + 显隐 + 列宽/面板高，localStorage 持久化
 // ---------------------------------------------------------------------------
 
-type PanelId = 'library' | 'events' | 'vars' | 'inspector' | 'ai'
+type PanelId = 'library' | 'events' | 'vars' | 'inspector' | 'debug' | 'ai'
 type ColKey = 'left' | 'rightA' | 'rightB'
 type DockLayout = Record<ColKey, PanelId[]>
 
-const ALL_PANELS: PanelId[] = ['library', 'events', 'vars', 'inspector', 'ai']
-const DEFAULT_LAYOUT: DockLayout = { left: ['library', 'events', 'vars'], rightA: ['inspector'], rightB: ['ai'] }
-const DEFAULT_COL_OF: Record<PanelId, ColKey> = { library: 'left', events: 'left', vars: 'left', inspector: 'rightA', ai: 'rightB' }
+const ALL_PANELS: PanelId[] = ['library', 'events', 'vars', 'inspector', 'debug', 'ai']
+const DEFAULT_LAYOUT: DockLayout = { left: ['library', 'events', 'vars'], rightA: ['inspector'], rightB: ['debug', 'ai'] }
+const DEFAULT_COL_OF: Record<PanelId, ColKey> = {
+  library: 'left',
+  events: 'left',
+  vars: 'left',
+  inspector: 'rightA',
+  debug: 'rightB',
+  ai: 'rightB',
+}
+/** 调试面板默认收起（工具栏 🐞 打开）；其余面板默认可见 */
+const DEFAULT_HIDDEN: Partial<Record<PanelId, boolean>> = { debug: true }
 
 const DOCK_KEY = 'graph-dock'
 const HEIGHTS_KEY = 'graph-dock-h'
@@ -112,8 +123,9 @@ function sanitizeLayout(raw: unknown): DockLayout {
   return out
 }
 
+/** 加载 dock 状态：无存档时调试面板默认收起（DEFAULT_HIDDEN），其余可见 */
 function loadDock(): DockState {
-  const state: DockState = { layout: sanitizeLayout(null), hidden: {} }
+  const state: DockState = { layout: sanitizeLayout(null), hidden: { ...DEFAULT_HIDDEN } }
   try {
     // 旧键 graph-panels（面板化首版的显隐布尔）迁移
     const legacy = JSON.parse(localStorage.getItem('graph-panels') ?? 'null') as Record<string, unknown> | null
@@ -361,6 +373,9 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
   const [scriptError, setScriptError] = useState<string | null>(null)
 
   const palette = useMemo(() => buildPalette(doc), [doc])
+  // 调试状态（docs/30）：断点印在节点卡圆点、暂停节点高亮
+  const debugSnap = useSyncExternalStore(subscribeDebugRun, getDebugSnapshot)
+  const breakpointSet = useMemo(() => new Set(debugSnap.breakpoints), [debugSnap.breakpoints])
   const templates = useMemo(() => buildTemplates(doc), [doc])
   const compsInfo = useMemo(
     () => doc.content.components.map((c) => ({ id: c.id, name: c.name, type: c.type })),
@@ -461,7 +476,9 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
       const position = { x: base?.x ?? 0, y: base?.y ?? 0 }
       const errors = issuesByNode.get(node.id)
       const related = relatedIds.has(node.id)
-      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}|${theme}|${summaryMode}`
+      const bp = breakpointSet.has(node.id)
+      const paused = debugSnap.pausedAt === node.id
+      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}|${theme}|${summaryMode}|${bp ? 'b' : ''}|${paused ? 'p' : ''}`
       const prev = prevMap.get(node.id)
       if (prev && prevSig.get(node.id) === signature) {
         nextMap.set(node.id, prev)
@@ -472,7 +489,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         id: node.id,
         type: 'graphCard',
         position,
-        data: { node, errors, comps: compsInfo, related, theme, summaryMode },
+        data: { node, errors, comps: compsInfo, related, theme, summaryMode, bp, paused, onToggleBp: toggleDebugBreakpoint },
         width: NODE_W,
         height: NODE_H,
         // 预置 measured：节点尺寸固定，首帧即可拖拽（否则 RF 拖拽检查报 #015）
@@ -484,7 +501,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     })
     nodeCacheRef.current = { map: nextMap, sig: nextSig }
     return list
-  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, compsSig, relatedIds])
+  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, compsSig, relatedIds, breakpointSet, debugSnap.pausedAt])
 
   const rfEdges: Edge[] = useMemo(
     () =>
@@ -667,6 +684,12 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
             />
           </DockPanel>
         )
+      case 'debug':
+        return (
+          <DockPanel key={id} icon="🐞" title="调试" {...drag} style={style} className={srcClass} onClose={() => togglePanel('debug')}>
+            <DebugPanel doc={doc} onFocusNode={focusNode} />
+          </DockPanel>
+        )
       case 'ai':
         return (
           <Suspense key={id} fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
@@ -735,6 +758,9 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         </button>
         <button type="button" className={`gtoggle${aiOpen ? ' active' : ''}`} onClick={onToggleAi} title="AI 助手面板（统一对话，随主题换肤）">
           🤖 AI
+        </button>
+        <button type="button" className={`gtoggle${panelVisible('debug') ? ' active' : ''}`} onClick={() => togglePanel('debug')} title="调试面板（断点/单步/变量观察与赋值/实时日志/手动触发事件；仅编辑器内可用）">
+          🐞 调试
         </button>
         <span className="graph-tb-sep" aria-hidden />
         <button type="button" onClick={() => apply((prog) => arrangeLayout(prog, 'all'))} title="按执行层级自动重排全部节点">

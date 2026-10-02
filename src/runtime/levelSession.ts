@@ -35,6 +35,10 @@ export interface SessionHost {
   onLogicEvent?(e: LogicRunEvent): void
   /** 可选：引擎预算覆写（AI 无头试运行收紧看门狗用；缺省用引擎默认值） */
   budgets?: GraphBudgets
+  /** 可选：调试门控（docs/30，编辑器 Debug 模式）——透传给图引擎 */
+  debug?: {
+    gate(nodeId: string, event: string): Promise<void>
+  }
 }
 
 export class LevelSession {
@@ -74,6 +78,7 @@ export class LevelSession {
     this.baseProgram = isGraphProgram(content.logic) ? content.logic : migrateLogicV1toV2(content.logic)
     this.engine = new GraphEngine(this.baseProgram, {
       budgets: host.budgets,
+      debug: host.debug,
       getQuestion: () => this.row as unknown as Json,
       dispatchCommand: (path, args, context) => this.handleCommand(path, args, context),
       // 行指针赋值 = 跳转题目行（docs/25）：clamp 到有效行区间，重复行 no-op 防事件环

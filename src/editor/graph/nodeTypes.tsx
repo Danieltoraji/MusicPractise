@@ -23,6 +23,12 @@ export interface GraphCardData extends Record<string, unknown> {
   theme?: GraphTheme
   /** 摘要显示模式：en=默认（标识符为主）/ zh=全中文结构词 */
   summaryMode?: SummaryMode
+  /** 调试断点已设（docs/30，节点卡左侧圆点） */
+  bp?: boolean
+  /** 调试暂停中：该节点是当前挂起点 */
+  paused?: boolean
+  /** 断点圆点点击（stopPropagation 后回调） */
+  onToggleBp?: (id: string) => void
 }
 export type GraphCardNode = Node<GraphCardData, 'graphCard'>
 
@@ -58,9 +64,20 @@ function GraphCard({ data, selected }: NodeProps<GraphCardNode>) {
   const dual = node.kind === 'branch' || node.kind === 'loop'
   return (
     <div
-      className={`gnode ${selected ? 'is-selected' : ''} ${errors.length ? 'has-error' : ''} ${data.related ? 'is-related' : ''}`}
+      className={`gnode ${selected ? 'is-selected' : ''} ${errors.length ? 'has-error' : ''} ${data.related ? 'is-related' : ''} ${data.paused ? 'is-paused' : ''}`}
       title={errors.length ? errors.join('\n') : undefined}
     >
+      {data.onToggleBp && (
+        <button
+          type="button"
+          className={`gnode-bp${data.bp ? ' on' : ''}`}
+          title={data.bp ? '移除断点' : '设为断点（调试模式在此节点暂停）'}
+          onClick={(e) => {
+            e.stopPropagation()
+            data.onToggleBp!(node.id)
+          }}
+        />
+      )}
       <div className="gnode-band" style={{ background: meta.color }} />
       <div className="gnode-head">
         <span className="gnode-kind" style={{ color: meta.color }}>{meta.label}</span>

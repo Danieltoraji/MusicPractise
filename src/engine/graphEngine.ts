@@ -49,6 +49,15 @@ export interface GraphHost {
   getNowSeconds?: () => number
   onError?: (err: unknown, context: { nodeId?: string; event?: string }) => void
   budgets?: GraphBudgets
+  /**
+   * 调试门控（docs/30）：每个节点执行前询问。实现方在需要暂停（断点命中/单步/手动暂停）时
+   * 返回一个挂起的 Promise，resume/step 时 resolve；引擎在门控返回后复查 generation
+   * （reset/stop 期间被挂起的执行自动作废）。实现方须在关闭时 resolve 所有挂起门，
+   * 否则处理器永久泄漏。
+   */
+  debug?: {
+    gate(nodeId: string, event: string): Promise<void>
+  }
 }
 
 interface QueuedEvent {
@@ -198,6 +207,12 @@ export class GraphEngine {
       if (!node) {
         this.fail(new Error(`执行边指向不存在的节点 "${cur}"`), { event, nodeId: cur })
         return
+      }
+      // 调试门控（docs/30）：断点命中/单步/手动暂停时挂起，resume/step 后继续。
+      // 门控返回后复查代数——调试会话 stop（reset）期间被挂起的执行在此作废。
+      if (this.host.debug) {
+        await this.host.debug.gate(node.id, event)
+        if (this.generation !== gen) return
       }
       try {
         cur = await this.execNode(node, prev, scope, ectx, counters, gen, event)
