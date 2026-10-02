@@ -1,11 +1,13 @@
 /**
- * 节点图编辑器：三栏布局 + React Flow 画布 + 体验面板（运行日志/lint 列表/变量/查看脚本）。
+ * 节点图编辑器：工作台面板化布局（docs/29）+ React Flow 画布 + 体验面板（运行日志/lint 列表/变量/查看脚本）。
  * doc.content.logic（GraphProgram v2）唯一真源；一切编辑 = graphOps 纯函数 → onChange 回写 doc，
  * 非法操作（on 入边、端口缺失等）由 ops 抛错 → 错误条提示、doc 不变（受控画布自动回滚）。
  * 拖动跟手：拖动中间帧走 transient 状态（不进 doc），落点一次性 moveNode 持久化。
+ * 五个 dock 面板（组件库/事件管理/变量/属性/AI）平级：宽度可拖拽、可 ✕ 关闭、工具栏按钮切换，
+ * 布局持久化在 localStorage（graph-panels / graph-panel-w-*）；AI 面板与属性平级挂在画布右侧并随主题换肤。
  * 默认导出（React.lazy 懒加载 @xyflow/react，不进主包）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -37,13 +39,15 @@ import {
   updateNode,
   type GraphProgram,
 } from '../../engine/graphProgram'
-import { buildEventGroups, buildPalette, buildTemplates } from './palette'
+import { buildPalette, buildTemplates } from './palette'
 import { NODE_H, NODE_W, arrangeLayout, dagrePositions } from './layout'
 import { applyNodeChangesToProgram, portFromHandle } from './changes'
 import { applyTemplate } from './applyTemplate'
 import { generateScript } from '../../engine/script'
 import { graphCardNodeTypes, type GraphCardData, type GraphTheme, type SummaryMode } from './nodeTypes'
-import { EventsPanel, NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
+import { NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
+import { DockPanel } from './DockPanel'
+import { EventManagerPanel } from './EventManagerPanel'
 import { NodeInspector } from './NodeInspector'
 import { VariablesPanel } from './VariablesPanel'
 import { CanvasMap } from './CanvasMap'
@@ -52,13 +56,95 @@ import { clearRunLog, readRunLog } from '../../runtime/runLog'
 interface Props {
   doc: LevelDoc
   onChange: (doc: LevelDoc) => void
-  /** 选中节点变化上报（编辑器 AI 面板附带上下文用；可选） */
-  onSelectedChange?: (id: string | null) => void
+  /** AI 助手总开关（EditorPage 单一真源：工具栏「🤖 AI」与各 tab 面板共用） */
+  aiOpen: boolean
+  onToggleAi: () => void
+}
+
+/** AI 助手面板在图工作台内的入坞形态（与属性平级挂画布右侧，随 ge-* 主题换肤）；会话 store 保证与其它 tab 连续 */
+const AiPanel = lazy(() => import('../ai/AiPanel').then((m) => ({ default: m.AiPanel })))
+
+// ---------------------------------------------------------------------------
+// dock 布局状态：显隐 + 三列宽度，localStorage 持久化（沿 graph-theme 惯例）
+// ---------------------------------------------------------------------------
+
+interface PanelVisibility {
+  library: boolean
+  events: boolean
+  vars: boolean
+  inspector: boolean
+}
+
+const PANELS_KEY = 'graph-panels'
+const W_LEFT_KEY = 'graph-panel-w-left'
+const W_INSP_KEY = 'graph-panel-w-insp'
+const W_AI_KEY = 'graph-panel-w-ai'
+
+const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v))
+
+function loadPanels(): PanelVisibility {
+  const fallback: PanelVisibility = { library: true, events: true, vars: true, inspector: true }
+  try {
+    const raw = JSON.parse(localStorage.getItem(PANELS_KEY) ?? '') as Partial<PanelVisibility>
+    return { ...fallback, ...raw }
+  } catch {
+    return fallback
+  }
+}
+
+/** 宽度持久化：读时钳制防坏数据，写时随拖拽 write-through（值小、频次可接受） */
+function usePanelWidth(key: string, def: number, min: number, max: number): [number, (w: number) => void] {
+  const [w, setW] = useState<number>(() => {
+    const raw = Number(localStorage.getItem(key))
+    return Number.isFinite(raw) && raw > 0 ? clamp(Math.round(raw), min, max) : def
+  })
+  const update = useCallback(
+    (next: number) => {
+      const v = clamp(Math.round(next), min, max)
+      setW(v)
+      try {
+        localStorage.setItem(key, String(v))
+      } catch {
+        // 隐私模式等：布局降级为不持久化
+      }
+    },
+    [key, min, max],
+  )
+  return [w, update]
+}
+
+/** 列宽拖拽分隔条：window 级监听（setPointerCapture 仅作指针出界保险，失败不阻断——
+ *  合成事件/特殊环境下 capture 会因非活跃 pointerId 抛错）；dir=1 向右拖变宽，-1 变窄（右列用） */
+function startSplitDrag(e: React.PointerEvent<HTMLDivElement>, dir: 1 | -1, onDelta: (dx: number) => void): void {
+  e.preventDefault()
+  const el = e.currentTarget
+  el.classList.add('is-dragging')
+  try {
+    el.setPointerCapture(e.pointerId)
+  } catch {
+    // 非活跃指针（自动化合成事件等）：window 监听已足够
+  }
+  const startX = e.clientX
+  const move = (ev: PointerEvent): void => onDelta(dir * (ev.clientX - startX))
+  const up = (): void => {
+    el.classList.remove('is-dragging')
+    try {
+      el.releasePointerCapture(e.pointerId)
+    } catch {
+      // ignore
+    }
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', up)
+    window.removeEventListener('pointercancel', up)
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', up)
+  window.addEventListener('pointercancel', up)
 }
 
 const NO_POSITIONS = new Map<string, { x: number; y: number }>()
 
-function GraphEditorInner({ doc, onChange, onSelectedChange }: Props) {
+function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
   const program = doc.content.logic
   const rf = useReactFlow()
   // 深色工作台 / 浅色主题，与节点摘要中英文显示模式（均记忆在 localStorage）
@@ -81,10 +167,29 @@ function GraphEditorInner({ doc, onChange, onSelectedChange }: Props) {
     })
   }
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  // 选中变化上报给父层（AI 面板上下文）；unmount 不专门清空——父层按当前 tab 取值
-  useEffect(() => {
-    onSelectedChange?.(selectedId)
-  }, [selectedId, onSelectedChange])
+  // dock 面板显隐与三列宽度（docs/29：跨会话记住工作台布局）
+  const [panels, setPanels] = useState<PanelVisibility>(loadPanels)
+  const [leftW, setLeftW] = usePanelWidth(W_LEFT_KEY, 200, 150, 360)
+  const [inspW, setInspW] = usePanelWidth(W_INSP_KEY, 300, 240, 460)
+  const [aiW, setAiW] = usePanelWidth(W_AI_KEY, 360, 280, 520)
+  const leftWRef = useRef(leftW)
+  leftWRef.current = leftW
+  const inspWRef = useRef(inspW)
+  inspWRef.current = inspW
+  const aiWRef = useRef(aiW)
+  aiWRef.current = aiW
+
+  const togglePanel = (key: keyof PanelVisibility): void => {
+    setPanels((p) => {
+      const next = { ...p, [key]: !p[key] }
+      try {
+        localStorage.setItem(PANELS_KEY, JSON.stringify(next))
+      } catch {
+        // 布局持久化降级
+      }
+      return next
+    })
+  }
   const [error, setError] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
   const [dragPos, setDragPos] = useState<Map<string, { x: number; y: number }>>(new Map())
@@ -164,10 +269,17 @@ function GraphEditorInner({ doc, onChange, onSelectedChange }: Props) {
     document.addEventListener('fullscreenchange', sync)
     return () => document.removeEventListener('fullscreenchange', sync)
   }, [])
-  const eventGroups = useMemo(() => buildEventGroups(doc), [doc])
+
   const addOnNode = useCallback(
     (event: string): void => {
       apply((prog) => addNode(prog, { kind: 'on', event, id: newNodeId(prog) } as GNode))
+    },
+    [apply],
+  )
+  /** 事件管理器「emit」动作：落一个派发该内部事件的 emit 节点（参数留默认，Inspector 里补 payload） */
+  const addEmitNode = useCallback(
+    (event: string): void => {
+      apply((prog) => addNode(prog, { kind: 'emit', event, id: newNodeId(prog) } as GNode))
     },
     [apply],
   )
@@ -341,6 +453,22 @@ function GraphEditorInner({ doc, onChange, onSelectedChange }: Props) {
   return (
     <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`}>
       <div className="graph-toolbar">
+        <button type="button" className={`gtoggle${panels.library ? ' active' : ''}`} onClick={() => togglePanel('library')} title="组件库面板（节点/模板菜单）">
+          🧩 组件库
+        </button>
+        <button type="button" className={`gtoggle${panels.events ? ' active' : ''}`} onClick={() => togglePanel('events')} title="事件管理面板（系统/组件/内部事件 → 一键落节点）">
+          ⚡ 事件
+        </button>
+        <button type="button" className={`gtoggle${panels.vars ? ' active' : ''}`} onClick={() => togglePanel('vars')} title="变量面板（声明/初值）">
+          🧮 变量
+        </button>
+        <button type="button" className={`gtoggle${panels.inspector ? ' active' : ''}`} onClick={() => togglePanel('inspector')} title="节点属性面板">
+          ⚙ 属性
+        </button>
+        <button type="button" className={`gtoggle${aiOpen ? ' active' : ''}`} onClick={onToggleAi} title="AI 助手面板（统一对话，随主题换肤）">
+          🤖 AI
+        </button>
+        <span className="graph-tb-sep" aria-hidden />
         <button type="button" onClick={() => apply((prog) => arrangeLayout(prog, 'all'))} title="按执行层级自动重排全部节点">
           整理布局
         </button>
@@ -426,21 +554,42 @@ function GraphEditorInner({ doc, onChange, onSelectedChange }: Props) {
         </div>
       )}
       <div className="graph-layout">
-        <div className="graph-left">
-          <NodeLibraryPanel
-            groups={palette}
-            templates={templates}
-            onPick={(item) => addFromPalette(item)}
-            onPickTemplate={(tpl) => addTemplate(tpl)}
+        {(panels.library || panels.events || panels.vars) && (
+          <div className="graph-left" style={{ width: leftW }}>
+            {panels.library && (
+              <DockPanel icon="🧩" title="组件库" className="gdock--lib" onClose={() => togglePanel('library')}>
+                <NodeLibraryPanel
+                  groups={palette}
+                  templates={templates}
+                  onPick={(item) => addFromPalette(item)}
+                  onPickTemplate={(tpl) => addTemplate(tpl)}
+                />
+              </DockPanel>
+            )}
+            {panels.events && (
+              <DockPanel icon="⚡" title="事件管理" className="gdock--events" onClose={() => togglePanel('events')}>
+                <EventManagerPanel doc={doc} onAddOn={addOnNode} onAddEmit={addEmitNode} onFocusNode={focusNode} />
+              </DockPanel>
+            )}
+            {panels.vars && (
+              <DockPanel icon="🧮" title="变量" className="gdock--vars" onClose={() => togglePanel('vars')}>
+                <VariablesPanel
+                  prog={program}
+                  onSet={(name, value) => apply((prog) => setGraphVariable(prog, name, value))}
+                  onRename={(oldName, newName) => apply((prog) => renameGraphVariable(prog, oldName, newName))}
+                  onRemove={(name) => apply((prog) => removeGraphVariable(prog, name))}
+                />
+              </DockPanel>
+            )}
+          </div>
+        )}
+        {(panels.library || panels.events || panels.vars) && (
+          <div
+            className="gsplit"
+            title="拖拽调整左栏宽度"
+            onPointerDown={(e) => startSplitDrag(e, 1, (dx) => setLeftW(leftWRef.current + dx))}
           />
-          <EventsPanel groups={eventGroups} onPick={addOnNode} />
-          <VariablesPanel
-            prog={program}
-            onSet={(name, value) => apply((prog) => setGraphVariable(prog, name, value))}
-            onRename={(oldName, newName) => apply((prog) => renameGraphVariable(prog, oldName, newName))}
-            onRemove={(name) => apply((prog) => removeGraphVariable(prog, name))}
-          />
-        </div>
+        )}
         <div
           className="graph-canvas"
           onContextMenu={(e) => {
@@ -515,16 +664,45 @@ function GraphEditorInner({ doc, onChange, onSelectedChange }: Props) {
             </div>
           )}
         </div>
-        <NodeInspector
-          node={selected}
-          doc={doc}
-          issues={selectedIssues}
-          onPatch={(patch) => selectedId && apply((prog) => updateNode(prog, selectedId, patch))}
-          onRemove={() => {
-            if (selectedId) apply((prog) => removeNode(prog, selectedId))
-            setSelectedId(null)
-          }}
-        />
+        {panels.inspector && <div
+          className="gsplit"
+          title="拖拽调整属性列宽度"
+          onPointerDown={(e) => startSplitDrag(e, -1, (dx) => setInspW(inspWRef.current - dx))}
+        />}
+        {panels.inspector && (
+          <div className="graph-right-col" style={{ width: inspW }}>
+            <DockPanel icon="⚙" title="属性" onClose={() => togglePanel('inspector')}>
+              <NodeInspector
+                node={selected}
+                doc={doc}
+                issues={selectedIssues}
+                onPatch={(patch) => selectedId && apply((prog) => updateNode(prog, selectedId, patch))}
+                onRemove={() => {
+                  if (selectedId) apply((prog) => removeNode(prog, selectedId))
+                  setSelectedId(null)
+                }}
+              />
+            </DockPanel>
+          </div>
+        )}
+        {aiOpen && (
+          <div
+            className="gsplit"
+            title="拖拽调整 AI 面板宽度"
+            onPointerDown={(e) => startSplitDrag(e, -1, (dx) => setAiW(aiWRef.current - dx))}
+          />
+        )}
+        {aiOpen && (
+          <div className="graph-right-col graph-ai-col" style={{ width: aiW }}>
+            <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
+              <AiPanel
+                doc={doc}
+                selection={{ tab: 'graph', nodeId: selectedId }}
+                onClose={onToggleAi}
+              />
+            </Suspense>
+          </div>
+        )}
       </div>
       {showLog && (
         <div className="graph-log">

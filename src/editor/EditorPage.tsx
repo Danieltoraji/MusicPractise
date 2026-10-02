@@ -79,9 +79,8 @@ export function EditorPage({ id }: Props) {
   const [doc, setDoc] = useState<LevelDoc | null>(null)
   const [tab, setTab] = useState<Tab>('canvas')
   const [selected, setSelected] = useState<string | null>(null)
-  // AI 助手：面板开关 + 跨视图选中上下文（画布 selected 复用；节点图/脚本页经可选 prop 上报）
+  // AI 助手总开关：单一真源——各 tab 的面板与节点图工作台内的 AI 入坞共用（docs/29）
   const [aiOpen, setAiOpen] = useState(true)
-  const [graphSelected, setGraphSelected] = useState<string | null>(null)
   const [scriptRange, setScriptRange] = useState<ScriptRangeReport | null>(null)
   const [saveErrors, setSaveErrors] = useState<string[]>([])
   const [lintWarnings, setLintWarnings] = useState<string[]>([])
@@ -266,7 +265,7 @@ export function EditorPage({ id }: Props) {
 
           {tab === 'graph' && (
             <Suspense fallback={<p className="muted">节点图加载中…</p>}>
-              <GraphEditor doc={doc} onChange={update} onSelectedChange={setGraphSelected} />
+              <GraphEditor doc={doc} onChange={update} aiOpen={aiOpen} onToggleAi={() => setAiOpen((v) => !v)} />
             </Suspense>
           )}
 
@@ -281,14 +280,15 @@ export function EditorPage({ id }: Props) {
           {tab === 'json' && <JsonTab doc={doc} onApply={update} />}
         </ErrorBoundary>
 
-        {aiOpen && (
+        {/* graph tab 的 AI 面板由 GraphEditor 在工作台内入坞（随深浅主题换肤，docs/29）；
+            其余 tab 在编辑器右栏渲染——同一会话 store，切 tab 对话连续 */}
+        {aiOpen && tab !== 'graph' && (
           <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
             <AiPanel
               doc={doc}
               selection={{
                 tab,
                 componentId: tab === 'canvas' ? selected : null,
-                nodeId: tab === 'graph' ? graphSelected : null,
                 scriptRange: tab === 'script' ? scriptRange : null,
               }}
               onClose={() => setAiOpen(false)}

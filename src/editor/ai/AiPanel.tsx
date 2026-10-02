@@ -1,8 +1,10 @@
 /**
- * 编辑器 AI 助手面板（批次1 ask 模式）：全 tab 共享的统一多轮对话右栏。
- * 挂在 EditorPage 的 .editor-body（lazy 加载）；会话存 src/ai/session 模块级 store（按 doc.id），
- * 切 tab 卸载重挂不丢。只读工具（read_script/read_doc/read_json/lint/read_run_log），
- * 选中上下文（画布组件/图节点/脚本选区）由 EditorPage 汇总经 props 传入，随消息附带。
+ * 编辑器 AI 助手面板（批次1 ask 模式）：多轮对话面板。
+ * 两种挂载形态共用本组件（docs/29）：编辑器右栏（其它 tab）与节点图工作台入坞（graph tab，
+ * 处于 .graph-editor 主题作用域内随深浅换肤）；宽度均由外层容器决定。
+ * 会话存 src/ai/session 模块级 store（按 doc.id），切 tab 卸载重挂不丢。
+ * 只读工具（read_script/read_doc/read_json/lint/read_run_log），
+ * 选中上下文由挂载方传入（graph：节点 id；script：选区；canvas：组件 id）。
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { runAgentTurn, stopAgent } from '../../ai/agent'

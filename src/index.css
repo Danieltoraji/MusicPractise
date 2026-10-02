@@ -1264,17 +1264,21 @@ a.level-row:hover {
   flex: 1;
 }
 .graph-left {
-  width: 200px;
-  flex: none;
+  flex: none; /* 宽度由内联 style 驱动（docs/29 可拖拽，localStorage 记忆） */
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-height: 0;
 }
-.graph-left .glib {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
+/* dock 面板堆叠：组件库占主要高度，事件/变量自然高度受限滚动 */
+.graph-left .gdock--lib {
+  flex: 1 1 0;
+  min-height: 180px;
+}
+.graph-left .gdock--events,
+.graph-left .gdock--vars {
+  flex: 0 1 auto;
+  max-height: 46%;
 }
 .glib-item-tpl {
   color: var(--accent);
@@ -3231,4 +3235,291 @@ a.lib-title:hover {
   align-items: center;
   gap: 12px;
   margin-top: 18px;
+}
+
+/* ---------- 节点图工作台面板化（docs/29）：dock 外壳 / 分隔条 / 事件管理器 / AI 入坞 ---------- */
+
+/* 工具栏：面板显隐切换组与既有按钮的分隔 */
+.graph-tb-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  flex: none;
+  align-self: center;
+}
+/* 浅色下补齐工具栏按钮的 active 反馈（深色段已有同特异性规则，后者胜出） */
+.graph-toolbar button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* dock 面板外壳：标题栏 + 内容区（承载 glib/gem/gvars/ginsp，内部卡片样式被中和） */
+.gdock {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.gdock-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.gdock-title {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gdock-close {
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 4px;
+  border-radius: 5px;
+}
+.gdock-close:hover {
+  color: var(--bad);
+}
+.gdock-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+/* 内部组件自带卡片样式（边框/底色/定宽）在 dock 内中和，外壳统一供卡 */
+.gdock-body > .glib,
+.gdock-body > .gem,
+.gdock-body > .gvars,
+.gdock-body > .ginsp {
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 8px;
+  max-height: none;
+  width: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 右侧 dock 列（属性 / AI）：宽度由内联 style 驱动 */
+.graph-right-col {
+  flex: none;
+  display: flex;
+  min-height: 0;
+}
+.graph-right-col > * {
+  flex: 1;
+  min-width: 0;
+}
+.graph-ai-col .ai-panel {
+  width: auto; /* 解除编辑器右栏的 360px 定宽，列宽即面板宽 */
+  min-height: 0;
+}
+
+/* 列宽拖拽分隔条 */
+.gsplit {
+  flex: none;
+  width: 9px;
+  cursor: col-resize;
+  align-self: stretch;
+  position: relative;
+  touch-action: none;
+}
+.gsplit::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: var(--line);
+  opacity: 0.7;
+}
+.gsplit:hover::after,
+.gsplit.is-dragging::after {
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+/* 事件管理器 */
+.gem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.gem-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.gem-row .gem-add {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gem-act {
+  flex: none;
+  font-size: 11.5px;
+  padding: 4px 6px;
+}
+.gem-act:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.gem-new {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+.gem-new input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+}
+.gem-new button {
+  flex: none;
+  font-size: 12px;
+}
+.gem-err {
+  color: var(--bad);
+  font-size: 11.5px;
+}
+
+/* --- 深色主题（ge-dark 作用域） --- */
+
+.ge-dark .gdock {
+  border-color: var(--ge-line);
+  background: var(--ge-panel);
+}
+.ge-dark .gdock-head {
+  border-bottom-color: var(--ge-line);
+}
+.ge-dark .gdock-title {
+  color: var(--ge-ink);
+}
+.ge-dark .gdock-close {
+  color: var(--ge-muted);
+}
+.ge-dark .gdock-close:hover {
+  color: var(--ge-bad);
+}
+.ge-dark .gem-new input {
+  background: var(--ge-panel-2);
+  border-color: var(--ge-line);
+  color: var(--ge-ink);
+}
+.ge-dark .gem-new button,
+.ge-dark .gem .gem-add,
+.ge-dark .gem .gem-act {
+  background: var(--ge-panel-2);
+  border: 1px solid var(--ge-line);
+  color: var(--ge-ink);
+  border-radius: 7px;
+}
+.ge-dark .gem .gem-add:hover,
+.ge-dark .gem .gem-act:not(:disabled):hover {
+  border-color: var(--ge-accent);
+  color: var(--ge-accent);
+}
+.ge-dark .gsplit::after {
+  background: var(--ge-line);
+}
+.ge-dark .gsplit:hover::after,
+.ge-dark .gsplit.is-dragging::after {
+  background: var(--ge-accent);
+}
+
+/* AI 助手面板入坞深色（graph tab 内随工作台主题换肤，docs/29） */
+.ge-dark .ai-panel {
+  border-color: var(--ge-line);
+  background: var(--ge-panel);
+}
+.ge-dark .ai-panel-head {
+  border-bottom-color: var(--ge-line);
+}
+.ge-dark .ai-panel-head b {
+  color: var(--ge-ink);
+}
+.ge-dark .ai-mode-chip {
+  color: var(--ge-accent);
+  border-color: var(--ge-accent);
+}
+.ge-dark .ai-panel-clear,
+.ge-dark .ai-panel-close {
+  color: var(--ge-muted);
+}
+.ge-dark .ai-panel-close:hover {
+  color: var(--ge-ink);
+}
+.ge-dark .ai-msg,
+.ge-dark .ai-msg-assistant {
+  color: var(--ge-ink);
+}
+.ge-dark .ai-msg-user {
+  background: rgba(56, 189, 248, 0.12);
+}
+.ge-dark .ai-msg-tool summary {
+  color: var(--ge-muted);
+}
+.ge-dark .ai-tool-calls {
+  color: var(--ge-muted);
+}
+.ge-dark .ai-panel-empty,
+.ge-dark .ai-panel-hint,
+.ge-dark .ai-busy {
+  color: var(--ge-muted);
+}
+.ge-dark .ai-panel-error {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(248, 113, 113, 0.08);
+  color: var(--ge-bad);
+}
+.ge-dark .ai-panel-error-close {
+  color: var(--ge-bad);
+}
+.ge-dark .ai-panel-form {
+  border-top-color: var(--ge-line);
+}
+.ge-dark .ai-panel-form textarea {
+  background: var(--ge-panel-2);
+  border-color: var(--ge-line);
+  color: var(--ge-ink);
+}
+.ge-dark .ai-panel-form button {
+  background: var(--ge-panel-2);
+  border: 1px solid var(--ge-line);
+  color: var(--ge-ink);
+  border-radius: 7px;
+}
+.ge-dark .ai-panel-form button:hover {
+  border-color: var(--ge-accent);
+  color: var(--ge-accent);
+}
+.ge-dark .ai-panel-form button.primary {
+  background: var(--ge-accent);
+  border-color: var(--ge-accent);
+  color: #0b1622;
+  font-weight: 600;
 }

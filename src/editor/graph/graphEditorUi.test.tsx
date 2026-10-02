@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LevelDoc } from '../../engine/level'
 import { GraphEditor } from './GraphEditor'
 
@@ -16,6 +16,11 @@ beforeAll(() => {
   } as unknown as typeof ResizeObserver
   Object.defineProperty(globalThis.HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 1200 })
   Object.defineProperty(globalThis.HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 700 })
+})
+
+// dock 布局（显隐/宽度）持久化在 localStorage——用例间必须清零防串扰
+beforeEach(() => {
+  localStorage.clear()
 })
 
 const containers: HTMLElement[] = []
@@ -67,7 +72,7 @@ const baseDoc = (): LevelDoc =>
 
 describe('GraphEditor（jsdom 冒烟）', () => {
   it('渲染节点信息卡（中文摘要印卡）与节点库分组、画布对照图', () => {
-    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} />)
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
     expect(container.textContent).toContain('事件')
     expect(container.textContent).toContain('v.score = v.score + 1')
     expect(container.textContent).toContain('当 关卡开始')
@@ -84,7 +89,7 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     const onChange = vi.fn((next: LevelDoc) => {
       doc = next
     })
-    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} />)
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
     const addBtn = [...container.querySelectorAll('.glib-item')].find((b) => b.textContent?.includes('进入下一题'))!
     act(() => (addBtn as HTMLElement).click())
     expect(doc.content.logic.nodes).toHaveLength(3)
@@ -110,7 +115,7 @@ describe('GraphEditor（jsdom 冒烟）', () => {
         },
       },
     }
-    const container = renderEl(<GraphEditor doc={doc} onChange={() => {}} />)
+    const container = renderEl(<GraphEditor doc={doc} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
     // 先点 call 节点（其草稿无 value 字段）
     const callCard = [...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('sound1·play'))
     act(() => callCard!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
@@ -137,7 +142,7 @@ describe('GraphEditor（jsdom 冒烟）', () => {
         },
       },
     }
-    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} />)
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
     const card = [...container.querySelectorAll('.gnode')].find((el) => el.textContent?.includes('如果 v.score >= 10'))
     expect(card).toBeTruthy()
     act(() => card!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
@@ -167,6 +172,97 @@ function changeSelect(select: HTMLSelectElement, value: string): void {
   select.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
+describe('工作台面板化（docs/29）', () => {
+  const toggleBtn = (container: HTMLElement, label: string): HTMLButtonElement => {
+    const btn = [...container.querySelectorAll('.graph-toolbar .gtoggle')].find((b) => b.textContent?.includes(label))
+    if (!btn) throw new Error(`找不到面板切换按钮 ${label}`)
+    return btn as HTMLButtonElement
+  }
+
+  it('默认渲染五个 dock 面板与工具栏切换按钮', () => {
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    expect(container.querySelectorAll('.gdock')).toHaveLength(4) // 组件库/事件管理/变量/属性
+    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).toEqual([
+      '🧩 组件库',
+      '⚡ 事件管理',
+      '🧮 变量',
+      '⚙ 属性',
+    ])
+    expect(container.querySelectorAll('.gsplit')).toHaveLength(2) // 左栏 + 属性（AI 关闭）
+  })
+
+  it('工具栏切换：事件面板隐藏再显示；✕ 关闭后按钮取消激活，再点恢复', () => {
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    // 工具栏切换隐藏
+    act(() => toggleBtn(container, '事件').click())
+    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).not.toContain('⚡ 事件管理')
+    expect(localStorage.getItem('graph-panels')).toContain('"events":false')
+    // 再点恢复
+    act(() => toggleBtn(container, '事件').click())
+    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).toContain('⚡ 事件管理')
+    // 面板 ✕ 关闭 → 按钮取消激活；按钮再点 → 恢复
+    const dock = [...container.querySelectorAll('.gdock')].find((d) => d.textContent?.includes('事件管理'))!
+    act(() => (dock.querySelector('.gdock-close') as HTMLElement).click())
+    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).not.toContain('⚡ 事件管理')
+    expect(toggleBtn(container, '事件').classList.contains('active')).toBe(false)
+    act(() => toggleBtn(container, '事件').click())
+    expect([...container.querySelectorAll('.gdock-title')].map((e) => e.textContent)).toContain('⚡ 事件管理')
+  })
+
+  it('左栏三面板全隐时左栏与分隔条消失；显隐配置从 localStorage 恢复', () => {
+    localStorage.setItem('graph-panels', JSON.stringify({ library: false, events: false, vars: false, inspector: true }))
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    expect(container.querySelector('.graph-left')).toBeNull()
+    expect(container.querySelectorAll('.gsplit')).toHaveLength(1) // 只剩属性列的
+    // 恢复一个
+    act(() => toggleBtn(container, '组件库').click())
+    expect(container.querySelector('.graph-left')).toBeTruthy()
+  })
+
+  it('宽度持久化：localStorage 中的列宽驱动内联样式并钳制', () => {
+    localStorage.setItem('graph-panel-w-left', '260')
+    localStorage.setItem('graph-panel-w-insp', '9999')
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    const left = container.querySelector('.graph-left') as HTMLElement
+    expect(left.style.width).toBe('260px')
+    const insp = container.querySelector('.graph-right-col') as HTMLElement
+    expect(insp.style.width).toBe('460px') // 超上限被钳到 460
+  })
+
+  it('AI 入坞：aiOpen=true 时 AI 面板渲染在 .graph-editor 内（主题作用域），列宽可配；onToggleAi 由工具栏按钮触发', async () => {
+    const onToggleAi = vi.fn()
+    localStorage.setItem('graph-panel-w-ai', '400')
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen onToggleAi={onToggleAi} />)
+    // AiPanel 为 lazy：轮询等待渲染
+    await act(async () => {
+      for (let i = 0; i < 50 && !container.querySelector('.ai-panel'); i++) {
+        await new Promise((r) => setTimeout(r, 10))
+      }
+    })
+    const aiCol = container.querySelector('.graph-ai-col') as HTMLElement
+    expect(aiCol).toBeTruthy()
+    expect(aiCol.style.width).toBe('400px')
+    // 主题作用域：AI 面板是 .graph-editor.ge-dark 的后代
+    expect(container.querySelector('.graph-editor.ge-dark .ai-panel')).toBeTruthy()
+    expect(container.querySelectorAll('.gsplit')).toHaveLength(3) // 左栏 + 属性 + AI
+    act(() => toggleBtn(container, 'AI').click())
+    expect(onToggleAi).toHaveBeenCalled()
+  })
+
+  it('事件管理器：+ 处理器 / emit 落节点（受控回写）', () => {
+    let doc = baseDoc()
+    const onChange = vi.fn((next: LevelDoc) => {
+      doc = next
+    })
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
+    // 系统事件：点击「关卡开始」的 + 处理器（gem-add）
+    const addLevel = [...container.querySelectorAll('.gem-add')].find((b) => b.textContent?.includes('关卡开始'))!
+    act(() => (addLevel as HTMLElement).click())
+    expect(onChange).toHaveBeenCalled()
+    expect(doc.content.logic.nodes.some((n) => n.kind === 'on' && n.event === 'level.started' && n.id !== 'on1')).toBe(true)
+  })
+})
+
 describe('Inspector 结构化编辑（3-5 友好化）', () => {
   function docWith(extraNodes: unknown[], comps?: LevelDoc['content']['components']): LevelDoc {
     const doc = baseDoc()
@@ -186,7 +282,7 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
     const onChange = vi.fn((next: LevelDoc) => {
       doc = next
     })
-    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} />)
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
     act(() => {
       ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('当 题目载入'))!
         .dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -210,11 +306,11 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
     let root!: Root
     const rerender = (d: LevelDoc): void => {
       current = d
-      act(() => root.render(<GraphEditor doc={d} onChange={rerender} />))
+      act(() => root.render(<GraphEditor doc={d} onChange={rerender} aiOpen={false} onToggleAi={() => {}} />))
     }
     act(() => {
       root = createRoot(container)
-      root.render(<GraphEditor doc={current} onChange={rerender} />)
+      root.render(<GraphEditor doc={current} onChange={rerender} aiOpen={false} onToggleAi={() => {}} />)
     })
     act(() => {
       ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('btn1·setEnabled'))!
@@ -241,7 +337,7 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
     const onChange = vi.fn((next: LevelDoc) => {
       doc = next
     })
-    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} />)
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
     act(() => {
       ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('v.score = 0'))!
         .dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -266,11 +362,11 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
     let root!: Root
     const rerender = (d: LevelDoc): void => {
       doc = d
-      act(() => root.render(<GraphEditor doc={d} onChange={rerender} />))
+      act(() => root.render(<GraphEditor doc={d} onChange={rerender} aiOpen={false} onToggleAi={() => {}} />))
     }
     act(() => {
       root = createRoot(container)
-      root.render(<GraphEditor doc={doc} onChange={rerender} />)
+      root.render(<GraphEditor doc={doc} onChange={rerender} aiOpen={false} onToggleAi={() => {}} />)
     })
     act(() => {
       ;[...container.querySelectorAll('.gnode')].find((c) => c.textContent?.includes('v.score = v.score + 7'))!

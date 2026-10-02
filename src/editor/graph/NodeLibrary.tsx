@@ -1,5 +1,6 @@
 /**
  * 节点库（左栏）与画布右键菜单共用的菜单渲染：分组 + 搜索过滤 + 模板组置顶。
+ * 事件入口已升级为独立的事件管理器面板（EventManagerPanel，docs/29）。
  */
 import { useState } from 'react'
 import type { PaletteGroup, PaletteItem, PaletteTemplate } from './palette'
@@ -117,33 +118,6 @@ export function NodeContextMenu({
           )
         })}
       </div>
-    </div>
-  )
-}
-
-/** 事件面板（左栏）：与变量面板同级，点击即落一个 on 节点 */
-export function EventsPanel({
-  groups,
-  onPick,
-}: {
-  groups: { group: string; items: { value: string; label: string; desc?: string }[] }[]
-  onPick: (event: string) => void
-}) {
-  return (
-    <div className="gevents">
-      <div className="glib-title" title="点击事件 → 在画布落一个事件节点">
-        事件
-      </div>
-      {groups.map((g) => (
-        <div key={g.group}>
-          <div className="glib-group-head">{g.group}</div>
-          {g.items.map((i) => (
-            <button key={i.value} type="button" className="glib-item" title={i.desc ?? i.value} onClick={() => onPick(i.value)}>
-              + {i.label}
-            </button>
-          ))}
-        </div>
-      ))}
     </div>
   )
 }
