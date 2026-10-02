@@ -2901,3 +2901,150 @@ a.lib-title:hover {
   color: var(--ink);
   background: #fff;
 }
+
+/* ---------- 设置页（AI 接入） ---------- */
+
+.provider-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.provider-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+.provider-card:hover {
+  border-color: var(--accent);
+}
+.provider-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #4f46e533;
+}
+.provider-card b {
+  font-size: 15px;
+}
+.provider-card-url {
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-all;
+}
+.provider-card-meta {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.provider-card-body {
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.provider-card-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.provider-card-remove:hover {
+  color: var(--bad);
+}
+.provider-add {
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  border-style: dashed;
+  min-height: 88px;
+}
+
+.settings-form {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+}
+.settings-form h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.settings-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.settings-form input {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+.key-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.key-row input {
+  flex: 1;
+}
+.key-toggle {
+  flex: none;
+  font-size: 13px;
+  padding: 4px 10px;
+}
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.settings-test {
+  font-size: 13px;
+  word-break: break-all;
+}
+.settings-test-ok {
+  color: var(--ok);
+}
+.settings-test-bad {
+  color: var(--bad);
+}
+.settings-hint {
+  font-size: 12.5px;
+  margin: 0;
+  line-height: 1.6;
+}
+.settings-save {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}

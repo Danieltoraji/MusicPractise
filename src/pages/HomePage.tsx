@@ -110,6 +110,15 @@ export function HomePage() {
           <p>WebAudio 时钟调度节拍器 + tap 采集 + 容差判定（rhythmMatch 纯函数）。</p>
         </a>
       </div>
+
+      <h2>设置</h2>
+      <div className="cards">
+        <a className="card" href="#/settings">
+          <div className="card-kind">⚙ 设置</div>
+          <h3>AI 接入设置</h3>
+          <p>配置 DeepSeek / GLM / ChatGPT 等任意供应商的 API Key，为编辑器的 AI 辅助功能接入模型。Key 仅存本机。</p>
+        </a>
+      </div>
     </div>
   )
 }

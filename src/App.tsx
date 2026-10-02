@@ -4,6 +4,7 @@ import { HomePage } from './pages/HomePage'
 import { LevelPage } from './pages/LevelPage'
 import { LibraryPage } from './pages/LibraryPage'
 import { SeriesPage } from './pages/SeriesPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { EditorPage } from './editor/EditorPage'
 import { TunerDemo } from './pages/TunerDemo'
 import { RhythmDemo } from './pages/RhythmDemo'
@@ -75,6 +76,8 @@ export default function App() {
     page = <EditorPage key={hash} id={hash.slice('#/edit/'.length)} />
   } else if (hash === '#/library') {
     page = <LibraryPage />
+  } else if (hash === '#/settings') {
+    page = <SettingsPage />
   } else if (hash === '#/tuner') {
     page = <TunerDemo />
   } else if (hash === '#/rhythm') {
@@ -101,6 +104,9 @@ export default function App() {
           </a>
           <a href="#/rhythm" className={hash === '#/rhythm' ? 'active' : ''}>
             节奏
+          </a>
+          <a href="#/settings" className={hash === '#/settings' ? 'active' : ''} title="AI 接入等设置">
+            ⚙ 设置
           </a>
         </nav>
       </header>
