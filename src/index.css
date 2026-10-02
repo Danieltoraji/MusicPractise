@@ -3652,3 +3652,53 @@ a.lib-title:hover {
   background: rgba(56, 189, 248, 0.1);
   color: var(--ge-ink);
 }
+
+/* 空态预设指令（批次4）：li 内整行按钮 */
+.ai-preset {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 12.5px;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  margin: 3px 0;
+}
+.ai-preset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ai-panel-empty ul {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0;
+}
+
+/* 资源库 AI 新建表单（批次4） */
+.ai-new-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  background: #eef2ff;
+  border-radius: 12px;
+}
+.ai-new-form textarea {
+  flex: 1;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 13.5px;
+}
+.ai-new-form .muted {
+  flex-basis: 100%;
+  font-size: 12px;
+}

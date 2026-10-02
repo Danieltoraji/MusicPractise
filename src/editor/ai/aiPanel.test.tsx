@@ -334,3 +334,45 @@ describe('AiPanel plan 模式（批次2b）', () => {
     expect(getSession(DOC.id).checkpointAt).not.toBeNull()
   })
 })
+
+describe('AiPanel 开场自动发送与预设（批次4）', () => {
+  function setKey(): void {
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
+    const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
+    stored.profiles.deepseek.apiKey = 'sk-t'
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
+  }
+
+  it('kickoff：资源库 AI 新建 → 挂载即切 agent 并自动发送描述', async () => {
+    setKey()
+    clearSession(DOC.id)
+    const kickoffDoc = blankLevelDoc()
+    sessionStorage.setItem('ai-kickoff', JSON.stringify({ docId: kickoffDoc.id, prompt: '做一个三和弦听辨练习' }))
+    const fetchMock = vi.fn(async () => bodyResponse({ choices: [{ message: { content: '收到，开始搭建。' } }] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const c = renderEl(<AiPanel doc={kickoffDoc} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await flushUntil(() => c.textContent!.includes('收到，开始搭建'))
+    expect(getSession(kickoffDoc.id).mode).toBe('agent')
+    const body = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
+    const lastUser = [...body.messages].reverse().find((m: { role: string }) => m.role === 'user')
+    expect(lastUser.content).toContain('做一个三和弦听辨练习')
+    expect(sessionStorage.getItem('ai-kickoff')).toBeNull()
+  })
+
+  it('kickoff 未配置 Key：提示词填入输入框不丢失', () => {
+    const kickoffDoc = blankLevelDoc()
+    sessionStorage.setItem('ai-kickoff', JSON.stringify({ docId: kickoffDoc.id, prompt: '节奏训练关' }))
+    const c = renderEl(<AiPanel doc={kickoffDoc} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    expect((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement).value).toBe('节奏训练关')
+    expect(getSession(kickoffDoc.id).mode).toBe('agent')
+    expect(sessionStorage.getItem('ai-kickoff')).toBeNull()
+  })
+
+  it('空态预设：点击即填入输入框', () => {
+    setKey()
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    const preset = [...c.querySelectorAll('.ai-preset')].find((b) => b.textContent?.includes('这个关卡的逻辑')) as HTMLButtonElement
+    act(() => preset.click())
+    expect((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement).value).toContain('这个关卡的逻辑')
+  })
+})

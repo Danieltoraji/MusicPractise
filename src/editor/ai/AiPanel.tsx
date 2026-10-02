@@ -66,6 +66,26 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     if (el) el.scrollTop = el.scrollHeight
   }, [session.messages.length, session.busy, session.error])
 
+  // AI 新建关卡开场（批次4）：资源库写入的 kickoff 指令 → 本 doc 首次挂载时自动以 agent 开工
+  useEffect(() => {
+    const raw = sessionStorage.getItem('ai-kickoff')
+    if (!raw) return
+    try {
+      const kickoff = JSON.parse(raw) as { docId: string; prompt: string }
+      if (kickoff.docId !== doc.id || !kickoff.prompt.trim()) return
+      sessionStorage.removeItem('ai-kickoff')
+      patchSession(doc.id, { mode: 'agent' })
+      if (!activeProfile()) {
+        setInput(kickoff.prompt.trim()) // 未配置 Key：先填入输入框，配置后一键发送
+        return
+      }
+      void sendText(kickoff.prompt.trim())
+    } catch {
+      sessionStorage.removeItem('ai-kickoff')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.id])
+
   const send = async (): Promise<void> => {
     const text = input.trim()
     if (!text || session.busy) return
@@ -182,22 +202,33 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       <div className="ai-panel-msgs" ref={listRef}>
         {empty && !session.error && (
           <div className="ai-panel-empty">
-            <p>问点什么，比如：</p>
+            <p>问点什么（点击即填入输入框）：</p>
             <ul>
-              <li>这个关卡的逻辑是怎么走的？</li>
-              <li>帮我检查有没有悬空引用或类型问题</li>
-              <li>试运行报错了，帮我看看日志（先点「▶ 试运行」）</li>
-              {session.mode === 'agent' && (
-                <>
-                  <li>把过关条件改成 v.score &gt;= 60</li>
-                  <li>再加 3 道选择题（数据表加行 + 逻辑改判定）</li>
-                </>
-              )}
+              {(session.mode === 'agent'
+                ? [
+                    '把过关条件改成 v.score >= 60',
+                    '再加 3 道选择题（数据表加行 + 逻辑改判定）',
+                    '帮我检查并修复这个关卡的问题，然后试运行验证',
+                  ]
+                : [
+                    '这个关卡的逻辑是怎么走的？',
+                    '帮我检查有没有悬空引用或类型问题',
+                    '试运行报错了，帮我看看日志（先点「▶ 试运行」）',
+                  ]
+              ).map((q) => (
+                <li key={q}>
+                  <button type="button" className="ai-preset" disabled={session.busy} onClick={() => setInput(q)}>
+                    {q}
+                  </button>
+                </li>
+              ))}
             </ul>
             <p className="muted">
               {session.mode === 'agent'
                 ? 'agent 模式：AI 会直接修改关卡（每次写入都过校验；发送时已存检查点，可随时「↩ 回滚」）。'
-                : 'AI 可读取脚本、文档、校验结果与运行日志。先在画布/节点图/脚本页选中一个元素再提问，会自动附带上下文。'}
+                : session.mode === 'plan'
+                  ? 'plan 模式：AI 调研后产出编号执行计划，确认后一键转 agent 执行。'
+                  : 'AI 可读取脚本、文档、校验结果与运行日志。先在画布/节点图/脚本页选中一个元素再提问，会自动附带上下文。'}
             </p>
           </div>
         )}

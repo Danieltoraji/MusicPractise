@@ -81,6 +81,27 @@ export function LibraryPage() {
     }
   }
 
+  // AI 新建关卡（批次4）：建空白关卡 → 带用户描述跳编辑器，AI 面板自动以 agent 模式开工
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiFormOpen, setAiFormOpen] = useState(false)
+
+  async function handleAiNew(): Promise<void> {
+    const prompt = aiPrompt.trim()
+    if (prompt === '') {
+      setError('先描述一下想做的关卡（如：大三和弦听辨练习，10 题，每题 10 分）')
+      return
+    }
+    setError('')
+    try {
+      const doc = blankLevelDoc()
+      await putResource(doc as never)
+      sessionStorage.setItem('ai-kickoff', JSON.stringify({ docId: doc.id, prompt }))
+      window.location.hash = `#/edit/${doc.id}`
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   // meta.featured 的内置资源置顶展示（教程/示例；其余按入库时间）
   const isFeatured = (r: LibraryRecord): boolean =>
     r.builtIn === 1 && (r.doc as { meta?: { featured?: boolean } })?.meta?.featured === true
@@ -103,6 +124,14 @@ export function LibraryPage() {
         <button type="button" className="primary" onClick={() => void handleNew()}>
           ✏ 新建关卡
         </button>
+        <button
+          type="button"
+          className={`primary${aiFormOpen ? ' active' : ''}`}
+          onClick={() => setAiFormOpen((v) => !v)}
+          title="描述需求，AI 在编辑器里以 agent 模式从零搭建关卡"
+        >
+          🤖 AI 新建关卡
+        </button>
         <button type="button" className="primary" disabled={importing} onClick={() => fileInput.current?.click()}>
           {importing ? '导入中…' : '⬆ 导入（.json / .zip）'}
         </button>
@@ -124,6 +153,27 @@ export function LibraryPage() {
           ← 返回首页
         </a>
       </div>
+
+      {aiFormOpen && (
+        <div className="ai-new-form">
+          <textarea
+            rows={2}
+            placeholder="描述想做的关卡，如：大三和弦听辨练习，10 题，每题 10 分，答错播放低音提示…"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                void handleAiNew()
+              }
+            }}
+          />
+          <button type="button" className="primary" onClick={() => void handleAiNew()}>
+            创建并让 AI 开工
+          </button>
+          <span className="muted">将创建空白关卡并进入编辑器，AI 助手自动以 agent 模式按描述搭建（可随时回滚）。</span>
+        </div>
+      )}
 
       {error && <p className="tone-error">{error}</p>}
       {report && (
