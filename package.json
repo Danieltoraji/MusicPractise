@@ -17,6 +17,7 @@
     "dexie": "^4.4.6",
     "dexie-react-hooks": "^4.4.0",
     "fflate": "^0.8.3",
+    "html-to-image": "^1.11.13",
     "pitchy": "^4.1.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

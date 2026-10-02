@@ -3702,3 +3702,240 @@ a.lib-title:hover {
   flex-basis: 100%;
   font-size: 12px;
 }
+
+/* ---------- 调试模式（docs/30）：断点圆点 / 暂停高亮 / 调试面板 ---------- */
+
+/* 节点卡断点圆点（卡左缘外挂；空心=未设，实心红=已设） */
+.gnode {
+  --bp-size: 12px;
+}
+.gnode-bp {
+  position: absolute;
+  left: calc(-1 * var(--bp-size) / 2 - 2px);
+  top: calc(50% - var(--bp-size) / 2);
+  width: var(--bp-size);
+  height: var(--bp-size);
+  border-radius: 50%;
+  border: 1.5px solid var(--bad);
+  background: var(--panel);
+  cursor: pointer;
+  padding: 0;
+  z-index: 5;
+  opacity: 0.45;
+}
+.gnode:hover .gnode-bp {
+  opacity: 1;
+}
+.gnode-bp.on {
+  background: var(--bad);
+  opacity: 1;
+  box-shadow: 0 0 6px rgba(220, 38, 38, 0.6);
+}
+/* 调试暂停中的节点：琥珀描边呼吸 */
+.gnode.is-paused {
+  outline: 2px solid var(--warn);
+  outline-offset: 2px;
+  animation: gdb-pulse 1.2s ease-in-out infinite;
+}
+@keyframes gdb-pulse {
+  0%,
+  100% {
+    outline-color: rgba(217, 119, 6, 0.9);
+  }
+  50% {
+    outline-color: rgba(217, 119, 6, 0.25);
+  }
+}
+
+/* 调试面板 */
+.gdb {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+  min-height: 0;
+}
+.gdb-start {
+  width: 100%;
+}
+.gdb-loaderr {
+  color: var(--bad);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.gdb-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+.gdb-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.gdb-state {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gdb-state-paused {
+  color: var(--warn);
+}
+.gdb-focus {
+  font-size: 12px;
+  padding: 0;
+}
+.gdb-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+}
+.gdb-var-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.gdb-var-name {
+  flex: none;
+  width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.gdb-var-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: Consolas, monospace;
+  font-size: 11.5px;
+}
+.gdb-payload {
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: Consolas, monospace;
+  font-size: 11.5px;
+}
+.gdb select {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.gdb-bp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gdb-bp-row .gnode-bp {
+  position: static;
+  flex: none;
+  opacity: 1;
+}
+.gdb-bp-del {
+  color: var(--muted);
+}
+.gdb-bp-del:hover {
+  color: var(--bad);
+}
+.gdb-log-sec {
+  flex: 1;
+  min-height: 90px;
+}
+.gdb-log {
+  flex: 1;
+  min-height: 60px;
+  overflow: auto;
+  background: #14181f;
+  color: #d7dce5;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.gdb-log-row {
+  display: flex;
+  gap: 6px;
+  word-break: break-all;
+}
+.gdb-log-row.error .gdb-log-kind,
+.gdb-log-row.error .gdb-log-text {
+  color: #f87171;
+}
+.gdb-log-row.command .gdb-log-kind {
+  color: #6b7280;
+}
+
+/* 调试面板深色（ge-dark） */
+.ge-dark .gdb button:not(.primary):not(.danger):not(.gnode-bp) {
+  background: var(--ge-panel-2);
+  border: 1px solid var(--ge-line);
+  color: var(--ge-ink);
+  border-radius: 7px;
+}
+.ge-dark .gdb button:not(.primary):not(.danger):not(.gnode-bp):hover:not(:disabled) {
+  border-color: var(--ge-accent);
+  color: var(--ge-accent);
+}
+.ge-dark .gdb button.danger {
+  color: var(--ge-bad);
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.06);
+}
+.ge-dark .gdb-var-row input,
+.ge-dark .gdb-payload,
+.ge-dark .gdb select {
+  background: var(--ge-panel-2);
+  border-color: var(--ge-line);
+  color: var(--ge-ink);
+}
+.ge-dark .gdb-var-name {
+  color: var(--ge-muted);
+}
+.ge-dark .gdb-preset,
+.ge-dark .ai-preset {
+  background: var(--ge-panel-2);
+  border-color: var(--ge-line);
+  color: var(--ge-ink);
+}
+.ge-dark .gdb-sec > .glib-group-head {
+  color: var(--ge-muted);
+}
+
+/* AI 高亮（批次5）：highlight_nodes 指认的节点 */
+.gnode.is-aihl {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 14px rgba(79, 70, 229, 0.55);
+}
+.ge-dark .gnode.is-aihl {
+  outline-color: var(--ge-accent);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+}
+
+/* AI 消息截图 */
+.ai-msg-images {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-msg-images img {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+}

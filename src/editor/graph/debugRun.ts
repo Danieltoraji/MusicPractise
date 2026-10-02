@@ -244,6 +244,12 @@ export function toggleDebugBreakpoint(nodeId: string): void {
   commit({ breakpoints: [...controller.breakpoints] })
 }
 
+/** 全量替换断点集（AI debug_breakpoints 工具用） */
+export function setDebugBreakpoints(ids: string[]): void {
+  controller.breakpoints = new Set(ids)
+  commit({ breakpoints: [...controller.breakpoints] })
+}
+
 export function clearDebugBreakpoints(): void {
   controller.breakpoints.clear()
   commit({ breakpoints: [] })

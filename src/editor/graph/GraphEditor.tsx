@@ -49,6 +49,7 @@ import { NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
 import { DockPanel } from './DockPanel'
 import { DebugPanel } from './DebugPanel'
 import { EventManagerPanel } from './EventManagerPanel'
+import { getAiHighlight, subscribeAiHighlight } from './aiHighlight'
 import { getDebugSnapshot, subscribeDebugRun, toggleDebugBreakpoint } from './debugRun'
 import { NodeInspector } from './NodeInspector'
 import { VariablesPanel } from './VariablesPanel'
@@ -376,6 +377,13 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
   // 调试状态（docs/30）：断点印在节点卡圆点、暂停节点高亮
   const debugSnap = useSyncExternalStore(subscribeDebugRun, getDebugSnapshot)
   const breakpointSet = useMemo(() => new Set(debugSnap.breakpoints), [debugSnap.breakpoints])
+  // AI 高亮（批次5）：highlight_nodes 工具指认的节点发光 + 画布自动定位
+  const aiHl = useSyncExternalStore(subscribeAiHighlight, getAiHighlight)
+  const aiHlSet = useMemo(() => new Set(aiHl.ids), [aiHl.ids])
+  useEffect(() => {
+    if (aiHl.ids.length > 0) focusNode(aiHl.ids[0])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiHl.ids.join(',')])
   const templates = useMemo(() => buildTemplates(doc), [doc])
   const compsInfo = useMemo(
     () => doc.content.components.map((c) => ({ id: c.id, name: c.name, type: c.type })),
@@ -478,7 +486,8 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
       const related = relatedIds.has(node.id)
       const bp = breakpointSet.has(node.id)
       const paused = debugSnap.pausedAt === node.id
-      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}|${theme}|${summaryMode}|${bp ? 'b' : ''}|${paused ? 'p' : ''}`
+      const aihl = aiHlSet.has(node.id)
+      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}|${theme}|${summaryMode}|${bp ? 'b' : ''}|${paused ? 'p' : ''}|${aihl ? 'a' : ''}`
       const prev = prevMap.get(node.id)
       if (prev && prevSig.get(node.id) === signature) {
         nextMap.set(node.id, prev)
@@ -489,7 +498,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         id: node.id,
         type: 'graphCard',
         position,
-        data: { node, errors, comps: compsInfo, related, theme, summaryMode, bp, paused, onToggleBp: toggleDebugBreakpoint },
+        data: { node, errors, comps: compsInfo, related, theme, summaryMode, bp, paused, aihl, onToggleBp: toggleDebugBreakpoint },
         width: NODE_W,
         height: NODE_H,
         // 预置 measured：节点尺寸固定，首帧即可拖拽（否则 RF 拖拽检查报 #015）
@@ -501,7 +510,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     })
     nodeCacheRef.current = { map: nextMap, sig: nextSig }
     return list
-  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, compsSig, relatedIds, breakpointSet, debugSnap.pausedAt])
+  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, compsSig, relatedIds, breakpointSet, debugSnap.pausedAt, aiHlSet])
 
   const rfEdges: Edge[] = useMemo(
     () =>

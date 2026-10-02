@@ -132,3 +132,57 @@ describe('runAgentTurn', () => {
     await first
   })
 })
+
+describe('agent 图像消息（批次5）', () => {
+  it('工具 emitImages → 带图 user 消息追加（面板与多模态模型可见）', async () => {
+    clearSession('res_agent_img')
+    let call = 0
+    const fn = vi.fn(async () => {
+      let payload: unknown
+      if (call === 0) {
+        payload = {
+          choices: [
+            {
+              message: {
+                content: '',
+                tool_calls: [{ id: 's1', type: 'function', function: { name: 'shot_tool', arguments: '{}' } }],
+              },
+            },
+          ],
+        }
+      } else payload = { choices: [{ message: { content: '我看过截图了。' } }] }
+      call += 1
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fn)
+
+    const shotTool: AiTool = {
+      name: 'shot_tool',
+      description: '',
+      parameters: { type: 'object', properties: {} },
+      exec: (_a, c) => {
+        c.emitImages?.(['data:image/png;base64,AAA'])
+        return '✓ 截图已捕获'
+      },
+    }
+    await runAgentTurn({
+      docId: 'res_agent_img',
+      profile,
+      systemPrompt: 'S',
+      userText: '截个图',
+      tools: [shotTool],
+      ctx: { getDoc: () => ({}) as LevelDoc, applyDoc: () => {}, levelId: 'res_agent_img' },
+    })
+    const s = getSession('res_agent_img')
+    // 消息序列：user → assistant(tool_calls) → tool → user(带图) → assistant(分析)
+    expect(s.messages).toHaveLength(5)
+    expect(s.messages[3]).toMatchObject({ role: 'user', images: ['data:image/png;base64,AAA'] })
+    expect(s.messages[4]).toMatchObject({ role: 'assistant', content: '我看过截图了。' })
+    // 序列化：带图消息 content 为 multimodal 数组
+    const body = JSON.parse(((fn.mock.calls[1] as unknown[])[1] as { body: string }).body)
+    const imgMsg = body.messages.find((m: { content: unknown }) => Array.isArray(m.content))
+    expect(imgMsg.content[0]).toMatchObject({ type: 'text' })
+    expect(imgMsg.content[1]).toMatchObject({ type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } })
+    clearSession('res_agent_img')
+  })
+})

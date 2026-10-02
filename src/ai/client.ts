@@ -15,6 +15,8 @@ export interface ChatMessage {
   toolCallId?: string
   /** role='tool' 时对应的工具名（部分供应商要求） */
   name?: string
+  /** 附带图像（data URL，如 AI 截图）；序列化为 multimodal content 数组 */
+  images?: string[]
 }
 
 /** 工具声明（OpenAI function calling 格式，主流供应商兼容） */
@@ -119,9 +121,17 @@ async function raiseForResponse(res: Response): Promise<void> {
   throw new AiClientError('bad-request', `请求被拒绝（${res.status}）：请检查模型名与 API 地址。${detail}`, res.status)
 }
 
-/** 把会话消息序列化成 OpenAI 兼容请求体（tool 角色附 tool_call_id） */
+/** 把会话消息序列化成 OpenAI 兼容请求体（tool 角色附 tool_call_id；带图消息走 multimodal content 数组） */
 function serializeMessage(m: ChatMessage): Record<string, unknown> {
-  const out: Record<string, unknown> = { role: m.role, content: m.content }
+  const out: Record<string, unknown> = { role: m.role }
+  if (m.images && m.images.length > 0) {
+    out.content = [
+      { type: 'text', text: m.content },
+      ...m.images.map((url) => ({ type: 'image_url', image_url: { url } })),
+    ]
+  } else {
+    out.content = m.content
+  }
   if (m.toolCalls) out.tool_calls = m.toolCalls
   if (m.toolCallId) out.tool_call_id = m.toolCallId
   if (m.name) out.name = m.name

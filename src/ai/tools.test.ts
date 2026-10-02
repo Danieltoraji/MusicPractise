@@ -139,3 +139,26 @@ describe('AI 只读工具', () => {
     expect(out).toContain('[错误](节点 c1)[button1.clicked] boom')
   })
 })
+
+describe('highlight_nodes（批次5）', () => {
+  it('高亮合法节点 / 未知 id 拒绝 / 空数组清除', async () => {
+    const { clearAiHighlight, getAiHighlight } = await import('../editor/graph/aiHighlight')
+    const doc = blankLevelDoc()
+    doc.content.components.push({ id: 'b1', type: 'button' } as never)
+    doc.content.logic.nodes.push({ id: 'hl1', kind: 'comment', text: 'x' } as never)
+    const ctx = { getDoc: () => doc, applyDoc: () => {}, levelId: doc.id } as ToolContext
+    const hl = READONLY_TOOLS.find((t) => t.name === 'highlight_nodes')!
+    clearAiHighlight()
+
+    const ok = (await hl.exec({ nodeIds: ['hl1'], note: '看这里' }, ctx)) as string
+    expect(ok).toContain('hl1')
+    expect(getAiHighlight()).toEqual({ ids: ['hl1'], note: '看这里' })
+
+    const bad = (await hl.exec({ nodeIds: ['ghost'] }, ctx)) as string
+    expect(bad).toContain('都不存在')
+
+    const cleared = (await hl.exec({ nodeIds: [] }, ctx)) as string
+    expect(cleared).toContain('已清除')
+    expect(getAiHighlight().ids).toEqual([])
+  })
+})

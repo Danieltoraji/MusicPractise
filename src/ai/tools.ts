@@ -13,6 +13,7 @@ import { readRunLog } from '../runtime/runLog'
 import { generateScript } from '../engine/script'
 import { describeGNode } from './prompts'
 import { formatRunReport, runLevelHeadless, type RunEventStep } from './runHarness'
+import { setAiHighlight } from '../editor/graph/aiHighlight'
 
 export interface ToolContext {
   /** 读最新 doc（经 ref 转发，跨轮次看到其它工具/用户的修改） */
@@ -21,6 +22,10 @@ export interface ToolContext {
   applyDoc(next: LevelDoc): void
   /** 运行日志按关卡 id 存取 */
   levelId: string
+  /** 截取工作台屏幕（返回 PNG data URL；不支持时返回 null）——AI 截图工具用 */
+  captureScreenshot?(): Promise<string | null>
+  /** 向对话追加图像（多模态模型可查看、创作者可见）——AI 截图后调用 */
+  emitImages?(images: string[]): void
 }
 
 export interface AiTool {
@@ -211,4 +216,37 @@ const runLevelTool: AiTool = {
 }
 
 /** 只读工具集：ask 模式（以及后续 plan 模式）可用 */
-export const READONLY_TOOLS: AiTool[] = [readScriptTool, readDocTool, readJsonTool, lintTool, readRunLogTool, runLevelTool]
+/** 节点高亮（批次5）：AI 与创作者的交互——指认正在讨论的节点（发光标记+画布自动定位） */
+const highlightNodesTool: AiTool = {
+  name: 'highlight_nodes',
+  description:
+    '在节点图上高亮指定节点（创作者可见的发光标记，画布自动定位到第一个节点）——用于指认你正在讨论/修改的节点。' +
+    '再次调用即替换高亮；nodeIds 传空数组清除全部高亮',
+  parameters: {
+    type: 'object',
+    properties: {
+      nodeIds: { type: 'array', items: { type: 'string' }, description: '要高亮的节点 id（先 read_script 确认）' },
+      note: { type: 'string', description: '一句话说明为什么高亮（显示给创作者）' },
+    },
+    required: ['nodeIds'],
+  },
+  exec: (args, ctx) => {
+    const ids = Array.isArray(args.nodeIds) ? (args.nodeIds as unknown[]).map((x) => str0(x)).filter((x) => x !== '') : []
+    const known = new Set(ctx.getDoc().content.logic.nodes.map((n) => n.id))
+    const valid = ids.filter((i) => known.has(i))
+    const unknown = ids.filter((i) => !known.has(i))
+    if (ids.length > 0 && valid.length === 0) {
+      return `高亮失败：节点 id 都不存在。可用节点：${[...known].join('、')}`
+    }
+    const note = str0(args.note)
+    setAiHighlight(valid, note || null)
+    return `✓ 已高亮 ${valid.join('、') || '（已清除）'}${unknown.length > 0 ? `（未知 id 已忽略：${unknown.join('、')}）` : ''}${
+      note ? ` —— ${note}` : ''
+    }`
+  },
+}
+function str0(v: unknown): string {
+  return typeof v === 'string' ? v : ''
+}
+
+export const READONLY_TOOLS: AiTool[] = [readScriptTool, readDocTool, readJsonTool, lintTool, readRunLogTool, runLevelTool, highlightNodesTool]

@@ -45,6 +45,12 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     const maxTurns = opts.maxTurns ?? 6
     const messages: ChatMessage[] = [{ role: 'system', content: opts.systemPrompt }, ...getSession(opts.docId).messages]
     const specs = toSpecs(opts.tools)
+    // 工具产生的图像（如 debug_screenshot）缓冲；一轮工具结果消费完后以带图 user 消息发给多模态模型
+    const imageBuffer: string[] = []
+    const ctx: ToolContext = {
+      ...opts.ctx,
+      emitImages: (imgs) => imageBuffer.push(...imgs),
+    }
 
     for (let turn = 0; turn < maxTurns; turn++) {
       const res = await chatCompleteRaw(opts.profile, messages, { tools: specs, signal: ctrl.signal })
@@ -60,12 +66,24 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
         } else {
           try {
             const args = call.function.arguments.trim() ? (JSON.parse(call.function.arguments) as Record<string, unknown>) : {}
-            result = await tool.exec(args, opts.ctx)
+            result = await tool.exec(args, ctx)
           } catch (err) {
             result = `工具执行出错：${err instanceof Error ? err.message : String(err)}`
           }
         }
         const msg: ChatMessage = { role: 'tool', toolCallId: call.id, name: call.function.name, content: result }
+        messages.push(msg)
+        appendMessage(opts.docId, msg)
+      }
+
+      // 截图等工具产出的图像：以带图 user 消息附给多模态模型（面板同步展示）
+      if (imageBuffer.length > 0) {
+        const msg: ChatMessage = {
+          role: 'user',
+          content: '（以下是刚才工具截取的屏幕截图，请结合它继续分析）',
+          images: [...imageBuffer],
+        }
+        imageBuffer.length = 0
         messages.push(msg)
         appendMessage(opts.docId, msg)
       }

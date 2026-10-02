@@ -7,6 +7,7 @@
  * 选中上下文由挂载方传入（graph：节点 id；script：选区；canvas：组件 id）。
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { toPng } from 'html-to-image'
 import { runAgentTurn, stopAgent } from '../../ai/agent'
 import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
 import type { AiProfileConfig, ChatMessage } from '../../ai/client'
@@ -14,6 +15,7 @@ import { buildEditorSystemPrompt, formatSelectionContext, type AiSelectionContex
 import { appendMessage, clearSession, getSession, patchSession, subscribeAiSession, type AiMode } from '../../ai/session'
 import { loadAiSettings } from '../../ai/settings'
 import { READONLY_TOOLS } from '../../ai/tools'
+import { DEBUG_TOOLS } from '../../ai/tools-debug'
 import { WRITE_TOOLS } from '../../ai/tools-write'
 import type { LevelDoc } from '../../engine/level'
 
@@ -111,8 +113,31 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       profile: prof,
       systemPrompt: buildEditorSystemPrompt(docRef.current, mode),
       userText,
-      tools: mode === 'agent' ? [...READONLY_TOOLS, ...WRITE_TOOLS] : READONLY_TOOLS,
-      ctx: { getDoc: () => docRef.current, applyDoc: (next) => applyRef.current(next), levelId: doc.id },
+      tools:
+        mode === 'agent'
+          ? [...READONLY_TOOLS, ...WRITE_TOOLS, ...DEBUG_TOOLS]
+          : READONLY_TOOLS,
+      ctx: {
+        getDoc: () => docRef.current,
+        applyDoc: (next) => applyRef.current(next),
+        levelId: doc.id,
+        // AI 截图：抓节点卡层（纯 HTML，避开 React Flow SVG/背景的已知捕获问题）；8s 竞速兜底
+        captureScreenshot: async () => {
+          const el =
+            document.querySelector('.graph-editor .react-flow__nodes') ??
+            document.querySelector('.graph-editor .react-flow')
+          if (!el) return null
+          try {
+            const capture = toPng(el as HTMLElement, { backgroundColor: '#14181f', pixelRatio: 1.5, skipFonts: true })
+            return await Promise.race([
+              capture,
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+            ])
+          } catch {
+            return null
+          }
+        },
+      },
       maxTurns: mode === 'agent' ? 8 : 6,
     })
   }
@@ -294,10 +319,19 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
 }
 
 function renderMsg(m: ChatMessage, i: number): React.ReactNode {
+  const images =
+    m.images && m.images.length > 0 ? (
+      <div className="ai-msg-images">
+        {m.images.map((src, k) => (
+          <img key={k} src={src} alt={`截图 ${k + 1}`} />
+        ))}
+      </div>
+    ) : null
   if (m.role === 'user') {
     return (
       <div key={i} className="ai-msg ai-msg-user">
         {m.content}
+        {images}
       </div>
     )
   }
@@ -312,8 +346,9 @@ function renderMsg(m: ChatMessage, i: number): React.ReactNode {
     )
   }
   return (
-    <details key={i} className="ai-msg ai-msg-tool">
+    <details key={i} className="ai-msg ai-msg-tool" open={!!images}>
       <summary>⚙ {m.name ?? '工具'} 结果</summary>
+      {images}
       <pre>{m.content}</pre>
     </details>
   )

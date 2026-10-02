@@ -27,6 +27,8 @@ export interface GraphCardData extends Record<string, unknown> {
   bp?: boolean
   /** 调试暂停中：该节点是当前挂起点 */
   paused?: boolean
+  /** AI 高亮（批次5）：highlight_nodes 工具指认的节点 */
+  aihl?: boolean
   /** 断点圆点点击（stopPropagation 后回调） */
   onToggleBp?: (id: string) => void
 }
@@ -64,8 +66,8 @@ function GraphCard({ data, selected }: NodeProps<GraphCardNode>) {
   const dual = node.kind === 'branch' || node.kind === 'loop'
   return (
     <div
-      className={`gnode ${selected ? 'is-selected' : ''} ${errors.length ? 'has-error' : ''} ${data.related ? 'is-related' : ''} ${data.paused ? 'is-paused' : ''}`}
-      title={errors.length ? errors.join('\n') : undefined}
+      className={`gnode ${selected ? 'is-selected' : ''} ${errors.length ? 'has-error' : ''} ${data.related ? 'is-related' : ''} ${data.paused ? 'is-paused' : ''} ${data.aihl ? 'is-aihl' : ''}`}
+      title={errors.length ? errors.join('\n') : data.aihl ? 'AI 高亮' : undefined}
     >
       {data.onToggleBp && (
         <button
