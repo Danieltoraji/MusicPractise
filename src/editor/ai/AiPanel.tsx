@@ -147,6 +147,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         },
       },
       maxTurns: mode === 'agent' ? 8 : 6,
+      stream: true,
     })
   }
 
@@ -447,6 +448,7 @@ function renderMsg(m: ChatMessage, i: number): React.ReactNode {
           <div className="ai-tool-calls">⚙ 调用工具：{m.toolCalls.map((c) => c.function.name).join('、')}</div>
         )}
         {m.content && <span>{m.content}</span>}
+        {m.streaming && <span className="ai-cursor" aria-hidden />}
       </div>
     )
   }

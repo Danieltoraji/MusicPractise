@@ -64,6 +64,51 @@ export function appendMessage(docId: string, msg: ChatMessage): void {
   setSession(docId, { ...s, messages: [...s.messages, msg] })
 }
 
+// ---------------------------------------------------------------------------
+// 流式更新（批次6a）：delta 高频到达，按 40ms 合帧 commit，防面板逐 token 重渲染
+// ---------------------------------------------------------------------------
+
+const pendingDelta = new Map<string, string>()
+let lastFlushAt = 0
+
+function replaceLast(docId: string, patch: Partial<ChatMessage>): void {
+  const s = getSession(docId)
+  if (s.messages.length === 0) return
+  const messages = [...s.messages]
+  messages[messages.length - 1] = { ...messages[messages.length - 1], ...patch }
+  setSession(docId, { ...s, messages })
+}
+
+/** 追加一条流式中的空 assistant 消息（streaming 标记 → 面板渲染光标） */
+export function beginStreamingMessage(docId: string): void {
+  appendMessage(docId, { role: 'assistant', content: '', streaming: true })
+}
+
+/** 流式追加 delta 到最后一条 assistant 消息（40ms 合帧）；finalize=true 立即刷出全部缓冲 */
+export function streamAppendToLast(docId: string, delta: string, finalize = false): void {
+  pendingDelta.set(docId, (pendingDelta.get(docId) ?? '') + delta)
+  const flushNow = finalize || Date.now() - lastFlushAt >= 40
+  const pending = pendingDelta.get(docId) ?? ''
+  if (pending === '') return
+  if (!flushNow) return
+  lastFlushAt = Date.now()
+  pendingDelta.delete(docId)
+  const s = getSession(docId)
+  const last = s.messages.at(-1)
+  if (last?.role !== 'assistant' || last.streaming !== true) return
+  replaceLast(docId, { content: last.content + pending })
+}
+
+/** 流式定稿：用最终消息替换流式占位（吞掉未刷缓冲，清除 streaming 标记） */
+export function replaceLastMessage(docId: string, msg: ChatMessage): void {
+  pendingDelta.delete(docId)
+  const s = getSession(docId)
+  if (s.messages.length === 0) return
+  const messages = [...s.messages]
+  messages[messages.length - 1] = msg
+  setSession(docId, { ...s, messages })
+}
+
 export function clearSession(docId: string): void {
   setSession(docId, { messages: [], busy: false, error: null, mode: 'ask', checkpointAt: null, plan: null })
 }

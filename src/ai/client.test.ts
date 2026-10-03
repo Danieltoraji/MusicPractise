@@ -179,3 +179,61 @@ describe('chatCompleteRaw（function calling）', () => {
     await expect(chatComplete(profile, [])).rejects.toMatchObject({ kind: 'response' })
   })
 })
+
+describe('流式输出（批次6a）', () => {
+  function sseResponse(chunks: Array<Record<string, unknown> | 'DONE'>): Response {
+    const encoder = new TextEncoder()
+    const lines = chunks.map((c) => (c === 'DONE' ? 'data: [DONE]\n\n' : `data: ${JSON.stringify({ choices: [{ delta: c }] })}\n\n`))
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const l of lines) controller.enqueue(encoder.encode(l))
+        controller.close()
+      },
+    })
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+
+  it('纯文本流：delta 回调逐段回调，返回完整 content', async () => {
+    const deltas: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse([{ content: '你' }, { content: '好' }, { content: '呀' }, 'DONE']),
+      ),
+    )
+    const res = await chatCompleteRaw(profile, [{ role: 'user', content: 'hi' }], {
+      stream: true,
+      onDelta: (d) => deltas.push(d),
+    })
+    expect(deltas).toEqual(['你', '好', '呀'])
+    expect(res).toEqual({ content: '你好呀' })
+  })
+
+  it('tool_calls 增量拼接：arguments 分片合并为完整调用', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse([
+          { tool_calls: [{ index: 0, id: 'c9', function: { name: 'write_', arguments: '{"scr' } }] },
+          { tool_calls: [{ index: 0, function: { name: 'ipt', arguments: 'ipt": "x"}' } }] },
+          'DONE',
+        ]),
+      ),
+    )
+    const res = await chatCompleteRaw(profile, [], { stream: true })
+    expect(res.toolCalls).toHaveLength(1)
+    expect(res.toolCalls![0]).toEqual({
+      id: 'c9',
+      type: 'function',
+      function: { name: 'write_ipt', arguments: '{"script": "x"}' },
+    })
+  })
+
+  it('stream 请求体带 stream:true；空流 → response 错误', async () => {
+    const fn = vi.fn(async () => sseResponse(['DONE']))
+    vi.stubGlobal('fetch', fn)
+    await expect(chatCompleteRaw(profile, [], { stream: true })).rejects.toMatchObject({ kind: 'response' })
+    const body = JSON.parse(((fn.mock.calls[0] as unknown[])[1] as { body: string }).body)
+    expect(body.stream).toBe(true)
+  })
+})

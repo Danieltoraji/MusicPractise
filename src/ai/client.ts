@@ -17,6 +17,8 @@ export interface ChatMessage {
   name?: string
   /** 附带图像（data URL，如 AI 截图）；序列化为 multimodal content 数组 */
   images?: string[]
+  /** 流式中的 assistant 消息（面板渲染光标态；定稿后清除） */
+  streaming?: boolean
 }
 
 /** 工具声明（OpenAI function calling 格式，主流供应商兼容） */
@@ -60,6 +62,9 @@ export interface ChatCompleteOptions {
   maxTokens?: number
   /** function calling 工具声明；agent 循环使用 */
   tools?: AiToolSpec[]
+  /** 流式输出：SSE 增量回调（content 增量文本）；最终仍返回完整结果 */
+  stream?: boolean
+  onDelta?: (delta: string) => void
 }
 
 function assertConfig(profile: AiProfileConfig): void {
@@ -170,7 +175,7 @@ export async function chatCompleteRaw(
         body: JSON.stringify({
           model: profile.model.trim(),
           messages: messages.map(serializeMessage),
-          stream: false,
+          stream: opts.stream === true,
           ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
           ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
           ...(opts.tools && opts.tools.length > 0 ? { tools: opts.tools } : {}),
@@ -188,6 +193,10 @@ export async function chatCompleteRaw(
     }
     await raiseForResponse(res)
 
+    if (opts.stream === true) {
+      return await consumeSseStream(res, opts)
+    }
+
     const data = (await res.json().catch(() => null)) as ChatResponseShape | null
     const message = data?.choices?.[0]?.message
     const content = typeof message?.content === 'string' ? message.content : ''
@@ -200,6 +209,80 @@ export async function chatCompleteRaw(
     clearTimeout(timer)
     opts.signal?.removeEventListener('abort', forward)
   }
+}
+
+interface SseDelta {
+  content?: string | null
+  tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }>
+}
+
+/**
+ * 解析 OpenAI 兼容 SSE 流（data: {...} 行 / data: [DONE] 终止）：
+ * 增量 content 经 onDelta 回调，tool_calls 按 index 增量拼接（id/name 首块、arguments 追加），
+ * 最终返回与非流式一致的完整结果。
+ */
+async function consumeSseStream(
+  res: Response,
+  opts: { onDelta?: (delta: string) => void },
+): Promise<ChatCompletionResult> {
+  if (!res.body) throw new AiClientError('response', '供应商流式响应没有内容体')
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let content = ''
+  const toolAcc = new Map<number, { id: string; function: { name: string; arguments: string } }>()
+
+  const handleChunk = (chunkText: string): void => {
+    for (const rawLine of chunkText.split('\n')) {
+      const line = rawLine.trim()
+      if (line === '' || !line.startsWith('data:')) continue
+      const data = line.slice(5).trim()
+      if (data === '[DONE]') continue
+      let parsed: { choices?: Array<{ delta?: SseDelta }> }
+      try {
+        parsed = JSON.parse(data)
+      } catch {
+        continue // 心跳/注释等非 JSON 行
+      }
+      const delta = parsed.choices?.[0]?.delta
+      if (!delta) continue
+      if (typeof delta.content === 'string' && delta.content !== '') {
+        content += delta.content
+        opts.onDelta?.(delta.content)
+      }
+      for (const tc of delta.tool_calls ?? []) {
+        const idx = typeof tc.index === 'number' ? tc.index : 0
+        const acc = toolAcc.get(idx) ?? { id: '', function: { name: '', arguments: '' } }
+        if (typeof tc.id === 'string') acc.id = tc.id
+        if (typeof tc.function?.name === 'string') acc.function.name += tc.function.name
+        if (typeof tc.function?.arguments === 'string') acc.function.arguments += tc.function.arguments
+        toolAcc.set(idx, acc)
+      }
+    }
+  }
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const nl = buffer.lastIndexOf('\n')
+      if (nl === -1) continue
+      handleChunk(buffer.slice(0, nl + 1))
+      buffer = buffer.slice(nl + 1)
+    }
+    handleChunk(buffer + '\n')
+  } finally {
+    reader.releaseLock()
+  }
+
+  const toolCalls: ToolCall[] = [...toolAcc.values()]
+    .filter((t) => t.id !== '' && t.function.name !== '')
+    .map((t) => ({ id: t.id, type: 'function' as const, function: t.function }))
+  if (content === '' && toolCalls.length === 0) {
+    throw new AiClientError('response', '供应商流式响应没有产出内容')
+  }
+  return { content, toolCalls: toolCalls.length > 0 ? toolCalls : undefined }
 }
 
 export async function chatComplete(

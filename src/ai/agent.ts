@@ -5,7 +5,7 @@
  */
 
 import { AiClientError, chatCompleteRaw, type AiProfileConfig, type AiToolSpec, type ChatMessage } from './client'
-import { appendMessage, getSession, patchSession } from './session'
+import { appendMessage, beginStreamingMessage, getSession, patchSession, replaceLastMessage, streamAppendToLast } from './session'
 import type { AiTool, ToolContext } from './tools'
 
 const controllers = new Map<string, AbortController>()
@@ -25,6 +25,8 @@ export interface AgentTurnOptions {
   ctx: ToolContext
   /** 单次提问最多工具调用轮数，防失控 */
   maxTurns?: number
+  /** 流式输出：chat 走 SSE，assistant 消息在会话中打字机式增长（批次6a） */
+  stream?: boolean
 }
 
 function toSpecs(tools: AiTool[]): AiToolSpec[] {
@@ -53,9 +55,18 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     }
 
     for (let turn = 0; turn < maxTurns; turn++) {
-      const res = await chatCompleteRaw(opts.profile, messages, { tools: specs, signal: ctrl.signal })
-      messages.push({ role: 'assistant', content: res.content, toolCalls: res.toolCalls })
-      appendMessage(opts.docId, { role: 'assistant', content: res.content, toolCalls: res.toolCalls })
+      // 流式：先落一条 streaming 占位消息，delta 打字机填充，完成后用最终消息替换
+      if (opts.stream) beginStreamingMessage(opts.docId)
+      const res = await chatCompleteRaw(opts.profile, messages, {
+        tools: specs,
+        signal: ctrl.signal,
+        stream: opts.stream === true,
+        onDelta: opts.stream ? (d) => streamAppendToLast(opts.docId, d) : undefined,
+      })
+      const finalMsg: ChatMessage = { role: 'assistant', content: res.content, toolCalls: res.toolCalls }
+      messages.push(finalMsg)
+      if (opts.stream) replaceLastMessage(opts.docId, finalMsg)
+      else appendMessage(opts.docId, finalMsg)
       if (!res.toolCalls || res.toolCalls.length === 0) return // 文本回复 = 本轮结束
 
       for (const call of res.toolCalls) {

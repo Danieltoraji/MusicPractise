@@ -49,7 +49,20 @@ async function type(el: HTMLTextAreaElement, value: string): Promise<void> {
 const DOC = blankLevelDoc()
 const noop = (): void => {}
 
+/** 200 且含 choices 时把 JSON 响应转成 SSE 流（面板走 stream:true，供应商总是回流）；错误状态保持 JSON */
 function bodyResponse(payload: unknown, status = 200): Response {
+  const p = payload as {
+    choices?: Array<{ message?: { content?: string; tool_calls?: Array<Record<string, unknown>> } }>
+  }
+  if (status === 200 && p?.choices) {
+    const msg = p.choices[0]?.message ?? {}
+    const enc = new TextEncoder()
+    const parts: string[] = []
+    if (msg.content) parts.push(`data: ${JSON.stringify({ choices: [{ delta: { content: msg.content } }] })}\n\n`)
+    if (msg.tool_calls) parts.push(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: msg.tool_calls } }] })}\n\n`)
+    parts.push('data: [DONE]\n\n')
+    return new Response(enc.encode(parts.join('')), { status, headers: { 'Content-Type': 'text/event-stream' } })
+  }
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } })
 }
 

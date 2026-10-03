@@ -186,3 +186,109 @@ describe('agent 图像消息（批次5）', () => {
     clearSession('res_agent_img')
   })
 })
+
+describe('agent 流式（批次6a）', () => {
+  function sseResponseText(deltas: string[], delayMs = 0): Response {
+    const enc = new TextEncoder()
+    const lines = deltas.map((d) => `data: ${JSON.stringify({ choices: [{ delta: { content: d } }] })}\n\n`)
+    lines.push('data: [DONE]\n\n')
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        if (delayMs <= 0) {
+          for (const l of lines) c.enqueue(enc.encode(l))
+          c.close()
+          return
+        }
+        // 逐段延迟：让流式中间态可观察
+        let i = 0
+        const push = (): void => {
+          if (i >= lines.length) {
+            c.close()
+            return
+          }
+          c.enqueue(enc.encode(lines[i]))
+          i += 1
+          setTimeout(push, delayMs)
+        }
+        push()
+      },
+    })
+    return new Response(stream, { status: 200 })
+  }
+
+  it('流式文本轮：占位 streaming → 打字机增量 → 定稿清除标记', async () => {
+    clearSession('res_agent_stream')
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponseText(['正在', '修改…'], 120)))
+    const running = runAgentTurn({
+      docId: 'res_agent_stream',
+      profile,
+      systemPrompt: 'S',
+      userText: 'go',
+      tools: [fakeTool],
+      ctx,
+      stream: true,
+    })
+    // 中间态：streaming 占位已出现（首 delta 可能被 40ms 合帧暂存，content 可为空）
+    await new Promise((r) => setTimeout(r, 60))
+    const mid = getSession('res_agent_stream').messages.at(-1)
+    expect(mid).toMatchObject({ role: 'assistant', streaming: true })
+    await running
+    const msgs = getSession('res_agent_stream').messages
+    expect(msgs).toHaveLength(2)
+    expect(msgs[1]).toMatchObject({ role: 'assistant', content: '正在修改…' })
+    expect(msgs[1].streaming).toBeUndefined()
+  }, 15000)
+
+  it('流式工具轮：SSE 增量 tool_calls 拼接 → 工具执行 → 第二轮文本', async () => {
+    clearSession('res_agent_stream2')
+    let call = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        
+        if (call === 0) {
+          // SSE：tool_calls 增量（arguments 分片）
+          const enc = new TextEncoder()
+          const lines = [
+            `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'w9', function: { name: 'fake_read', arguments: '{"x":' } }] } }] })}\n\n`,
+            `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '1}' } }] } }] })}\n\n`,
+            'data: [DONE]\n\n',
+          ]
+          call += 1
+          const stream = new ReadableStream<Uint8Array>({
+            start(c) {
+              for (const l of lines) c.enqueue(enc.encode(l))
+              c.close()
+            },
+          })
+          return new Response(stream, { status: 200 })
+        }
+        // 请求带 stream:true，供应商总是回 SSE（纯文本轮也是）
+        const enc2 = new TextEncoder()
+        const stream2 = new ReadableStream<Uint8Array>({
+          start(c) {
+            c.enqueue(enc2.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: '完成。' } }] })}\n\n`))
+            c.enqueue(enc2.encode('data: [DONE]\n\n'))
+            c.close()
+          },
+        })
+        call += 1
+        return new Response(stream2, { status: 200 })
+      }),
+    )
+    await runAgentTurn({
+      docId: 'res_agent_stream2',
+      profile,
+      systemPrompt: 'S',
+      userText: 'go',
+      tools: [fakeTool],
+      ctx,
+      stream: true,
+    })
+    const msgs = getSession('res_agent_stream2').messages
+    expect(msgs[1].toolCalls![0].function).toEqual({ name: 'fake_read', arguments: '{"x":1}' })
+    expect(msgs[2]).toMatchObject({ role: 'tool', content: '工具结果文本' })
+    expect(msgs[3]).toMatchObject({ role: 'assistant', content: '完成。' })
+    expect(msgs.at(-1)!.streaming).toBeUndefined()
+  }, 15000)
+})
