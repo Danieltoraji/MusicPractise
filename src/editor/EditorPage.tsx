@@ -145,12 +145,79 @@ export function EditorPage({ id }: Props) {
     }
   }, [record, id])
 
-  /** 编辑器内所有文档修改走这里：修改即标脏并清「已保存」提示 */
-  const update = useCallback((next: LevelDoc) => {
+  // ---------------------------------------------------------------------------
+  // 撤销/重做栈（批次6c）：所有 update（手动+AI 写入）入栈，cap 50；
+  // ref 存栈 + bump 计数驱动渲染（避免 setState updater 的 StrictMode 双调副作用）
+  // ---------------------------------------------------------------------------
+  const docRef = useRef<LevelDoc | null>(null)
+  docRef.current = doc
+  const histRef = useRef<{ past: LevelDoc[]; future: LevelDoc[] }>({ past: [], future: [] })
+  const [, histBump] = useState(0)
+  const HIST_CAP = 50
+
+  /** 编辑器内所有文档修改走这里：入历史栈（撤销/重做，批次6c）、标脏、清「已保存」提示 */
+  const update = useCallback(
+    (next: LevelDoc) => {
+      const cur = docRef.current
+      if (cur) {
+        const h = histRef.current
+        h.past = [...h.past.slice(-(HIST_CAP - 1)), structuredClone(cur)]
+        h.future = []
+      }
+      setSavedTip('')
+      setDirty(true)
+      setDoc(next)
+      histBump((v) => v + 1)
+    },
+    [histBump],
+  )
+
+  const undo = useCallback((): void => {
+    const h = histRef.current
+    const cur = docRef.current
+    if (h.past.length === 0 || !cur) return
+    const prev = h.past[h.past.length - 1]
+    h.past = h.past.slice(0, -1)
+    h.future = [structuredClone(cur), ...h.future.slice(0, HIST_CAP - 1)]
+    setSavedTip('')
+    setDirty(true)
+    setDoc(prev)
+    histBump((v) => v + 1)
+  }, [histBump])
+
+  const redo = useCallback((): void => {
+    const h = histRef.current
+    const cur = docRef.current
+    if (h.future.length === 0 || !cur) return
+    const next = h.future[0]
+    h.future = h.future.slice(1)
+    h.past = [...h.past.slice(-(HIST_CAP - 1)), structuredClone(cur)]
     setSavedTip('')
     setDirty(true)
     setDoc(next)
-  }, [])
+    histBump((v) => v + 1)
+  }, [histBump])
+
+  // 快捷键（批次6c）：window 级监听——Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z（或 Ctrl+Y）重做。
+  // 输入框/文本域内不拦截（浏览器原生文本撤销优先）；编辑器卸载即移除。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const key = e.key.toLowerCase()
+      if (key === 'y') {
+        e.preventDefault()
+        redo()
+      } else if (key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) redo()
+        else undo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo])
 
   const savingRef = useRef(false)
   /** 保存：普通关卡覆盖原记录；内置示例不可覆盖（会被种子重写）——自动另存为用户副本并切换过去 */
@@ -202,6 +269,22 @@ export function EditorPage({ id }: Props) {
           value={String(doc.meta.title ?? '')}
           onChange={(e) => update(setMeta(doc, { title: e.target.value }))}
         />
+        <button
+          type="button"
+          disabled={histRef.current.past.length === 0}
+          title="撤销（Ctrl+Z）"
+          onClick={() => undo()}
+        >
+          ↶
+        </button>
+        <button
+          type="button"
+          disabled={histRef.current.future.length === 0}
+          title="重做（Ctrl+Shift+Z）"
+          onClick={() => redo()}
+        >
+          ↷
+        </button>
         <button type="button" className="primary" onClick={() => save()}>
           💾 保存{dirty ? ' *' : ''}
         </button>
