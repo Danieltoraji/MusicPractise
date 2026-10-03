@@ -128,3 +128,109 @@ describe('checkExprText（表达式实时校验）', () => {
     expect(checkExprText('v.score +')).not.toBeNull()
   })
 })
+
+describe('FlowEditor（批次10 推进与过关）', () => {
+  /** 挂 TableEditor 并模拟 EditorPage 的重渲染：onChange 更新 doc 后立即以新 props 重渲染 */
+  function renderFlow(initial: LevelDoc): { c: HTMLElement; doc: () => LevelDoc; restore: () => void } {
+    let doc = initial
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const rerender = (): void => {
+      act(() => {
+        root.render(<TableEditor doc={doc} onChange={(next) => { doc = next; rerender() }} />)
+      })
+    }
+    rerender()
+    return { c: container, doc: () => doc, restore: () => { act(() => root.unmount()); container.remove() } }
+  }
+
+  /** 受控 input 赋值 */
+  function type(el: HTMLInputElement, value: string): void {
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      setter.call(el, value)
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  }
+
+  /** React onBlur 在 jsdom 需以冒泡的 focusout 派发（仓库惯例，variablesPanel.test 同款） */
+  function blur(el: HTMLElement): void {
+    act(() => el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
+  }
+
+  it('渲染编辑条：顺序下拉/题数/过关条件勾选 + 摘要', () => {
+    const doc = baseDoc()
+    doc.content.flow = { order: 'sequential', pass: { expr: 'v.score >= 10' } }
+    const { c, restore } = renderFlow(doc)
+    try {
+      expect(c.textContent).toContain('推进与过关')
+      const sel = c.querySelector('.flow-editor select') as HTMLSelectElement
+      expect(sel.value).toBe('sequential')
+      const check = c.querySelector('.flow-field-check input') as HTMLInputElement
+      expect(check.checked).toBe(true)
+      // 勾选态显示条件构造器与摘要
+      expect(c.querySelector('.flow-pass .cond-b')).not.toBeNull()
+      expect(c.querySelector('.flow-summary')?.textContent).toContain('v.score >= 10')
+    } finally {
+      restore()
+    }
+  })
+
+  it('切换顺序回写；题数清空失焦 = 删键（全部）', () => {
+    const { c, doc, restore } = renderFlow(baseDoc())
+    try {
+      const sel = c.querySelector('.flow-editor select') as HTMLSelectElement
+      act(() => {
+        sel.value = 'shuffle'
+        sel.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      expect(doc().content.flow?.order).toBe('shuffle')
+
+      const countInput = c.querySelector('.flow-field input[type="number"]') as HTMLInputElement
+      expect(countInput.value).toBe('') // baseDoc 无 count → placeholder 全部
+      type(countInput, '5')
+      blur(countInput)
+      expect(doc().content.flow?.count).toBe(5)
+      type(countInput, '')
+      blur(countInput)
+      expect('count' in (doc().content.flow ?? {})).toBe(false)
+    } finally {
+      restore()
+    }
+  })
+
+  it('取消勾选 = 删除 pass 键；重新勾选给种子表达式', () => {
+    const initial = baseDoc()
+    initial.content.flow = { pass: { expr: 'v.score >= 10' } }
+    const { c, doc, restore } = renderFlow(initial)
+    try {
+      const check = c.querySelector('.flow-field-check input') as HTMLInputElement
+      act(() => { check.click() })
+      expect('pass' in (doc().content.flow ?? {})).toBe(false)
+      expect(c.querySelector('.flow-pass')).toBeNull()
+
+      act(() => { check.click() })
+      expect((doc().content.flow?.pass as { expr: string }).expr).toContain('v.score')
+    } finally {
+      restore()
+    }
+  })
+
+  it('高级模式非法表达式：红字提示且不写 doc', () => {
+    const initial = baseDoc()
+    initial.content.flow = { pass: { expr: 'v.score >= 10' } }
+    const { c, doc, restore } = renderFlow(initial)
+    try {
+      const adv = [...c.querySelectorAll('.flow-pass .opv-modes button')].find((b) => b.textContent === '高级') as HTMLElement
+      act(() => adv.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+      const exprInput = c.querySelector('.flow-pass input') as HTMLInputElement
+      type(exprInput, 'v.score >= ')
+      blur(exprInput)
+      expect(c.querySelector('.flow-editor .tone-error')?.textContent).not.toBeNull()
+      expect((doc().content.flow?.pass as { expr: string }).expr).toBe('v.score >= 10') // doc 未被污染
+    } finally {
+      restore()
+    }
+  })
+})

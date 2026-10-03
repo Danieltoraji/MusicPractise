@@ -4408,3 +4408,64 @@ a.lib-title:hover {
   background: rgba(245, 158, 11, 0.12);
   border-color: rgba(245, 158, 11, 0.4);
 }
+
+/* ---------------------------------------------------------------------------
+   推进与过关编辑条（批次10）：数据表 tab 工具条下的紧凑分区
+--------------------------------------------------------------------------- */
+.flow-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.flow-editor > b {
+  font-size: 13px;
+}
+.flow-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.flow-field span {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.flow-field select,
+.flow-field input[type='number'] {
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-family: inherit;
+}
+.flow-field input[type='number'] {
+  width: 76px;
+}
+.flow-field-check input[type='checkbox'] {
+  width: auto;
+}
+.flow-pass {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.flow-msg {
+  font-size: 12px;
+}
+.flow-warn {
+  color: #9a6700;
+  background: #fff8c5;
+  border: 1px solid #d4a72c66;
+  border-radius: 6px;
+  padding: 1px 8px;
+}
+.flow-summary {
+  flex-basis: 100%;
+  font-size: 12px;
+}

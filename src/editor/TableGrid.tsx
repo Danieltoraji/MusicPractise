@@ -9,6 +9,7 @@
  */
 import { useRef, useState } from 'react'
 import type { ColumnType, LevelDoc } from '../engine/level'
+import { FlowEditor } from './FlowEditor'
 import type { Json } from '../engine/expr'
 import {
   addTableColumn,
@@ -123,6 +124,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
           + 添加行
         </button>
       </div>
+      <FlowEditor doc={doc} onChange={onChange} />
       {colErr && <div className="tone-error">{colErr}</div>}
 
       <div className="tgrid-wrap">
