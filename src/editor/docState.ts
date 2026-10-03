@@ -215,10 +215,19 @@ export function setTable(doc: LevelDoc, table: DataTable): LevelDoc {
   return next
 }
 
-/** 推进配置（AI 写入工具批次2a；patch 中显式给出的键才覆盖） */
+/**
+ * 推进配置（AI 写入工具批次2a；patch 中显式给出的键才覆盖）。
+ * 归一化：patch 值为 null/undefined 的键一律**删除**——pass 的 null 过不了 Ajv（type:object，
+ * 曾经导致 edit_flow 清除过关条件后无法保存），count 的 null 虽合法但与缺省同义，删键保持文档干净。
+ * 「清除」语义 = 删键（结算默认通过 / 全部行）。
+ */
 export function setFlow(doc: LevelDoc, patch: Partial<NonNullable<LevelDoc['content']['flow']>>): LevelDoc {
   const next = structuredClone(doc)
-  next.content.flow = { ...(next.content.flow ?? {}), ...patch }
+  const merged: Record<string, unknown> = { ...(next.content.flow ?? {}), ...patch }
+  for (const k of Object.keys(merged)) {
+    if (merged[k] === null || merged[k] === undefined) delete merged[k]
+  }
+  next.content.flow = merged as NonNullable<LevelDoc['content']['flow']>
   return next
 }
 

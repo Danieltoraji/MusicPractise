@@ -167,6 +167,11 @@ describe('AI 写入工具（批次2a）', () => {
     const lastView = await run('edit_views', { op: 'remove', id: 'main' }, doc)
     expect(lastView.result).toContain('至少保留一个视图')
 
+    // 清除过关条件（空串语义）：flow.pass 键被删除而非存 null（null 过不了 Ajv，曾致无法保存）
+    const cleared = await run('edit_flow', { pass: '' }, doc)
+    expect(cleared.result).toContain('✓')
+    expect('pass' in (cleared.h.current().content.flow ?? {})).toBe(false)
+
     const meta = await run('edit_meta', { patch: { title: '新标题', difficulty: 9 } }, doc)
     expect(meta.h.current().meta.title).toBe('新标题')
     expect(meta.h.current().meta.difficulty).toBe(5) // 钳制到 1–5

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
+import { loadLevelDoc } from '../library/validate'
 import {
   addComponent,
   addTableColumn,
@@ -12,6 +13,7 @@ import {
   renameVariable,
   setTable,
   setTableColumnType,
+  setFlow,
   setVariable,
   updateTableCell,
 } from './docState'
@@ -106,5 +108,29 @@ describe('docState 数据表操作（3-7 网格编辑配套）', () => {
     const doc = withTable()
     expect(() => addTableColumn(doc, 'bad name')).toThrow(/非法列名/)
     expect(() => addTableColumn(doc, 'title')).toThrow(/列名已存在/)
+  })
+})
+
+describe('setFlow 归一化（批次10）', () => {
+  it('null/undefined 值的键一律删除（清除语义 = 缺键），文档保持 schema 合法', () => {
+    let doc = blankLevelDoc()
+    doc = setFlow(doc, { order: 'shuffle', count: 5, pass: { expr: 'v.score >= 60' } })
+    expect(doc.content.flow).toMatchObject({ order: 'shuffle', count: 5, pass: { expr: 'v.score >= 60' } })
+
+    // 清除过关条件：pass null → 删键（曾经存 null 导致 Ajv 拒绝 /content/flow/pass must be object）
+    doc = setFlow(doc, { pass: null as never })
+    expect(doc.content.flow).toMatchObject({ order: 'shuffle', count: 5 })
+    expect('pass' in (doc.content.flow ?? {})).toBe(false)
+
+    // count null（= 全部）→ 同样删键；order undefined → 删键（回落 sequential）
+    doc = setFlow(doc, { count: null as never, order: undefined as never })
+    expect(doc.content.flow).toEqual({})
+  })
+
+  it('归一化后的文档能通过 loadLevelDoc 装载（清除过关条件可保存）', () => {
+    let doc = blankLevelDoc()
+    doc = setFlow(doc, { pass: null as never, count: null as never })
+    const r = loadLevelDoc(structuredClone(doc))
+    expect(r.ok).toBe(true)
   })
 })
