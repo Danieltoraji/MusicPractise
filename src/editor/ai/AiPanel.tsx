@@ -12,7 +12,7 @@ import { runAgentTurn, stopAgent } from '../../ai/agent'
 import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
 import type { AiProfileConfig, ChatMessage } from '../../ai/client'
 import { buildEditorSystemPrompt, buildPlanExecutionPrompt, formatSelectionContext, type AiSelectionContext } from '../../ai/prompts'
-import { appendMessage, clearSession, getSession, patchSession, subscribeAiSession, type AiMode, type PlanItemStatus } from '../../ai/session'
+import { appendMessage, clearSession, getSession, hydrateSession, patchSession, subscribeAiSession, type AiMode, type PlanItemStatus } from '../../ai/session'
 import { buildPlan } from '../../ai/plan'
 import type { PlanState } from '../../ai/plan'
 import { loadAiSettings } from '../../ai/settings'
@@ -64,6 +64,11 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
   const listRef = useRef<HTMLDivElement>(null)
 
   const profile = activeProfile()
+
+  // 会话持久化恢复（批次6b）：挂载时从 IndexedDB 载入本关卡的对话（内存为空才载入）
+  useEffect(() => {
+    void hydrateSession(doc.id)
+  }, [doc.id])
 
   // 新消息/状态变化时滚到底部
   useEffect(() => {
@@ -185,6 +190,17 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     await sendText(`请严格按以下计划执行修改（不要重新规划，逐项落实后汇报结果）：\n\n${lastAssistantText}`)
   }
 
+  /** plan-act 继续：恢复的 executing 计划重发未完成项 */
+  const continuePlan = async (): Promise<void> => {
+    const plan = getSession(doc.id).plan
+    if (!plan || plan.status !== 'executing' || session.busy) return
+    const remaining = plan.items.filter((it) => it.status === 'pending' || it.status === 'in_progress')
+    if (remaining.length === 0) return
+    const at = saveCheckpoint(doc.id, docRef.current)
+    patchSession(doc.id, { checkpointAt: at })
+    await sendText(buildPlanExecutionPrompt(remaining))
+  }
+
   const abandonPlan = (): void => {
     patchSession(doc.id, { plan: null, mode: 'ask' })
   }
@@ -294,6 +310,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         <PlanCard
           plan={session.plan}
           onAbandon={session.plan.status === 'executing' && !session.busy ? abandonPlan : undefined}
+          onContinue={session.plan.status === 'executing' && !session.busy ? () => void continuePlan() : undefined}
         />
       )}
       {!session.plan && draftPlan && (
@@ -395,8 +412,16 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
   )
 }
 
-/** 计划卡（executing/done）：逐项状态实时显示（update_plan 工具驱动） */
-function PlanCard({ plan, onAbandon }: { plan: PlanState; onAbandon?: () => void }) {
+/** 计划卡（executing/done）：逐项状态实时显示（update_plan 工具驱动）；恢复的 executing 可继续执行 */
+function PlanCard({
+  plan,
+  onAbandon,
+  onContinue,
+}: {
+  plan: PlanState
+  onAbandon?: () => void
+  onContinue?: () => void
+}) {
   const done = plan.items.filter((it) => it.status === 'done' || it.status === 'skipped').length
   const icon = (s: PlanItemStatus): string =>
     s === 'done' ? '✓' : s === 'in_progress' ? '→' : s === 'skipped' ? '—' : '○'
@@ -406,6 +431,11 @@ function PlanCard({ plan, onAbandon }: { plan: PlanState; onAbandon?: () => void
         <span>
           {plan.status === 'done' ? '✅ 计划完成' : `⚙ 执行计划中（${done}/${plan.items.length}）`}
         </span>
+        {onContinue && (
+          <button type="button" className="ai-plan-run" title="重发未完成的计划项" onClick={onContinue}>
+            ▶ 继续执行
+          </button>
+        )}
         {onAbandon && (
           <button type="button" className="ai-plan-abandon" title="放弃计划（已执行的修改用「↩ 回滚」撤销）" onClick={onAbandon}>
             放弃

@@ -39,9 +39,19 @@ export interface ProgressRecord {
   updatedAt: number
 }
 
+/** AI 会话持久化（批次6b）：每个关卡文档一条，刷新/重开后恢复对话 */
+export interface AiSessionRecord {
+  docId: string
+  messages: unknown[]
+  plan: unknown
+  mode: 'ask' | 'plan' | 'agent'
+  updatedAt: number
+}
+
 export const db = new Dexie('music-practise-library') as Dexie & {
   resources: EntityTable<LibraryRecord, 'id'>
   progress: EntityTable<ProgressRecord, 'levelId'>
+  aiSessions: EntityTable<AiSessionRecord, 'docId'>
 }
 
 db.version(1).stores({
@@ -50,6 +60,11 @@ db.version(1).stores({
 db.version(2).stores({
   resources: 'id, kind, version, importedAt, builtIn',
   progress: 'levelId',
+})
+db.version(3).stores({
+  resources: 'id, kind, version, importedAt, builtIn',
+  progress: 'levelId',
+  aiSessions: 'docId',
 })
 
 // 教程与功能示例放在最前：新用户在资源库最先看到它们

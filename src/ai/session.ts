@@ -53,6 +53,7 @@ export function getSession(docId: string): AiSession {
 function setSession(docId: string, next: AiSession): void {
   sessions.set(docId, next)
   emit()
+  schedulePersist(docId) // 批次6b：防抖写入 IndexedDB
 }
 
 export function patchSession(docId: string, patch: Partial<Omit<AiSession, 'messages'>>): void {
@@ -111,4 +112,55 @@ export function replaceLastMessage(docId: string, msg: ChatMessage): void {
 
 export function clearSession(docId: string): void {
   setSession(docId, { messages: [], busy: false, error: null, mode: 'ask', checkpointAt: null, plan: null })
+}
+
+// ---------------------------------------------------------------------------
+// 持久化（批次6b）：IndexedDB aiSessions 表（db v3），刷新/重开后恢复对话。
+// setSession 时防抖写入（600ms）；busy/error/checkpointAt 为运行时态不持久。
+// hydrateSession：内存为空时才载入（幂等）；恢复后 executing 计划可由面板继续执行。
+// ---------------------------------------------------------------------------
+
+import { db } from '../library/db'
+
+const persistTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const hydrated = new Set<string>()
+
+function schedulePersist(docId: string): void {
+  const prev = persistTimers.get(docId)
+  if (prev) clearTimeout(prev)
+  persistTimers.set(
+    docId,
+    setTimeout(() => {
+      persistTimers.delete(docId)
+      const s = getSession(docId)
+      if (s.messages.length === 0) {
+        void db.aiSessions.delete(docId).catch(() => {})
+        return
+      }
+      void db.aiSessions
+        .put({ docId, messages: s.messages, plan: s.plan, mode: s.mode, updatedAt: Date.now() })
+        .catch(() => {})
+    }, 600),
+  )
+}
+
+/** 恢复持久化会话（内存为空时才载入；幂等）。失败静默——空会话照常可用 */
+export async function hydrateSession(docId: string): Promise<void> {
+  const s = getSession(docId)
+  if (s.messages.length > 0 || hydrated.has(docId)) return
+  hydrated.add(docId)
+  try {
+    const rec = await db.aiSessions.get(docId)
+    if (!rec) return
+    const cur = getSession(docId)
+    if (cur.messages.length > 0) return // 挂载期间已有新消息（kickoff 等），不覆盖
+    setSession(docId, {
+      ...cur,
+      messages: Array.isArray(rec.messages) ? (rec.messages as ChatMessage[]) : [],
+      plan: (rec.plan as PlanState | null) ?? null,
+      mode: rec.mode ?? 'ask',
+    })
+  } catch {
+    // IndexedDB 不可用：空会话照常
+  }
 }
