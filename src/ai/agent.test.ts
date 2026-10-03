@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runAgentTurn, stopAgent } from './agent'
-import type { AiProfileConfig } from './client'
+import { buildModelMessages, runAgentTurn, stopAgent } from './agent'
+import type { AiProfileConfig, ChatMessage } from './client'
 import { appendMessage, clearSession, getSession } from './session'
 import type { AiTool, ToolContext } from './tools'
 import type { LevelDoc } from '../engine/level'
@@ -332,4 +332,74 @@ describe('agent 流式（批次6a）', () => {
     expect(msgs[3]).toMatchObject({ role: 'assistant', content: '完成。' })
     expect(msgs.at(-1)!.streaming).toBeUndefined()
   }, 15000)
+})
+describe('历史预算 buildModelMessages（批次8c）', () => {
+  const sys = 'SYS'
+  const u = (i: number): ChatMessage => ({ role: 'user', content: `u${i}` })
+  const a = (i: number): ChatMessage => ({ role: 'assistant', content: `a${i}` })
+  const t = (i: number): ChatMessage => ({ role: 'tool', toolCallId: `c${i}`, name: 'x', content: 'r' })
+
+  it('未超限：原样透传（仅加 system 前缀）', () => {
+    const history = [u(0), a(0)]
+    const out = buildModelMessages(sys, history)
+    expect(out).toHaveLength(3)
+    expect(out[0]).toMatchObject({ role: 'system', content: 'SYS' })
+    expect(out.slice(1)).toEqual(history)
+  })
+
+  it('超限：只下发最近窗口，窗口起点前进到第一条 user 消息（不拆 tool 对），附省略说明', () => {
+    // 100 条：u/a 交替；最后 60 条窗口起点在第 40 条（a39），前进到它后面的 user
+    const history: ChatMessage[] = []
+    for (let i = 0; i < 50; i++) {
+      history.push(u(i))
+      history.push(a(i))
+    }
+    const out = buildModelMessages(sys, history)
+    expect(out.length).toBeLessThanOrEqual(2 + 60)
+    expect(out[0]).toMatchObject({ role: 'system', content: 'SYS' })
+    expect(out[1].role).toBe('system')
+    expect(out[1].content).toContain('已省略')
+    // 窗口起点必为 user（tool/assistant 打头的残缺序列会被供应商拒绝）
+    expect(out[2].role).toBe('user')
+    // 末尾完整保留
+    expect(out.at(-1)).toEqual(history.at(-1))
+    // 会话真源未被裁剪
+    expect(history).toHaveLength(100)
+  })
+
+  it('窗口内没有 user 消息（tool 链尾过长）的极端情况：保完整历史不断对', () => {
+    const history: ChatMessage[] = [u(0), ...Array.from({ length: 80 }, (_, i) => t(i))]
+    const out = buildModelMessages(sys, history)
+    expect(out).toHaveLength(1 + history.length)
+    expect(out[0]).toMatchObject({ role: 'system', content: 'SYS' })
+  })
+})
+
+describe('token 用量累计（批次8c）', () => {
+  it('每轮响应的 usage 累加进 session（工具轮+文本轮）', async () => {
+    clearSession('res_agent_usage')
+    let call = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const payload =
+          call === 0
+            ? { choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'fake_read', arguments: '{}' } }] } }], usage: { prompt_tokens: 100, completion_tokens: 20 } }
+            : { choices: [{ message: { content: '完成' } }], usage: { prompt_tokens: 300, completion_tokens: 15 } }
+        call += 1
+        return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+    await runAgentTurn({ docId: 'res_agent_usage', profile, systemPrompt: 'S', userText: 'go', tools: [fakeTool], ctx })
+    expect(getSession('res_agent_usage').usage).toEqual({ promptTokens: 400, completionTokens: 35 })
+    clearSession('res_agent_usage')
+  })
+
+  it('供应商不返回 usage：session.usage 保持 undefined', async () => {
+    clearSession('res_agent_nousage')
+    scriptFetch([{ choices: [{ message: { content: '好' } }] }])
+    await runAgentTurn({ docId: 'res_agent_nousage', profile, systemPrompt: 'S', userText: 'go', tools: [], ctx })
+    expect(getSession('res_agent_nousage').usage).toBeUndefined()
+    clearSession('res_agent_nousage')
+  })
 })

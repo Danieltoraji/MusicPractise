@@ -237,3 +237,40 @@ describe('流式输出（批次6a）', () => {
     expect(body.stream).toBe(true)
   })
 })
+
+describe('token 用量解析（批次8c）', () => {
+  it('非流式：读响应体顶层 usage；缺字段则 undefined', async () => {
+    const fn = mockFetch({ choices: [{ message: { content: '好' } }], usage: { prompt_tokens: 120, completion_tokens: 34 } })
+    const res = await chatCompleteRaw(profile, [{ role: 'user', content: 'hi' }])
+    expect(res.usage).toEqual({ promptTokens: 120, completionTokens: 34 })
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    mockFetch({ choices: [{ message: { content: '好' } }] })
+    const res2 = await chatCompleteRaw(profile, [{ role: 'user', content: 'hi' }])
+    expect(res2.usage).toBeUndefined()
+  })
+
+  it('流式：SSE chunk 顶层 usage 随末块解析；不带则 undefined', async () => {
+    const enc = new TextEncoder()
+    const lines = [
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '你' } }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '好' } }], usage: { prompt_tokens: 55, completion_tokens: 7 } })}\n\n`,
+      'data: [DONE]\n\n',
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ start(c) { for (const l of lines) c.enqueue(enc.encode(l)); c.close() } }), { status: 200 })),
+    )
+    const res = await chatCompleteRaw(profile, [{ role: 'user', content: 'hi' }], { stream: true })
+    expect(res.content).toBe('你好')
+    expect(res.usage).toEqual({ promptTokens: 55, completionTokens: 7 })
+
+    const lines2 = [`data: ${JSON.stringify({ choices: [{ delta: { content: '好' } }] })}\n\n`, 'data: [DONE]\n\n']
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ start(c) { for (const l of lines2) c.enqueue(enc.encode(l)); c.close() } }), { status: 200 })),
+    )
+    const res2 = await chatCompleteRaw(profile, [{ role: 'user', content: 'hi' }], { stream: true })
+    expect(res2.usage).toBeUndefined()
+  })
+})

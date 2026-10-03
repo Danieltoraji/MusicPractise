@@ -85,7 +85,15 @@ interface ChatChoice {
 }
 interface ChatResponseShape {
   choices?: ChatChoice[]
+  usage?: { prompt_tokens?: unknown; completion_tokens?: unknown }
   error?: { message?: unknown }
+}
+
+/** 解析响应体顶层 usage（数字才收；缺字段即 undefined——流式部分供应商不带） */
+function parseUsage(raw: unknown): ChatUsage | undefined {
+  const u = (raw ?? {}) as { prompt_tokens?: unknown; completion_tokens?: unknown }
+  if (typeof u.prompt_tokens !== 'number' || typeof u.completion_tokens !== 'number') return undefined
+  return { promptTokens: u.prompt_tokens, completionTokens: u.completion_tokens }
 }
 
 function parseToolCalls(raw: unknown): ToolCall[] | undefined {
@@ -143,11 +151,18 @@ function serializeMessage(m: ChatMessage): Record<string, unknown> {
   return out
 }
 
+export interface ChatUsage {
+  promptTokens: number
+  completionTokens: number
+}
+
 export interface ChatCompletionResult {
   /** 助手文本（可能为空串——纯工具调用轮） */
   content: string
   /** 非空 = 模型请求调用工具，调用方执行后以 role='tool' 消息回填继续 */
   toolCalls?: ToolCall[]
+  /** 本次请求的 token 用量（供应商返回才有——流式部分供应商不带，缺省即无） */
+  usage?: ChatUsage
 }
 
 /** 完整版补全：保留 tool_calls 与原始结构，agent 循环使用 */
@@ -204,7 +219,7 @@ export async function chatCompleteRaw(
     if (!content && !toolCalls) {
       throw new AiClientError('response', '供应商返回了无法解析的响应（缺少 choices[0].message 内容）')
     }
-    return { content, toolCalls }
+    return { content, toolCalls, usage: parseUsage(data?.usage) }
   } finally {
     clearTimeout(timer)
     opts.signal?.removeEventListener('abort', forward)
@@ -219,6 +234,7 @@ interface SseDelta {
 /**
  * 解析 OpenAI 兼容 SSE 流（data: {...} 行 / data: [DONE] 终止）：
  * 增量 content 经 onDelta 回调，tool_calls 按 index 增量拼接（id/name 首块、arguments 追加），
+ * chunk 顶层 usage（部分供应商随末块返回）最后一块覆盖，
  * 最终返回与非流式一致的完整结果。
  */
 async function consumeSseStream(
@@ -230,6 +246,7 @@ async function consumeSseStream(
   const decoder = new TextDecoder()
   let buffer = ''
   let content = ''
+  let usage: ChatUsage | undefined
   const toolAcc = new Map<number, { id: string; function: { name: string; arguments: string } }>()
 
   const handleChunk = (chunkText: string): void => {
@@ -238,12 +255,13 @@ async function consumeSseStream(
       if (line === '' || !line.startsWith('data:')) continue
       const data = line.slice(5).trim()
       if (data === '[DONE]') continue
-      let parsed: { choices?: Array<{ delta?: SseDelta }> }
+      let parsed: { choices?: Array<{ delta?: SseDelta }>; usage?: unknown }
       try {
         parsed = JSON.parse(data)
       } catch {
         continue // 心跳/注释等非 JSON 行
       }
+      if (parsed.usage) usage = parseUsage(parsed.usage)
       const delta = parsed.choices?.[0]?.delta
       if (!delta) continue
       if (typeof delta.content === 'string' && delta.content !== '') {
@@ -282,7 +300,7 @@ async function consumeSseStream(
   if (content === '' && toolCalls.length === 0) {
     throw new AiClientError('response', '供应商流式响应没有产出内容')
   }
-  return { content, toolCalls: toolCalls.length > 0 ? toolCalls : undefined }
+  return { content, toolCalls: toolCalls.length > 0 ? toolCalls : undefined, usage }
 }
 
 export async function chatComplete(

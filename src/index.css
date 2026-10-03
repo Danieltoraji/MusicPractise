@@ -765,6 +765,30 @@ a.level-row:hover {
   font-size: 14px;
   padding: 0 2px;
 }
+.ai-panel-error-retry {
+  border: 1px solid var(--bad);
+  background: none;
+  color: var(--bad);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 1px 8px;
+  flex: none;
+}
+.ai-panel-error-retry:hover:not(:disabled) {
+  background: #fde3e3;
+}
+.ai-panel-error-retry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* 会话累计 token 用量（批次8c）：输入区下的小字脚注 */
+.ai-panel-usage {
+  padding: 0 14px 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: right;
+}
 .ai-panel-hint {
   padding: 0 12px 8px;
   color: var(--muted);
@@ -3573,6 +3597,13 @@ a.lib-title:hover {
 }
 .ge-dark .ai-panel-error-close {
   color: var(--ge-bad);
+}
+.ge-dark .ai-panel-error-retry {
+  border-color: rgba(248, 113, 113, 0.6);
+  color: var(--ge-bad);
+}
+.ge-dark .ai-panel-error-retry:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.15);
 }
 .ge-dark .ai-panel-form {
   border-top-color: var(--ge-line);

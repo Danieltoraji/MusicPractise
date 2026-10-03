@@ -59,6 +59,7 @@ const noop = (): void => {}
 function bodyResponse(payload: unknown, status = 200): Response {
   const p = payload as {
     choices?: Array<{ message?: { content?: string; tool_calls?: Array<Record<string, unknown>> } }>
+    usage?: unknown
   }
   if (status === 200 && p?.choices) {
     const msg = p.choices[0]?.message ?? {}
@@ -66,6 +67,8 @@ function bodyResponse(payload: unknown, status = 200): Response {
     const parts: string[] = []
     if (msg.content) parts.push(`data: ${JSON.stringify({ choices: [{ delta: { content: msg.content } }] })}\n\n`)
     if (msg.tool_calls) parts.push(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: msg.tool_calls } }] })}\n\n`)
+    // 部分供应商在末块附顶层 usage（批次8c 用量统计的来源）
+    if (p.usage) parts.push(`data: ${JSON.stringify({ usage: p.usage })}\n\n`)
     parts.push('data: [DONE]\n\n')
     return new Response(enc.encode(parts.join('')), { status, headers: { 'Content-Type': 'text/event-stream' } })
   }
@@ -604,5 +607,68 @@ describe('用户附图（批次8a）', () => {
       ;(c.querySelector('.ai-attach-del') as HTMLButtonElement).click()
     })
     expect(c.querySelectorAll('.ai-attach-chip')).toHaveLength(0)
+  })
+})
+
+describe('会话治理（批次8c）', () => {
+  function setKey(): void {
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
+    const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
+    stored.profiles.deepseek.apiKey = 'sk-t'
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
+  }
+
+  it('失败重试：不重复插入 user 消息，续跑成功后错误清除', async () => {
+    setKey()
+    clearSession(DOC.id)
+    let call = 0
+    const fetchMock = vi.fn(async () => {
+      call += 1
+      if (call === 1) {
+        return new Response(JSON.stringify({ error: { message: 'quota exceeded' } }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return bodyResponse({ choices: [{ message: { content: '重试成功。' } }] })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '帮我看看')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.querySelector('.ai-panel-error') !== null)
+    expect(c.querySelector('.ai-panel-error')?.textContent).toContain('429')
+    expect(getSession(DOC.id).messages.filter((m) => m.role === 'user')).toHaveLength(1)
+
+    await act(async () => {
+      ;(c.querySelector('.ai-panel-error-retry') as HTMLButtonElement).click()
+    })
+    await flushUntil(() => c.textContent!.includes('重试成功。'))
+    // user 消息没有因重试翻倍；错误条消失
+    expect(getSession(DOC.id).messages.filter((m) => m.role === 'user')).toHaveLength(1)
+    expect(getSession(DOC.id).error).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('token 用量脚注：SSE 末块 usage 累计显示（万位缩写 k）', async () => {
+    setKey()
+    clearSession(DOC.id)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        bodyResponse({ choices: [{ message: { content: '好' } }], usage: { prompt_tokens: 12000, completion_tokens: 800 } }),
+      ),
+    )
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '嗨')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.querySelector('.ai-panel-usage') !== null)
+    expect(c.querySelector('.ai-panel-usage')?.textContent).toContain('12.0k')
+    expect(c.querySelector('.ai-panel-usage')?.textContent).toContain('800')
+    expect(getSession(DOC.id).usage).toEqual({ promptTokens: 12000, completionTokens: 800 })
   })
 })

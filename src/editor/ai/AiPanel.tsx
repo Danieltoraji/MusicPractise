@@ -57,6 +57,11 @@ const MODE_META: Record<AiMode, { label: string; tip: string }> = {
   agent: { label: 'agent', tip: '代理修改：AI 可直接修改关卡（发送时自动存检查点，可一键回滚）' },
 }
 
+/** token 用量显示：万位以上缩写为 k（万以下原样，保留可对账的精确感） */
+function fmtTokens(n: number): string {
+  return n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+}
+
 export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className, headerDrag }: Props) {
   const session = useSyncExternalStore(subscribeAiSession, () => getSession(doc.id))
   // 工具 ctx 走 ref：agent 循环跨 await 期间始终读到最新 doc（保存副本换 id 会重挂面板，无碍）
@@ -121,6 +126,52 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     await sendText(text, pendingImages)
   }
 
+  /** 本轮请求的公共参数（sendText 与失败重试共用；工具集/截图/轮数随模式取） */
+  const turnOptions = (mode: AiMode, prof: AiProfileConfig) => ({
+    docId: doc.id,
+    profile: prof,
+    systemPrompt: buildEditorSystemPrompt(docRef.current, mode),
+    tools:
+      mode === 'agent'
+        ? [
+            ...READONLY_TOOLS,
+            ...WRITE_TOOLS,
+            ...DEBUG_TOOLS,
+            ...(getSession(doc.id).plan?.status === 'executing' ? PLAN_TOOLS : []),
+          ]
+        : READONLY_TOOLS,
+    ctx: {
+      getDoc: () => docRef.current,
+      applyDoc: (next: LevelDoc) => applyRef.current(next),
+      levelId: doc.id,
+      // AI 截图（批次8b 双目标）：graph=节点卡层（纯 HTML，避开 React Flow SVG 的已知捕获问题）；
+      // canvas=编辑器画布的关卡预览（真实组件渲染）。html-to-image 抓 DOM/SVG 均可；8s 竞速兜底
+      captureScreenshot: async (target: 'graph' | 'canvas' = 'graph') => {
+        const el =
+          target === 'canvas'
+            ? document.querySelector('.editor-body .editor-canvas')
+            : document.querySelector('.graph-editor .react-flow__nodes') ??
+              document.querySelector('.graph-editor .react-flow')
+        if (!el) return null
+        try {
+          const capture = toPng(el as HTMLElement, {
+            backgroundColor: target === 'canvas' ? '#f3f5f8' : '#14181f',
+            pixelRatio: 1.5,
+            skipFonts: true,
+          })
+          return await Promise.race([
+            capture,
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+          ])
+        } catch {
+          return null
+        }
+      },
+    },
+    maxTurns: mode === 'agent' ? 8 : 6,
+    stream: true,
+  })
+
   /** 实际发送（send 的内 guts；执行计划/开场自动发送复用）。mode 直读 store 真源（executePlan 先切模式再发送，快照会滞后） */
   const sendText = async (text: string, images?: string[]): Promise<void> => {
     if ((!text && !(images && images.length > 0)) || session.busy) return
@@ -137,52 +188,21 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     const ctxText = formatSelectionContext(selection, docRef.current)
     const body = text || '（见图片）'
     const userText = ctxText ? `[上下文] ${ctxText}\n\n${body}` : body
-    await runAgentTurn({
-      docId: doc.id,
-      profile: prof,
-      systemPrompt: buildEditorSystemPrompt(docRef.current, mode),
-      userText,
-      images: images && images.length > 0 ? images : undefined,
-      tools:
-        mode === 'agent'
-          ? [
-              ...READONLY_TOOLS,
-              ...WRITE_TOOLS,
-              ...DEBUG_TOOLS,
-              ...(getSession(doc.id).plan?.status === 'executing' ? PLAN_TOOLS : []),
-            ]
-          : READONLY_TOOLS,
-      ctx: {
-        getDoc: () => docRef.current,
-        applyDoc: (next) => applyRef.current(next),
-        levelId: doc.id,
-        // AI 截图（批次8b 双目标）：graph=节点卡层（纯 HTML，避开 React Flow SVG 的已知捕获问题）；
-        // canvas=编辑器画布的关卡预览（真实组件渲染）。html-to-image 抓 DOM/SVG 均可；8s 竞速兜底
-        captureScreenshot: async (target = 'graph') => {
-          const el =
-            target === 'canvas'
-              ? document.querySelector('.editor-body .editor-canvas')
-              : document.querySelector('.graph-editor .react-flow__nodes') ??
-                document.querySelector('.graph-editor .react-flow')
-          if (!el) return null
-          try {
-            const capture = toPng(el as HTMLElement, {
-              backgroundColor: target === 'canvas' ? '#f3f5f8' : '#14181f',
-              pixelRatio: 1.5,
-              skipFonts: true,
-            })
-            return await Promise.race([
-              capture,
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
-            ])
-          } catch {
-            return null
-          }
-        },
-      },
-      maxTurns: mode === 'agent' ? 8 : 6,
-      stream: true,
-    })
+    await runAgentTurn({ ...turnOptions(mode, prof), userText, images: images && images.length > 0 ? images : undefined })
+  }
+
+  /** 失败重试（批次8c）：不重复插入刚才的消息，以现有历史续跑本轮；agent 模式尚无检查点时补存 */
+  const retry = async (): Promise<void> => {
+    if (session.busy || !session.error) return
+    const prof = profile ?? activeProfile()
+    if (!prof) return
+    const mode = getSession(doc.id).mode
+    patchSession(doc.id, { error: null })
+    if (mode === 'agent' && getSession(doc.id).checkpointAt === null) {
+      const at = saveCheckpoint(doc.id, docRef.current)
+      patchSession(doc.id, { checkpointAt: at })
+    }
+    await runAgentTurn(turnOptions(mode, prof))
   }
 
   /** plan 模式确认流：解析最近回复为计划清单（不可解析回退纯文本执行条） */
@@ -396,6 +416,15 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       {session.error && (
         <div className="ai-panel-error">
           <span>{session.error}</span>
+          <button
+            type="button"
+            className="ai-panel-error-retry"
+            title="以现有对话重跑本轮（不重复发送刚才的消息）"
+            disabled={session.busy || !profile}
+            onClick={() => void retry()}
+          >
+            ↻ 重试
+          </button>
           <button type="button" className="ai-panel-error-close" title="关闭" onClick={() => patchSession(doc.id, { error: null })}>
             ×
           </button>
@@ -512,6 +541,12 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
           </button>
         )}
       </div>
+
+      {session.usage && (
+        <div className="ai-panel-usage" title="本会话累计 token 用量（供应商返回时统计；流式部分供应商不带则不增长）">
+          ↑{fmtTokens(session.usage.promptTokens)} ↓{fmtTokens(session.usage.completionTokens)} tokens
+        </div>
+      )}
     </aside>
   )
 }

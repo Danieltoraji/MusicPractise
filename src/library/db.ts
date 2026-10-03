@@ -45,6 +45,8 @@ export interface AiSessionRecord {
   messages: unknown[]
   plan: unknown
   mode: 'ask' | 'plan' | 'agent'
+  /** 累计 token 用量（批次8c；供应商返回才有） */
+  usage?: { promptTokens: number; completionTokens: number }
   updatedAt: number
 }
 

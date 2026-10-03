@@ -5,10 +5,33 @@
  */
 
 import { AiClientError, chatCompleteRaw, type AiProfileConfig, type AiToolSpec, type ChatMessage } from './client'
-import { appendMessage, beginStreamingMessage, getSession, patchSession, replaceLastMessage, streamAppendToLast } from './session'
+import { addSessionUsage, appendMessage, beginStreamingMessage, getSession, patchSession, replaceLastMessage, streamAppendToLast } from './session'
 import type { AiTool, ToolContext } from './tools'
 
 const controllers = new Map<string, AbortController>()
+
+/** 单次请求下发的消息条数上限（不含 system；超出只下发最近窗口——面板仍显示完整历史，批次8c） */
+const MODEL_MSG_LIMIT = 60
+
+/**
+ * 组装发给模型的请求消息：system + 最近窗口。
+ * 超限时窗口起点前进到第一条 user 消息——不能从 assistant(tool_calls)/tool 对中间切开，
+ * 否则 tool 消息失去前置 tool_calls，严格供应商会 4xx。只影响下发副本，不动会话。
+ */
+export function buildModelMessages(systemPrompt: string, history: ChatMessage[]): ChatMessage[] {
+  if (history.length <= MODEL_MSG_LIMIT) return [{ role: 'system', content: systemPrompt }, ...history]
+  let start = history.length - MODEL_MSG_LIMIT
+  while (start < history.length && history[start].role !== 'user') start++
+  if (start >= history.length) {
+    // 窗口内没有 user 消息（极端情况）：保完整历史，宁可偏长不可断对
+    return [{ role: 'system', content: systemPrompt }, ...history]
+  }
+  return [
+    { role: 'system', content: systemPrompt },
+    { role: 'system', content: `（更早的 ${start} 条消息已省略以控制上下文长度；如需更早的细节请让用户重新提供。）` },
+    ...history.slice(start),
+  ]
+}
 
 /** 面板「停止」按钮：中断当前轮的 fetch（工具执行为本地纯函数不中断） */
 export function stopAgent(docId: string): void {
@@ -53,7 +76,8 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
 
   try {
     const maxTurns = opts.maxTurns ?? 6
-    const messages: ChatMessage[] = [{ role: 'system', content: opts.systemPrompt }, ...getSession(opts.docId).messages]
+    // 本轮对话的本地副本（会话真源由 session store 维护）；每次请求前按预算重新组装下发消息
+    const history: ChatMessage[] = [...getSession(opts.docId).messages]
     const specs = toSpecs(opts.tools)
     // 工具产生的图像（如 debug_screenshot）缓冲；一轮工具结果消费完后以带图 user 消息发给多模态模型
     const imageBuffer: string[] = []
@@ -65,14 +89,15 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     for (let turn = 0; turn < maxTurns; turn++) {
       // 流式：先落一条 streaming 占位消息，delta 打字机填充，完成后用最终消息替换
       if (opts.stream) beginStreamingMessage(opts.docId)
-      const res = await chatCompleteRaw(opts.profile, messages, {
+      const res = await chatCompleteRaw(opts.profile, buildModelMessages(opts.systemPrompt, history), {
         tools: specs,
         signal: ctrl.signal,
         stream: opts.stream === true,
         onDelta: opts.stream ? (d) => streamAppendToLast(opts.docId, d) : undefined,
       })
+      addSessionUsage(opts.docId, res.usage)
       const finalMsg: ChatMessage = { role: 'assistant', content: res.content, toolCalls: res.toolCalls }
-      messages.push(finalMsg)
+      history.push(finalMsg)
       if (opts.stream) replaceLastMessage(opts.docId, finalMsg)
       else appendMessage(opts.docId, finalMsg)
       if (!res.toolCalls || res.toolCalls.length === 0) return // 文本回复 = 本轮结束
@@ -91,7 +116,7 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
           }
         }
         const msg: ChatMessage = { role: 'tool', toolCallId: call.id, name: call.function.name, content: result }
-        messages.push(msg)
+        history.push(msg)
         appendMessage(opts.docId, msg)
       }
 
@@ -103,7 +128,7 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
           images: [...imageBuffer],
         }
         imageBuffer.length = 0
-        messages.push(msg)
+        history.push(msg)
         appendMessage(opts.docId, msg)
       }
     }

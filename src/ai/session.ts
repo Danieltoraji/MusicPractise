@@ -5,10 +5,10 @@
  * 面板经 subscribe + useSyncExternalStore 订阅更新。
  */
 
-import type { ChatMessage } from './client'
+import type { ChatMessage, ChatUsage } from './client'
 import type { PlanState } from './plan'
 
-export type { ChatMessage } from './client'
+export type { ChatMessage, ChatUsage } from './client'
 export type { PlanState, PlanItem, PlanItemStatus } from './plan'
 
 export type AiMode = 'ask' | 'plan' | 'agent'
@@ -26,6 +26,8 @@ export interface AiSession {
   checkpointAt: number | null
   /** plan-act 工作流的计划（draft=待确认 / executing=逐项执行中 / done=完成）；null = 无计划 */
   plan: PlanState | null
+  /** 本会话累计 token 用量（供应商返回才计入；批次8c） */
+  usage?: ChatUsage
 }
 
 const sessions = new Map<string, AiSession>()
@@ -63,6 +65,18 @@ export function patchSession(docId: string, patch: Partial<Omit<AiSession, 'mess
 export function appendMessage(docId: string, msg: ChatMessage): void {
   const s = getSession(docId)
   setSession(docId, { ...s, messages: [...s.messages, msg] })
+}
+
+/** 累计本会话 token 用量（供应商未返回 usage 时不产生变更；批次8c） */
+export function addSessionUsage(docId: string, usage: ChatUsage | undefined): void {
+  if (!usage) return
+  const cur = getSession(docId).usage ?? { promptTokens: 0, completionTokens: 0 }
+  patchSession(docId, {
+    usage: {
+      promptTokens: cur.promptTokens + usage.promptTokens,
+      completionTokens: cur.completionTokens + usage.completionTokens,
+    },
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +125,7 @@ export function replaceLastMessage(docId: string, msg: ChatMessage): void {
 }
 
 export function clearSession(docId: string): void {
-  setSession(docId, { messages: [], busy: false, error: null, mode: 'ask', checkpointAt: null, plan: null })
+  setSession(docId, { messages: [], busy: false, error: null, mode: 'ask', checkpointAt: null, plan: null, usage: undefined })
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +152,7 @@ function schedulePersist(docId: string): void {
         return
       }
       void db.aiSessions
-        .put({ docId, messages: s.messages, plan: s.plan, mode: s.mode, updatedAt: Date.now() })
+        .put({ docId, messages: s.messages, plan: s.plan, mode: s.mode, usage: s.usage, updatedAt: Date.now() })
         .catch(() => {})
     }, 600),
   )
@@ -159,6 +173,7 @@ export async function hydrateSession(docId: string): Promise<void> {
       messages: Array.isArray(rec.messages) ? (rec.messages as ChatMessage[]) : [],
       plan: (rec.plan as PlanState | null) ?? null,
       mode: rec.mode ?? 'ask',
+      usage: rec.usage ?? undefined,
     })
   } catch {
     // IndexedDB 不可用：空会话照常
