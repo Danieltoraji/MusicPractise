@@ -6,7 +6,9 @@
  * 只读工具（read_script/read_doc/read_json/lint/read_run_log），
  * 选中上下文由挂载方传入（graph：节点 id；script：选区；canvas：组件 id）。
  */
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { toPng } from 'html-to-image'
 import { runAgentTurn, stopAgent } from '../../ai/agent'
 import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
@@ -472,6 +474,23 @@ function PlanCard({
   )
 }
 
+/** 定稿 assistant 消息的 Markdown 渲染（GFM 表格/删除线；默认不渲染原始 HTML——无 XSS 面） */
+const mdComponents = {
+  a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a {...props} target="_blank" rel="noreferrer" />
+  ),
+}
+
+const MarkdownView = memo(function MarkdownView({ text }: { text: string }) {
+  return (
+    <div className="ai-md">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  )
+})
+
 function renderMsg(m: ChatMessage, i: number): React.ReactNode {
   const images =
     m.images && m.images.length > 0 ? (
@@ -490,13 +509,24 @@ function renderMsg(m: ChatMessage, i: number): React.ReactNode {
     )
   }
   if (m.role === 'assistant') {
+    // 流式中：纯文本 + 光标（避免半截 markdown 反复解析）；定稿：markdown 渲染 + 超长内滚
+    if (m.streaming) {
+      return (
+        <div key={i} className="ai-msg ai-msg-assistant">
+          {m.toolCalls && m.toolCalls.length > 0 && (
+            <div className="ai-tool-calls">⚙ 调用工具：{m.toolCalls.map((c) => c.function.name).join('、')}</div>
+          )}
+          <span>{m.content}</span>
+          <span className="ai-cursor" aria-hidden />
+        </div>
+      )
+    }
     return (
-      <div key={i} className="ai-msg ai-msg-assistant">
+      <div key={i} className="ai-msg ai-msg-assistant ai-msg-md">
         {m.toolCalls && m.toolCalls.length > 0 && (
           <div className="ai-tool-calls">⚙ 调用工具：{m.toolCalls.map((c) => c.function.name).join('、')}</div>
         )}
-        {m.content && <span>{m.content}</span>}
-        {m.streaming && <span className="ai-cursor" aria-hidden />}
+        <MarkdownView text={m.content} />
       </div>
     )
   }

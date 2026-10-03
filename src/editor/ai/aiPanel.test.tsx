@@ -437,3 +437,91 @@ describe('一键预设指令（批次6d）', () => {
     expect(introMsg.content).toContain('edit_meta')
   })
 })
+
+describe('AI 回复 Markdown 渲染（批次7）', () => {
+  function setKey(): void {
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
+    const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
+    stored.profiles.deepseek.apiKey = 'sk-t'
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
+  }
+
+  it('定稿 assistant 消息渲染 markdown（标题/列表/GFM 表格）', async () => {
+    setKey()
+    clearSession(DOC.id)
+    const md = '# 问题报告\n- 悬空引用\n\n| 列 | 值 |\n| --- | --- |\n| score | 100 |'
+
+    vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: md } }] })))
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await type((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement), '审查')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.querySelector('.ai-md h1') !== null)
+    expect(c.querySelector('.ai-md h1')?.textContent).toBe('问题报告')
+    expect(c.querySelectorAll('.ai-md li').length).toBeGreaterThan(0)
+    console.log('MD-DBG:', JSON.stringify(c.querySelector('.ai-md')?.innerHTML?.slice(0, 300)))
+    expect(c.querySelector('.ai-md table')).toBeTruthy()
+  })
+
+  it('XSS 安全：原始 HTML 不被渲染为元素', async () => {
+    setKey()
+    clearSession(DOC.id)
+    const evil = '<script>window.__pwned = 1</script>\n<img src=x onerror="window.__pwned = 2">\n正常文本'
+    vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: evil } }] })))
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await type((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement), '看')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.textContent!.includes('正常文本'))
+    expect(c.querySelector('.ai-msg-md script')).toBeNull()
+    expect(c.querySelector('.ai-msg-md img')).toBeNull()
+    expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined()
+  })
+
+  it('流式中为纯文本（无 .ai-md），定稿后才有 markdown 包裹；链接 target=_blank', async () => {
+    setKey()
+    clearSession(DOC.id)
+    let call = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        let payload: unknown
+        if (call === 0) {
+          // SSE：流式文本 delta（无 markdown），120ms 延迟使中间态可观察
+          const enc = new TextEncoder()
+          const stream = new ReadableStream<Uint8Array>({
+            start(c2) {
+              c2.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: '链接：' } }] })}\n\n`))
+              setTimeout(() => {
+                c2.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: '[文档](https://example.com/docs)' } }] })}\n\n`))
+                c2.enqueue(enc.encode('data: [DONE]\n\n'))
+                c2.close()
+              }, 120)
+            },
+          })
+          call += 1
+          return new Response(stream, { status: 200 })
+        }
+        payload = { choices: [{ message: { content: '好的' } }] }
+        call += 1
+        return bodyResponse(payload)
+      }),
+    )
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await type((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement), '发链接')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    // 中间态：第一条流式占位（纯文本，无 .ai-md）
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60))
+    })
+    expect(c.querySelectorAll('.ai-msg-assistant .ai-md')).toHaveLength(0)
+    await flushUntil(() => c.querySelectorAll('.ai-msg-assistant .ai-md a').length > 0)
+    // 定稿回复中链接安全打开新页
+    const link = c.querySelector('.ai-md a[target="_blank"]') as HTMLAnchorElement
+    expect(link?.href).toContain('example.com')
+  })
+})
