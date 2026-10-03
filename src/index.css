@@ -800,6 +800,64 @@ a.level-row:hover {
 .ai-panel-form button {
   flex: none;
 }
+/* 用户附图（批次8a）：待发缩略图行 + 📎 按钮 */
+.ai-attach-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+.ai-attach-chip {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+.ai-attach-chip img {
+  width: 52px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+}
+.ai-attach-del {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg, #fff);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.ai-attach-del:hover {
+  color: var(--danger, #c0392b);
+}
+.ai-attach-warn {
+  font-size: 12px;
+  color: #9a6700;
+  background: #fff8c5;
+  border: 1px solid #d4a72c66;
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.ai-attach-btn {
+  align-self: flex-end;
+  margin-bottom: 1px;
+}
+.ge-dark .ai-attach-del {
+  background: #1c222c;
+}
+.ge-dark .ai-attach-warn {
+  color: #d8a327;
+  background: #2d2410;
+  border-color: #8a6d1a66;
+}
 .editor-canvas-layout {
   display: flex;
   flex-wrap: wrap;

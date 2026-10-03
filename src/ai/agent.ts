@@ -19,8 +19,10 @@ export interface AgentTurnOptions {
   docId: string
   profile: AiProfileConfig
   systemPrompt: string
-  /** 用户输入（调用方已拼好选中上下文前缀） */
-  userText: string
+  /** 用户输入（调用方已拼好选中上下文前缀）；不传/空 = 不追加 user 消息（失败重试时直接续跑现有历史） */
+  userText?: string
+  /** 随本轮 user 消息附带的图片（data URL；用户附图/多模态） */
+  images?: string[]
   tools: AiTool[]
   ctx: ToolContext
   /** 单次提问最多工具调用轮数，防失控 */
@@ -41,7 +43,13 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
   const ctrl = new AbortController()
   controllers.set(opts.docId, ctrl)
   patchSession(opts.docId, { busy: true, error: null })
-  appendMessage(opts.docId, { role: 'user', content: opts.userText })
+  if (opts.userText) {
+    appendMessage(opts.docId, {
+      role: 'user',
+      content: opts.userText,
+      images: opts.images && opts.images.length > 0 ? opts.images : undefined,
+    })
+  }
 
   try {
     const maxTurns = opts.maxTurns ?? 6

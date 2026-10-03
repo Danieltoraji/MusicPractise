@@ -11,6 +11,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toPng } from 'html-to-image'
 import { runAgentTurn, stopAgent } from '../../ai/agent'
+import { appendCapped, downscaleImage, fileToDataUrl, imageFilesFromClipboard, MAX_ATTACH_IMAGES } from '../../ai/imageAttach'
 import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
 import type { AiProfileConfig, ChatMessage } from '../../ai/client'
 import { buildEditorSystemPrompt, buildPlanExecutionPrompt, formatSelectionContext, PRESET_COMMANDS, type AiSelectionContext } from '../../ai/prompts'
@@ -18,6 +19,7 @@ import { appendMessage, clearSession, getSession, hydrateSession, patchSession, 
 import { buildPlan } from '../../ai/plan'
 import type { PlanState } from '../../ai/plan'
 import { loadAiSettings } from '../../ai/settings'
+import { detectVision } from '../../ai/vision'
 import { READONLY_TOOLS } from '../../ai/tools'
 import { PLAN_TOOLS } from '../../ai/tools-plan'
 import { DEBUG_TOOLS } from '../../ai/tools-debug'
@@ -63,6 +65,8 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
   const applyRef = useRef(onApplyDoc)
   applyRef.current = onApplyDoc
   const [input, setInput] = useState('')
+  const [pendingImages, setPendingImages] = useState<string[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const profile = activeProfile()
@@ -98,31 +102,47 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.id])
 
+  /** 附图进列（📎 上传与粘贴共用）：逐张压缩、容量截断；单张失败跳过不挡其余 */
+  const attachFiles = async (files: Iterable<File>): Promise<void> => {
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue
+      try {
+        const small = await downscaleImage(await fileToDataUrl(file))
+        setPendingImages((prev) => appendCapped(prev, small))
+      } catch {
+        // 读取/解码失败的单张跳过
+      }
+    }
+  }
+
   const send = async (): Promise<void> => {
     const text = input.trim()
-    if (!text || session.busy) return
-    await sendText(text)
+    if ((!text && pendingImages.length === 0) || session.busy) return
+    await sendText(text, pendingImages)
   }
 
   /** 实际发送（send 的内 guts；执行计划/开场自动发送复用）。mode 直读 store 真源（executePlan 先切模式再发送，快照会滞后） */
-  const sendText = async (text: string): Promise<void> => {
-    if (!text || session.busy) return
+  const sendText = async (text: string, images?: string[]): Promise<void> => {
+    if ((!text && !(images && images.length > 0)) || session.busy) return
     const prof = profile ?? activeProfile()
     if (!prof) return
     const mode = getSession(doc.id).mode
     setInput('')
+    setPendingImages([])
     // agent 模式：发送即存检查点（回滚 = 回到本轮 AI 动手前）
     if (mode === 'agent') {
       const at = saveCheckpoint(doc.id, docRef.current)
       patchSession(doc.id, { checkpointAt: at })
     }
     const ctxText = formatSelectionContext(selection, docRef.current)
-    const userText = ctxText ? `[上下文] ${ctxText}\n\n${text}` : text
+    const body = text || '（见图片）'
+    const userText = ctxText ? `[上下文] ${ctxText}\n\n${body}` : body
     await runAgentTurn({
       docId: doc.id,
       profile: prof,
       systemPrompt: buildEditorSystemPrompt(docRef.current, mode),
       userText,
+      images: images && images.length > 0 ? images : undefined,
       tools:
         mode === 'agent'
           ? [
@@ -398,19 +418,71 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         </div>
       )}
 
+      {pendingImages.length > 0 && (
+        <div className="ai-attach-row">
+          {pendingImages.map((src, i) => (
+            <span key={i} className="ai-attach-chip">
+              <img src={src} alt={`附图 ${i + 1}`} />
+              <button
+                type="button"
+                className="ai-attach-del"
+                title="移除这张图"
+                onClick={() => setPendingImages((prev) => prev.filter((_, k) => k !== i))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {profile && detectVision(profile.model) === 'text' && (
+            <span className="ai-attach-warn" title="该模型名属于已知纯文本模型，附图可能被供应商拒绝（4xx）。可在设置中改用视觉模型">
+              ⚠ 当前模型可能不支持图像输入
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="ai-panel-form">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            void attachFiles(e.target.files ?? [])
+            e.target.value = ''
+          }}
+        />
+        <button
+          type="button"
+          className="ai-attach-btn"
+          title={`附加图片（也可直接 Ctrl+V 粘贴截图，最多 ${MAX_ATTACH_IMAGES} 张）`}
+          disabled={!profile || pendingImages.length >= MAX_ATTACH_IMAGES}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          📎
+        </button>
         <textarea
           rows={2}
           placeholder={
             profile
               ? session.mode === 'agent'
                 ? '让 AI 修改关卡…（Enter 发送；发送时自动存检查点）'
-                : '询问当前关卡…（Enter 发送，Shift+Enter 换行）'
+                : '询问当前关卡…（Enter 发送，Shift+Enter 换行；可粘贴截图提问）'
               : '请先在设置中配置 AI 供应商'
           }
           value={input}
           disabled={!profile}
           onChange={(e) => setInput(e.target.value)}
+          onPaste={(e) => {
+            if (!profile) return
+            const items = e.clipboardData?.items
+            if (!items) return
+            const files = imageFilesFromClipboard(items)
+            if (files.length === 0) return
+            e.preventDefault()
+            void attachFiles(files)
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
@@ -423,7 +495,12 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
             停止
           </button>
         ) : (
-          <button type="button" className="primary" disabled={!profile || !input.trim()} onClick={() => void send()}>
+          <button
+            type="button"
+            className="primary"
+            disabled={!profile || (!input.trim() && pendingImages.length === 0)}
+            onClick={() => void send()}
+          >
             发送
           </button>
         )}

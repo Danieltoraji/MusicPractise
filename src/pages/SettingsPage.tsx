@@ -171,8 +171,11 @@ export function SettingsPage() {
               onChange={(e) => patchActive({ model: e.target.value })}
             />
             <datalist id="ai-model-suggestions">
-              {(preset?.models ?? []).map((m) => (
-                <option key={m} value={m} />
+              {(preset?.models ?? []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.id}
+                  {s.vision ? '（视觉：支持图像输入）' : ''}
+                </option>
               ))}
             </datalist>
           </label>

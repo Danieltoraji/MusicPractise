@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runAgentTurn, stopAgent } from './agent'
 import type { AiProfileConfig } from './client'
-import { clearSession, getSession } from './session'
+import { appendMessage, clearSession, getSession } from './session'
 import type { AiTool, ToolContext } from './tools'
 import type { LevelDoc } from '../engine/level'
 
@@ -184,6 +184,47 @@ describe('agent 图像消息（批次5）', () => {
     expect(imgMsg.content[0]).toMatchObject({ type: 'text' })
     expect(imgMsg.content[1]).toMatchObject({ type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } })
     clearSession('res_agent_img')
+  })
+})
+
+describe('agent 用户附图（批次8a）', () => {
+  it('opts.images 随 user 消息入会话，并以 multimodal content 发给模型', async () => {
+    clearSession('res_agent_att')
+    const fn = scriptFetch([{ choices: [{ message: { content: '我看到图了。' } }] }])
+    await runAgentTurn({
+      docId: 'res_agent_att',
+      profile,
+      systemPrompt: 'S',
+      userText: '看看这张图',
+      images: ['data:image/jpeg;base64,BBB'],
+      tools: [],
+      ctx,
+    })
+    expect(getSession('res_agent_att').messages[0]).toMatchObject({
+      role: 'user',
+      content: '看看这张图',
+      images: ['data:image/jpeg;base64,BBB'],
+    })
+    const body = JSON.parse(((fn.mock.calls[0] as unknown[])[1] as { body: string }).body)
+    expect(body.messages[1].content[1]).toMatchObject({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,BBB' } })
+    clearSession('res_agent_att')
+  })
+
+  it('不带 userText 时不追加 user 消息（失败重试续跑现有历史的路径）', async () => {
+    clearSession('res_agent_retry')
+    // 预置历史（模拟上一轮失败后残留的 user 消息）
+    appendMessage('res_agent_retry', { role: 'user', content: '上一轮的问题' })
+    const fn = scriptFetch([{ choices: [{ message: { content: '续跑成功。' } }] }])
+    await runAgentTurn({ docId: 'res_agent_retry', profile, systemPrompt: 'S', tools: [], ctx })
+    const msgs = getSession('res_agent_retry').messages
+    // 没有重复插入 user 消息：历史只有预置的 1 条 + 本轮 assistant 回复
+    expect(msgs).toHaveLength(2)
+    expect(msgs[0]).toMatchObject({ role: 'user', content: '上一轮的问题' })
+    expect(msgs[1]).toMatchObject({ role: 'assistant', content: '续跑成功。' })
+    // 模型收到的 user 消息仍是那一条（未重复）
+    const body = JSON.parse(((fn.mock.calls[0] as unknown[])[1] as { body: string }).body)
+    expect(body.messages.filter((m: { role: string }) => m.role === 'user')).toHaveLength(1)
+    clearSession('res_agent_retry')
   })
 })
 

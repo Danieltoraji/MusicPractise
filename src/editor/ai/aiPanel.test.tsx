@@ -9,6 +9,12 @@ import { blankLevelDoc } from '../docState'
 import type { LevelDoc } from '../../engine/level'
 import { AiPanel } from './AiPanel'
 
+// 附图压缩依赖 Image 解码（jsdom 不加载资源，onload 永不触发）——面板测试短路为原图直通
+vi.mock('../../ai/imageAttach', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../../ai/imageAttach')>()
+  return { ...mod, downscaleImage: async (url: string) => url }
+})
+
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const containers: HTMLElement[] = []
@@ -460,7 +466,6 @@ describe('AI 回复 Markdown 渲染（批次7）', () => {
     await flushUntil(() => c.querySelector('.ai-md h1') !== null)
     expect(c.querySelector('.ai-md h1')?.textContent).toBe('问题报告')
     expect(c.querySelectorAll('.ai-md li').length).toBeGreaterThan(0)
-    console.log('MD-DBG:', JSON.stringify(c.querySelector('.ai-md')?.innerHTML?.slice(0, 300)))
     expect(c.querySelector('.ai-md table')).toBeTruthy()
   })
 
@@ -523,5 +528,81 @@ describe('AI 回复 Markdown 渲染（批次7）', () => {
     // 定稿回复中链接安全打开新页
     const link = c.querySelector('.ai-md a[target="_blank"]') as HTMLAnchorElement
     expect(link?.href).toContain('example.com')
+  })
+})
+
+describe('用户附图（批次8a）', () => {
+  function setKey(): void {
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
+    const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
+    stored.profiles.deepseek.apiKey = 'sk-t'
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
+  }
+
+  /** 构造带 clipboardData.items 的 paste 事件 */
+  function pasteEvent(files: File[]): Event {
+    const ev = new Event('paste', { bubbles: true, cancelable: true }) as Event & { clipboardData: unknown }
+    ev.clipboardData = { items: files.map((f) => ({ type: f.type, getAsFile: () => f })) }
+    return ev
+  }
+
+  async function attachFile(c: HTMLElement, file: File): Promise<void> {
+    const input = c.querySelector('input[type="file"]') as HTMLInputElement
+    await act(async () => {
+      Object.defineProperty(input, 'files', { value: [file] })
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await flushUntil(() => c.querySelectorAll('.ai-attach-chip').length > 0)
+  }
+
+  it('📎 上传附图 → chip + 纯文本模型警告；发送后 user 消息带图（multimodal 下发）', async () => {
+    setKey()
+    clearSession(DOC.id)
+    const fetchMock = vi.fn(async () => bodyResponse({ choices: [{ message: { content: '收到图片。' } }] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+
+    await attachFile(c, new File(['fake-png'], 'shot.png', { type: 'image/png' }))
+    // 默认档案 deepseek-chat 属已知纯文本 → 附图警告可见
+    expect(c.textContent).toContain('可能不支持图像输入')
+    // 无文本但有图：发送按钮可用
+    const send = [...c.querySelectorAll('button')].find((b) => b.textContent === '发送') as HTMLButtonElement
+    expect(send.disabled).toBe(false)
+
+    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '看这张图')
+    await act(async () => {
+      send.click()
+    })
+    await flushUntil(() => c.textContent!.includes('收到图片。'))
+
+    expect(getSession(DOC.id).messages[0]).toMatchObject({
+      role: 'user',
+      images: expect.arrayContaining([expect.stringContaining('data:image/png')]),
+    })
+    const body = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
+    const userMsg = body.messages.at(-1)
+    expect(Array.isArray(userMsg.content)).toBe(true)
+    expect(userMsg.content[1]).toMatchObject({ type: 'image_url' })
+    // 面板渲染出图，且发送后 chip 区清空
+    expect(c.querySelector('.ai-msg-user img')).toBeTruthy()
+    expect(c.querySelectorAll('.ai-attach-chip')).toHaveLength(0)
+  })
+
+  it('Ctrl+V 粘贴截图：chip 入列；× 可移除', async () => {
+    setKey()
+    clearSession(DOC.id)
+    vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: '好' } }] })))
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    const textarea = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
+    await act(async () => {
+      textarea.dispatchEvent(pasteEvent([new File(['x'], 'clip.png', { type: 'image/png' })]))
+    })
+    await flushUntil(() => c.querySelectorAll('.ai-attach-chip').length > 0)
+    expect(c.querySelectorAll('.ai-attach-chip')).toHaveLength(1)
+
+    await act(async () => {
+      ;(c.querySelector('.ai-attach-del') as HTMLButtonElement).click()
+    })
+    expect(c.querySelectorAll('.ai-attach-chip')).toHaveLength(0)
   })
 })

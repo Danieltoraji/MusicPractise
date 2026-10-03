@@ -8,7 +8,8 @@ describe('AI 供应商预设注册表', () => {
     for (const p of PROVIDER_PRESETS) {
       expect(p.baseUrl).toMatch(/^https:\/\//)
       expect(p.baseUrl.endsWith('/')).toBe(false)
-      expect(p.models).toContain(p.defaultModel)
+      expect(p.models.some((s) => s.id === p.defaultModel)).toBe(true)
+      expect(p.models.every((s) => s.id.trim() !== '' && !s.id.includes('（'))).toBe(true)
       expect(p.name.length).toBeGreaterThan(0)
     }
   })

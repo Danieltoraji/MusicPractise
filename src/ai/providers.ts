@@ -6,15 +6,24 @@
  * 模型名迭代很快，预设只给建议值，设置页允许自由输入。
  */
 
+/** 模型建议条目（设置页 datalist）：value 恒为可直发 API 的模型名，标注只进显示文案 */
+export interface ModelSuggestion {
+  id: string
+  /** 支持图像输入（视觉） */
+  vision?: boolean
+}
+
 export interface ProviderPreset {
   id: string
   name: string
   baseUrl: string
   defaultModel: string
   /** 模型建议（设置页 datalist 候选，可自由输入之外的值） */
-  models: string[]
+  models: ModelSuggestion[]
   note?: string
 }
+
+const m = (id: string, vision = false): ModelSuggestion => (vision ? { id, vision: true } : { id })
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
@@ -22,43 +31,49 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     name: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
     defaultModel: 'deepseek-chat',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
-    note: 'deepseek-chat 通用对话；deepseek-reasoner 深度推理（较慢）',
+    models: [m('deepseek-chat'), m('deepseek-reasoner')],
+    note: 'deepseek-chat 通用对话；deepseek-reasoner 深度推理（较慢）。暂无视觉模型——发图片请换支持的供应商',
   },
   {
     id: 'glm',
     name: '智谱 GLM',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     defaultModel: 'glm-4.6',
-    models: ['glm-4.6', 'glm-4.5', 'glm-4.5-air', 'glm-4-flash'],
+    models: [m('glm-4.6'), m('glm-4.5'), m('glm-4.5-air'), m('glm-4-flash'), m('glm-4v-plus', true)],
   },
   {
     id: 'openai',
     name: 'OpenAI（ChatGPT）',
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-4o-mini',
-    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'],
+    models: [m('gpt-4o-mini', true), m('gpt-4o', true), m('gpt-4.1', true), m('gpt-4.1-mini'), m('o4-mini')],
   },
   {
     id: 'moonshot',
     name: 'Moonshot Kimi',
     baseUrl: 'https://api.moonshot.cn/v1',
     defaultModel: 'kimi-k2-0905-preview',
-    models: ['kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k'],
+    models: [m('kimi-k2-0905-preview'), m('moonshot-v1-8k'), m('moonshot-v1-32k'), m('moonshot-v1-8k-vision-preview', true)],
   },
   {
     id: 'qwen',
     name: '通义千问 Qwen',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     defaultModel: 'qwen-plus',
-    models: ['qwen-max', 'qwen-plus', 'qwen-turbo'],
+    models: [m('qwen-max'), m('qwen-plus'), m('qwen-turbo'), m('qwen-vl-max', true), m('qwen-vl-plus', true)],
   },
   {
     id: 'openrouter',
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'openrouter/auto',
-    models: ['openrouter/auto', 'deepseek/deepseek-chat', 'openai/gpt-4o-mini', 'anthropic/claude-sonnet-4.5'],
+    models: [
+      m('openrouter/auto'),
+      m('deepseek/deepseek-chat'),
+      m('openai/gpt-4o-mini', true),
+      m('anthropic/claude-sonnet-4.5', true),
+      m('qwen/qwen-2.5-vl-72b-instruct', true),
+    ],
     note: '聚合网关：一个 Key 调多家模型；其他供应商浏览器直连受阻时的备选',
   },
 ]
