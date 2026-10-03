@@ -48,9 +48,10 @@ import { graphCardNodeTypes, type GraphCardData, type GraphTheme, type SummaryMo
 import { NodeContextMenu, NodeLibraryPanel } from './NodeLibrary'
 import { DockPanel } from './DockPanel'
 import { DebugPanel } from './DebugPanel'
+import { DebugStage } from './DebugStage'
 import { EventManagerPanel } from './EventManagerPanel'
 import { getAiHighlight, subscribeAiHighlight } from './aiHighlight'
-import { getDebugSnapshot, subscribeDebugRun, toggleDebugBreakpoint } from './debugRun'
+import { getDebugSnapshot, stopDebugRun, subscribeDebugRun, toggleDebugBreakpoint } from './debugRun'
 import { NodeInspector } from './NodeInspector'
 import { VariablesPanel } from './VariablesPanel'
 import { CanvasMap } from './CanvasMap'
@@ -377,6 +378,14 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
   // 调试状态（docs/30）：断点印在节点卡圆点、暂停节点高亮
   const debugSnap = useSyncExternalStore(subscribeDebugRun, getDebugSnapshot)
   const breakpointSet = useMemo(() => new Set(debugSnap.breakpoints), [debugSnap.breakpoints])
+  // 调试布局（批次9 可视化）：会话激活时工作台整体切换——左区画面/节点图二选一，右侧调试+AI 列
+  const [dbgPane, setDbgPane] = useState<'stage' | 'graph'>('stage')
+  const [dbgRightW, setDbgRightW] = usePanelWidth('graph-dock-dbg-w', 380, 280, 560)
+  const [dbgDebugH, setDbgDebugH] = usePanelWidth('graph-dock-dbg-h', 340, 180, 700)
+  const stageSessionNo = debugSnap.stage?.sessionNo ?? 0
+  useEffect(() => {
+    if (stageSessionNo > 0) setDbgPane('stage') // 新会话启动（人或 AI）自动亮出画面
+  }, [stageSessionNo])
   // AI 高亮（批次5）：highlight_nodes 工具指认的节点发光 + 画布自动定位
   const aiHl = useSyncExternalStore(subscribeAiHighlight, getAiHighlight)
   const aiHlSet = useMemo(() => new Set(aiHl.ids), [aiHl.ids])
@@ -750,6 +759,154 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     )
   }
 
+  // 中央画布区（节点图 + 叠加层）：编辑布局与调试布局的「节点图」窗格共用（批次9）
+  const graphCanvasArea = (
+    <div
+      className="graph-canvas"
+      onContextMenu={(e) => {
+        e.preventDefault()
+      }}
+    >
+      <ReactFlow
+        nodes={rfNodes}
+        edges={rfEdges}
+        nodeTypes={graphCardNodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onNodeClick={(_, n) => setSelectedId(n.id)}
+        onPaneClick={() => {
+          setSelectedId(null)
+          setMenu(null)
+        }}
+        onPaneContextMenu={(e) => {
+          e.preventDefault()
+          const flow = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+          setMenu({ screen: { x: e.clientX, y: e.clientY }, flow })
+        }}
+        onEdgeDoubleClick={(_, edge) => apply((prog) => disconnect(prog, edge.id))}
+        deleteKeyCode={['Backspace', 'Delete']}
+        fitView
+        minZoom={0.2}
+        colorMode={theme}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={26} size={1.6} color="#26355a" />
+        <MiniMap pannable zoomable nodeColor="#41598c" nodeStrokeColor="#6f86b8" />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+      {showMap && (
+        <CanvasMap
+          comps={doc.content.components}
+          views={doc.content.views}
+          focusId={mapFocus}
+          onToggleFocus={(id) => setMapFocus((cur) => (cur === id ? null : id))}
+          onClose={() => {
+            setShowMap(false)
+            setMapFocus(null)
+          }}
+        />
+      )}
+      {menu && (
+        <NodeContextMenu
+          groups={palette}
+          templates={templates}
+          screen={menu.screen}
+          onPick={(item) => addFromPalette(item, menu.flow)}
+          onPickTemplate={(tpl) => addTemplate(tpl, menu.flow)}
+          onClose={() => setMenu(null)}
+        />
+      )}
+      {showScript && (
+        <div className="graph-script-overlay">
+          <div className="graph-script-head">
+            <b>伪代码视图（LevelScript）</b>
+            <span className="muted">只读——结构与图一一对应，双向无损</span>
+            <button
+              type="button"
+              onClick={() => {
+                setShowScript(false)
+                setScriptError(null)
+              }}
+            >
+              关闭
+            </button>
+          </div>
+          {scriptError ? <div className="ginsp-issues tone-error">{scriptError}</div> : <pre className="script-view">{scriptText?.text}</pre>}
+        </div>
+      )}
+    </div>
+  )
+
+  // 调试布局（批次9 可视化）：会话激活时整体替换编辑布局——
+  // 左区 = 调试画面/节点图二选一（画面为默认），右侧 = 调试面板 + AI 助手列（宽度可拖拽）
+  if (debugSnap.mode !== 'idle') {
+    return (
+      <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`}>
+        <div className="graph-toolbar">
+          <span className="gdb-live" title="调试会话运行中——画面上的点击即真实事件，AI 的调试操作也实时可见">
+            {debugSnap.mode === 'paused' ? `⏸ 调试中（暂停于 ${debugSnap.pausedAt}）` : '▶ 调试运行中'}
+          </span>
+          <button
+            type="button"
+            className="gtoggle"
+            onClick={() => {
+              stopDebugRun()
+              setDbgPane('stage')
+            }}
+            title="结束调试会话并回到编辑布局"
+          >
+            ⏹ 停止调试
+          </button>
+          <button
+            type="button"
+            className={`gtoggle${dbgPane === 'stage' ? ' active' : ''}`}
+            onClick={() => setDbgPane('stage')}
+            title="左侧显示可交互的游玩画面"
+          >
+            ▶ 画面
+          </button>
+          <button
+            type="button"
+            className={`gtoggle${dbgPane === 'graph' ? ' active' : ''}`}
+            onClick={() => setDbgPane('graph')}
+            title="左侧显示节点图（断点圆点与暂停高亮）"
+          >
+            ⛏ 节点图
+          </button>
+          <span className="muted graph-toolbar-hint">变量/事件/断点/日志在右侧调试面板；AI 助手同列——AI 试玩全程可见</span>
+        </div>
+        {error && <div className="editor-errors">操作未生效：{error}</div>}
+        <div className="graph-layout gdb-layout">
+          <div className="gdb-main">{dbgPane === 'stage' ? <DebugStage doc={doc} /> : graphCanvasArea}</div>
+          <div
+            className="gsplit"
+            title="拖拽调整右侧面板宽度（向左拖变宽）"
+            onPointerDown={(e) => {
+              const base = dbgRightW
+              startSplitDrag(e, 'x', (d) => setDbgRightW(base - d))
+            }}
+          />
+          <div className="graph-dock-col gdb-right" style={{ width: dbgRightW }}>
+            <DockPanel icon="🐞" title="调试" style={{ flex: '0 0 auto', height: dbgDebugH }} onClose={stopDebugRun}>
+              <DebugPanel doc={doc} onFocusNode={focusNode} />
+            </DockPanel>
+            <div
+              className="gsplit gsplit-h"
+              title="拖拽调整上方面板高度"
+              onPointerDown={(e) => {
+                const base = dbgDebugH
+                startSplitDrag(e, 'y', (d) => setDbgDebugH(base + d))
+              }}
+            />
+            <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
+              <AiPanel doc={doc} selection={{ tab: 'graph', nodeId: selectedId }} onClose={onToggleAi} onApplyDoc={onChange} style={{ flex: 1, minHeight: 0 }} />
+            </Suspense>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`}>
       <div className="graph-toolbar">
@@ -868,80 +1025,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
             }}
           />
         )}
-        <div
-          className="graph-canvas"
-          onContextMenu={(e) => {
-            e.preventDefault()
-          }}
-        >
-          <ReactFlow
-            nodes={rfNodes}
-            edges={rfEdges}
-            nodeTypes={graphCardNodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={(_, n) => setSelectedId(n.id)}
-            onPaneClick={() => {
-              setSelectedId(null)
-              setMenu(null)
-            }}
-            onPaneContextMenu={(e) => {
-              e.preventDefault()
-              const flow = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY })
-              setMenu({ screen: { x: e.clientX, y: e.clientY }, flow })
-            }}
-            onEdgeDoubleClick={(_, edge) => apply((prog) => disconnect(prog, edge.id))}
-            deleteKeyCode={['Backspace', 'Delete']}
-            fitView
-            minZoom={0.2}
-            colorMode={theme}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={26} size={1.6} color="#26355a" />
-          <MiniMap pannable zoomable nodeColor="#41598c" nodeStrokeColor="#6f86b8" />
-          <Controls showInteractive={false} />
-          </ReactFlow>
-          {showMap && (
-            <CanvasMap
-              comps={doc.content.components}
-              views={doc.content.views}
-              focusId={mapFocus}
-              onToggleFocus={(id) => setMapFocus((cur) => (cur === id ? null : id))}
-              onClose={() => {
-                setShowMap(false)
-                setMapFocus(null)
-              }}
-            />
-          )}
-          {menu && (
-            <NodeContextMenu
-              groups={palette}
-              templates={templates}
-              screen={menu.screen}
-              onPick={(item) => addFromPalette(item, menu.flow)}
-              onPickTemplate={(tpl) => addTemplate(tpl, menu.flow)}
-              onClose={() => setMenu(null)}
-            />
-          )}
-          {showScript && (
-            <div className="graph-script-overlay">
-              <div className="graph-script-head">
-                <b>伪代码视图（LevelScript）</b>
-                <span className="muted">只读——结构与图一一对应，双向无损</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowScript(false)
-                    setScriptError(null)
-                  }}
-                >
-                  关闭
-                </button>
-              </div>
-              {scriptError ? <div className="ginsp-issues tone-error">{scriptError}</div> : <pre className="script-view">{scriptText?.text}</pre>}
-            </div>
-          )}
-        </div>
+        {graphCanvasArea}
         {(['rightA', 'rightB'] as ColKey[]).map((col) =>
           visibleIn(col).length === 0 ? null : (
             <Fragment key={col}>

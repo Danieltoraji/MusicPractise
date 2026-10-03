@@ -4,6 +4,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LevelDoc } from '../../engine/level'
 import { GraphEditor } from './GraphEditor'
+import { getDebugSnapshot, startDebugRun, stopDebugRun } from './debugRun'
+import { addComponent, blankLevelDoc } from '../docState'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -474,3 +476,79 @@ describe('Inspector 结构化编辑（3-5 友好化）', () => {
     containers.push(container)
   })
 })
+
+describe('调试布局（批次9 可视化）', () => {
+  // 防用例失败时调试会话泄漏到其它文件/用例（模块单例跨用例存活）
+  afterEach(() => {
+    stopDebugRun()
+  })
+
+  // startDebugRun 走 loadLevelDoc 装载——用 blankLevelDoc（schema 合法）而非 GraphEditor 冒烟用的手拼 baseDoc
+  function debugDoc(): LevelDoc {
+    let doc = blankLevelDoc()
+    doc = addComponent(doc, 'button', 'main')
+    doc = {
+      ...doc,
+      content: {
+        ...doc.content,
+        logic: {
+          logicVersion: 2,
+          variables: { score: 0 },
+          nodes: [
+            { id: 'on1', kind: 'on', event: 'level.started', x: 0, y: 0 },
+            { id: 'onb', kind: 'on', event: 'button1.clicked', x: 0, y: 160 },
+            { id: 'asb', kind: 'assign', target: 'score', value: { expr: 'v.score + 1' }, x: 300, y: 160 },
+          ],
+          edges: [{ id: 'eb', from: 'onb', to: 'asb' }],
+        },
+      },
+    } as unknown as LevelDoc
+    return doc
+  }
+
+  it('调试会话激活：工作台切换为调试布局（停止按钮+画面），编辑 dock 消失；停止后恢复', async () => {
+    const doc = debugDoc()
+    await act(async () => {
+      await startDebugRun(doc)
+    })
+    const c = renderEl(<GraphEditor doc={doc} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    // 调试布局：停止调试按钮 + 画面在左侧；编辑布局的三列（组件库标题）不存在
+    expect(c.textContent).toContain('停止调试')
+    expect(c.querySelector('.gdb-layout')).not.toBeNull()
+    expect(c.querySelector('.gdb-stage-canvas')).not.toBeNull()
+    expect(c.textContent).not.toContain('组件库')
+
+    // 停止 → 编辑布局恢复
+    const stop = [...c.querySelectorAll('.graph-toolbar button')].find((b) => b.textContent?.includes('停止调试')) as HTMLElement
+    await act(async () => {
+      stop.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(c.querySelector('.gdb-layout')).toBeNull()
+    expect(c.textContent).toContain('组件库')
+    expect(getDebugSnapshot().mode).toBe('idle')
+  })
+
+  it('调试中可切「节点图」窗格（graph-canvas 在场），「画面」切回', async () => {
+    const doc = debugDoc()
+    await act(async () => {
+      await startDebugRun(doc)
+    })
+    const c = renderEl(<GraphEditor doc={doc} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    const tab = (label: string): HTMLElement =>
+      [...c.querySelectorAll('.graph-toolbar button')].find((b) => b.textContent?.includes(label)) as HTMLElement
+    await act(async () => {
+      tab('节点图').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(c.querySelector('.graph-canvas')).not.toBeNull()
+    expect(c.querySelector('.gdb-stage-canvas')).toBeNull()
+    await act(async () => {
+      tab('画面').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(c.querySelector('.gdb-stage-canvas')).not.toBeNull()
+    const stop = [...c.querySelectorAll('.graph-toolbar button')].find((b) => b.textContent?.includes('停止调试')) as HTMLElement
+    await act(async () => {
+      stop.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+  })
+})
+

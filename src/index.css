@@ -4281,3 +4281,130 @@ a.lib-title:hover {
   border-left-color: var(--ge-line);
   color: var(--ge-muted);
 }
+
+/* ---------------------------------------------------------------------------
+   调试布局与画面（批次9 可视化）：会话激活时工作台切换为
+   [gdb-main 画面/节点图 | gsplit | gdb-right 调试+AI 列]
+   画面本体保持玩家页观感（浅色视口 + 800×470 坐标系等比缩放），外框随工作台主题。
+--------------------------------------------------------------------------- */
+.gdb-live {
+  font-weight: 600;
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #f59e0b66;
+  border-radius: 7px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.gdb-layout {
+  align-items: stretch;
+}
+.gdb-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 620px;
+}
+.gdb-right {
+  flex: none;
+  overflow-y: auto;
+}
+/* 画面组件 */
+.gdb-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ge-line, var(--line));
+  background: var(--ge-panel, var(--panel));
+}
+.gdb-stage-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--ge-ink, var(--ink));
+  font-size: 12.5px;
+}
+.gdb-stage-title {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+.gdb-stage-prompt {
+  color: var(--ge-muted, var(--muted));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+.gdb-stage-badge {
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #f59e0b66;
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.gdb-stage-viewport {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.gdb-stage-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.gdb-stage-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ge-ink, var(--ink));
+  font-size: 12.5px;
+  min-height: 24px;
+}
+.gdb-stage-foot .pass {
+  color: var(--ok, #16a34a);
+  font-weight: 600;
+}
+.gdb-stage-foot .nopass {
+  color: var(--bad, #dc2626);
+  font-weight: 600;
+}
+.gdb-stage-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+}
+/* 深色工作台：外框/顶底条随主题，画面视口保持玩家页浅色观感 */
+.ge-dark .gdb-stage {
+  background: var(--ge-panel);
+  border-color: var(--ge-line);
+  color: var(--ge-ink);
+}
+.ge-dark .gdb-stage-badge {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+.ge-dark .gdb-live {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+}
