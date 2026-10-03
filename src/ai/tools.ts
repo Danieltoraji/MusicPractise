@@ -24,9 +24,10 @@ export interface ToolContext {
   levelId: string
   /**
    * 截取工作台屏幕（返回 PNG data URL；不支持时返回 null）——AI 截图工具用。
-   * target：graph=节点图画布（默认）；canvas=编辑器画布的关卡预览（节点图视图下无此元素返回 null）
+   * target：graph=节点图画布（默认）；canvas=编辑器画布的关卡预览（节点图视图下无此元素返回 null）；
+   * debug=调试运行的游玩画面（无可见调试会话时返回 null）
    */
-  captureScreenshot?(target?: 'graph' | 'canvas'): Promise<string | null>
+  captureScreenshot?(target?: 'graph' | 'canvas' | 'debug'): Promise<string | null>
   /** 向对话追加图像（多模态模型可查看、创作者可见）——AI 截图后调用 */
   emitImages?(images: string[]): void
 }
@@ -252,31 +253,38 @@ function str0(v: unknown): string {
   return typeof v === 'string' ? v : ''
 }
 
-/** 屏幕截图（批次8b）：双目标——节点图结构 / 编辑器画布的关卡预览外观；全模式可用 */
+/** 屏幕截图（批次8b/9）：三目标——节点图结构 / 编辑器画布预览 / 调试运行画面；全模式可用 */
 const captureScreenTool: AiTool = {
   name: 'capture_screen',
   description:
     '截屏给创作者看并附带给你（多模态模型可直接查看图片）：' +
     'target=graph 截节点图画布（确认图结构/向创作者指认位置）；' +
-    'target=canvas 截编辑器画布的关卡预览（组件布局与关卡外观，检查样式问题）。' +
+    'target=canvas 截编辑器画布的关卡预览（组件布局与关卡外观，检查样式问题）；' +
+    'target=debug 截调试运行的游玩画面（AI 试玩/断点状态的可见证据，需调试会话在跑）。' +
     '图片同时展示在对话中',
   parameters: {
     type: 'object',
     properties: {
-      target: { type: 'string', enum: ['graph', 'canvas'], description: 'graph=节点图（默认）；canvas=关卡预览画布' },
+      target: {
+        type: 'string',
+        enum: ['graph', 'canvas', 'debug'],
+        description: 'graph=节点图（默认）；canvas=关卡预览画布；debug=调试运行画面',
+      },
     },
   },
   exec: async (args, ctx) => {
     if (!ctx.captureScreenshot || !ctx.emitImages) return '当前环境不支持截图'
-    const target = str0(args.target) === 'canvas' ? 'canvas' : 'graph'
+    const raw = str0(args.target)
+    const target = raw === 'canvas' || raw === 'debug' ? raw : 'graph'
     const dataUrl = await ctx.captureScreenshot(target)
     if (!dataUrl) {
-      return target === 'canvas'
-        ? '画布截图失败：当前视图没有关卡画布（例如正处于节点图视图）——切到画布/布局视图再试，或改用 target=graph'
-        : '截图失败：节点图元素不可用'
+      if (target === 'canvas') return '画布截图失败：当前视图没有关卡画布（例如正处于节点图视图）——切到画布/布局视图再试，或改用 target=graph'
+      if (target === 'debug') return '调试画面截图失败：没有可见的调试会话——先用 debug_control(action="start") 启动调试，或改用 target=graph'
+      return '截图失败：节点图元素不可用'
     }
+    const label = target === 'canvas' ? '关卡画布' : target === 'debug' ? '调试画面' : '节点图'
     ctx.emitImages([dataUrl])
-    return `✓ ${target === 'canvas' ? '关卡画布' : '节点图'}截图已捕获（附在对话中，创作者可见；若模型支持图像输入则可直接查看）。`
+    return `✓ ${label}截图已捕获（附在对话中，创作者可见；若模型支持图像输入则可直接查看）。`
   },
 }
 

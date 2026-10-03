@@ -144,14 +144,16 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       getDoc: () => docRef.current,
       applyDoc: (next: LevelDoc) => applyRef.current(next),
       levelId: doc.id,
-      // AI 截图（批次8b 双目标）：graph=节点卡层（纯 HTML，避开 React Flow SVG 的已知捕获问题）；
-      // canvas=编辑器画布的关卡预览（真实组件渲染）。html-to-image 抓 DOM/SVG 均可；8s 竞速兜底
-      captureScreenshot: async (target: 'graph' | 'canvas' = 'graph') => {
+      // AI 截图（批次8b/9 目标）：graph=节点卡层（纯 HTML，避开 React Flow SVG 的已知捕获问题）；
+      // canvas=编辑器画布的关卡预览；debug=调试运行的游玩画面（.gdb-stage-canvas，无可见会话时无此元素）
+      captureScreenshot: async (target: 'graph' | 'canvas' | 'debug' = 'graph') => {
         const el =
           target === 'canvas'
             ? document.querySelector('.editor-body .editor-canvas')
-            : document.querySelector('.graph-editor .react-flow__nodes') ??
-              document.querySelector('.graph-editor .react-flow')
+            : target === 'debug'
+              ? document.querySelector('.gdb-stage-canvas')
+              : document.querySelector('.graph-editor .react-flow__nodes') ??
+                document.querySelector('.graph-editor .react-flow')
         if (!el) return null
         try {
           const capture = toPng(el as HTMLElement, {

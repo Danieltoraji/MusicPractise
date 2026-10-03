@@ -40,7 +40,7 @@ function stateSummary(): string {
 const debugControlTool: AiTool = {
   name: 'debug_control',
   description:
-    '控制调试会话：action=start 以当前文档启动可暂停的调试运行（先于其它 debug 工具）；' +
+    '控制调试会话：action=start 以当前文档启动**可见**调试会话（游玩画面显示在工作台左侧，创作者实时可见你操作的每一步）；' +
     'resume 放行挂起的节点；step 单步（下一节点边界再暂停）；pause 在下一节点边界暂停；stop 停止会话',
   parameters: {
     type: 'object',
@@ -166,12 +166,15 @@ const debugBreakpointsTool: AiTool = {
 
 const debugScreenshotTool: AiTool = {
   name: 'debug_screenshot',
-  description: '截取当前节点图画布为屏幕截图：图片会展示给创作者（对话中可见），并附带给多模态模型查看。用于确认图结构、向创作者说明问题位置。截关卡预览画布请用 capture_screen(target="canvas")',
+  description:
+    '截取当前调试运行的游玩画面（批次9 调试可视化：AI 启动的调试会话在左侧可见，截屏即「看」到断点/试玩状态）；' +
+    '无可见调试会话时回落截节点图。图片会展示给创作者（对话中可见），并附带给多模态模型查看',
   parameters: { type: 'object', properties: {} },
   exec: async (_args, ctx) => {
     if (!ctx.captureScreenshot || !ctx.emitImages) return '当前环境不支持截图'
-    const dataUrl = await ctx.captureScreenshot('graph')
-    if (!dataUrl) return '截图失败：画布元素不可用'
+    // 优先调试画面（可见会话）；截不到（无会话/不在节点图工作台）回落节点图
+    const dataUrl = (await ctx.captureScreenshot('debug')) ?? (await ctx.captureScreenshot('graph'))
+    if (!dataUrl) return '截图失败：调试画面与节点图均不可用'
     ctx.emitImages([dataUrl])
     return '✓ 屏幕截图已捕获（附在对话中，创作者可见；若模型支持图像输入则可直接查看）。'
   },

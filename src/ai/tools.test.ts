@@ -170,7 +170,7 @@ describe('capture_screen（批次8b）', () => {
 
   it('target 透传给 captureScreenshot，图片经 emitImages 进对话', async () => {
     const seen: string[] = []
-    const calls: ('graph' | 'canvas' | undefined)[] = []
+    const calls: ('graph' | 'canvas' | 'debug' | undefined)[] = []
     const ctx: ToolContext = {
       getDoc: () => blankLevelDoc(),
       applyDoc: () => {},
@@ -204,5 +204,33 @@ describe('capture_screen（批次8b）', () => {
 
     const ctxNoCap: ToolContext = { getDoc: () => blankLevelDoc(), applyDoc: () => {}, levelId: 'shot3' }
     expect(await shotTool().exec({ target: 'graph' }, ctxNoCap)).toContain('不支持截图')
+  })
+})
+
+describe('capture_screen debug 目标（批次9）', () => {
+  function shotTool() {
+    return READONLY_TOOLS.find((t) => t.name === 'capture_screen')!
+  }
+
+  it('target=debug 透传并标注「调试画面」；无可见会话（null）给启动指引', async () => {
+    const calls: unknown[] = []
+    const base: ToolContext = {
+      getDoc: () => blankLevelDoc(),
+      applyDoc: () => {},
+      levelId: 'shot9',
+      captureScreenshot: async (target) => {
+        calls.push(target)
+        return 'data:image/png;base64,D'
+      },
+      emitImages: () => {},
+    }
+    const res = (await shotTool().exec({ target: 'debug' }, base)) as string
+    expect(calls).toEqual(['debug'])
+    expect(res).toContain('调试画面')
+
+    // 无可见调试会话：captureScreenshot 返回 null → 文案给 debug_control 启动指引
+    const ctx2: ToolContext = { ...base, captureScreenshot: async () => null }
+    const res2 = (await shotTool().exec({ target: 'debug' }, ctx2)) as string
+    expect(res2).toContain('debug_control')
   })
 })

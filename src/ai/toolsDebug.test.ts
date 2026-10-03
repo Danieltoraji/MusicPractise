@@ -123,3 +123,34 @@ describe('update_plan（plan-act 进度工具）', () => {
     stopDebugRun()
   })
 })
+
+describe('debug_screenshot 优先级（批次9）', () => {
+  it('优先截调试画面；失败回落节点图', async () => {
+    const { DEBUG_TOOLS } = await import('./tools-debug')
+    const tool = DEBUG_TOOLS.find((t) => t.name === 'debug_screenshot')!
+    const calls: string[] = []
+    const seen: string[] = []
+    const ctx: ToolContext = {
+      getDoc: () => ({}) as LevelDoc,
+      applyDoc: () => {},
+      levelId: 'dbg9',
+      captureScreenshot: async (target) => {
+        calls.push(target ?? 'default')
+        return target === 'debug' ? null : 'data:image/png;base64,GRAPH'
+      },
+      emitImages: (imgs) => seen.push(...imgs),
+    }
+    const res = (await tool.exec({}, ctx)) as string
+    expect(calls).toEqual(['debug', 'graph'])
+    expect(seen).toEqual(['data:image/png;base64,GRAPH'])
+    expect(res).toContain('已捕获')
+
+    // 全失败：明确失败文案且不 emit
+    const ctx2: ToolContext = { ...ctx, captureScreenshot: async () => null, emitImages: () => {} }
+    const seen2: string[] = []
+    ctx2.emitImages = (imgs) => seen2.push(...imgs)
+    const res2 = (await tool.exec({}, ctx2)) as string
+    expect(res2).toContain('失败')
+    expect(seen2).toEqual([])
+  })
+})

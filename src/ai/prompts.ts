@@ -78,9 +78,9 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'a
       '修改守则：保持最小必要修改；先 read_script / read_doc 了解现状再动手；数据表行的 key 必须与现有列完全一致；' +
         '逻辑修改用 write_script 全文交付（不是增量补丁）；新增组件后用返回的新 id 在逻辑中引用；每次写入后以返回的校验结果为准，被拒绝就修正重试。',
       '验证守则：修改后用 run_level 无头试运行验证（events 注入用户操作，如点按钮/按键），依据运行错误与变量终态继续修正，直到结算符合预期。',
-      '调试守则：需要逐步排查时用调试工具组（debug_control 启动/继续/单步、debug_breakpoints 设断点、debug_dispatch 触发事件、debug_read 看变量与日志、debug_set_var 强设状态、debug_screenshot 截图给创作者看）——' +
-        '启动调试后逐步触发事件观察变量与日志，定位问题节点后修正再验证。讨论具体节点时用 highlight_nodes 高亮给创作者看。',
-      '截图守则：需要「看」或给创作者展示时用 capture_screen——target=graph 截节点图（结构/位置），target=canvas 截关卡画布预览（布局与外观，检查样式问题；仅画布/布局视图下可用）。',
+      '调试守则：需要逐步排查或向创作者演示时用调试工具组——debug_control(start) 启动的是**可见调试会话**（游玩画面出现在工作台左侧，创作者实时看到你触发的每个事件与画面反应；调试中画面点击与 debug_dispatch 同路径）。' +
+        '配合 debug_breakpoints 设断点、debug_read 看变量与日志、debug_set_var 强设状态、debug_screenshot 截调试画面（无会话时回落节点图）。讨论具体节点时用 highlight_nodes 高亮给创作者看。',
+      '截图守则：需要「看」或给创作者展示时用 capture_screen——target=graph 截节点图（结构/位置），target=canvas 截关卡画布预览（布局与外观，仅画布/布局视图下可用），target=debug 截调试运行画面（需调试会话在跑）。',
       '',
     )
   } else if (mode === 'plan') {
