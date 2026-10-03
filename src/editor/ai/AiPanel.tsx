@@ -156,14 +156,21 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         getDoc: () => docRef.current,
         applyDoc: (next) => applyRef.current(next),
         levelId: doc.id,
-        // AI 截图：抓节点卡层（纯 HTML，避开 React Flow SVG/背景的已知捕获问题）；8s 竞速兜底
-        captureScreenshot: async () => {
+        // AI 截图（批次8b 双目标）：graph=节点卡层（纯 HTML，避开 React Flow SVG 的已知捕获问题）；
+        // canvas=编辑器画布的关卡预览（真实组件渲染）。html-to-image 抓 DOM/SVG 均可；8s 竞速兜底
+        captureScreenshot: async (target = 'graph') => {
           const el =
-            document.querySelector('.graph-editor .react-flow__nodes') ??
-            document.querySelector('.graph-editor .react-flow')
+            target === 'canvas'
+              ? document.querySelector('.editor-body .editor-canvas')
+              : document.querySelector('.graph-editor .react-flow__nodes') ??
+                document.querySelector('.graph-editor .react-flow')
           if (!el) return null
           try {
-            const capture = toPng(el as HTMLElement, { backgroundColor: '#14181f', pixelRatio: 1.5, skipFonts: true })
+            const capture = toPng(el as HTMLElement, {
+              backgroundColor: target === 'canvas' ? '#f3f5f8' : '#14181f',
+              pixelRatio: 1.5,
+              skipFonts: true,
+            })
             return await Promise.race([
               capture,
               new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),

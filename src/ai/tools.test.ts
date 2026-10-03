@@ -162,3 +162,47 @@ describe('highlight_nodes（批次5）', () => {
     expect(getAiHighlight().ids).toEqual([])
   })
 })
+
+describe('capture_screen（批次8b）', () => {
+  function shotTool() {
+    return READONLY_TOOLS.find((t) => t.name === 'capture_screen')!
+  }
+
+  it('target 透传给 captureScreenshot，图片经 emitImages 进对话', async () => {
+    const seen: string[] = []
+    const calls: ('graph' | 'canvas' | undefined)[] = []
+    const ctx: ToolContext = {
+      getDoc: () => blankLevelDoc(),
+      applyDoc: () => {},
+      levelId: 'shot1',
+      captureScreenshot: async (target) => {
+        calls.push(target)
+        return 'data:image/png;base64,SHOT'
+      },
+      emitImages: (imgs) => seen.push(...imgs),
+    }
+    const res = (await shotTool().exec({ target: 'canvas' }, ctx)) as string
+    expect(res).toContain('关卡画布')
+    expect(calls).toEqual(['canvas'])
+    expect(seen).toEqual(['data:image/png;base64,SHOT'])
+
+    const res2 = (await shotTool().exec({}, ctx)) as string
+    expect(res2).toContain('节点图')
+    expect(calls[1]).toBe('graph')
+  })
+
+  it('截不到目标（null）时返回可读指引；缺截图能力时明确说明', async () => {
+    const ctxNull: ToolContext = {
+      getDoc: () => blankLevelDoc(),
+      applyDoc: () => {},
+      levelId: 'shot2',
+      captureScreenshot: async () => null,
+      emitImages: () => {},
+    }
+    expect(await shotTool().exec({ target: 'canvas' }, ctxNull)).toContain('没有关卡画布')
+    expect(await shotTool().exec({ target: 'graph' }, ctxNull)).toContain('不可用')
+
+    const ctxNoCap: ToolContext = { getDoc: () => blankLevelDoc(), applyDoc: () => {}, levelId: 'shot3' }
+    expect(await shotTool().exec({ target: 'graph' }, ctxNoCap)).toContain('不支持截图')
+  })
+})

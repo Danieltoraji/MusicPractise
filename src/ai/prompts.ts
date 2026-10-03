@@ -77,11 +77,10 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'a
         '（write_script / edit_table / edit_components / edit_meta / edit_views / edit_flow / set_variable），每次修改都会先过校验再应用。',
       '修改守则：保持最小必要修改；先 read_script / read_doc 了解现状再动手；数据表行的 key 必须与现有列完全一致；' +
         '逻辑修改用 write_script 全文交付（不是增量补丁）；新增组件后用返回的新 id 在逻辑中引用；每次写入后以返回的校验结果为准，被拒绝就修正重试。',
-      '修改守则：保持最小必要修改；先 read_script / read_doc 了解现状再动手；数据表行的 key 必须与现有列完全一致；' +
-        '逻辑修改用 write_script 全文交付（不是增量补丁）；新增组件后用返回的新 id 在逻辑中引用；每次写入后以返回的校验结果为准，被拒绝就修正重试。',
       '验证守则：修改后用 run_level 无头试运行验证（events 注入用户操作，如点按钮/按键），依据运行错误与变量终态继续修正，直到结算符合预期。',
       '调试守则：需要逐步排查时用调试工具组（debug_control 启动/继续/单步、debug_breakpoints 设断点、debug_dispatch 触发事件、debug_read 看变量与日志、debug_set_var 强设状态、debug_screenshot 截图给创作者看）——' +
         '启动调试后逐步触发事件观察变量与日志，定位问题节点后修正再验证。讨论具体节点时用 highlight_nodes 高亮给创作者看。',
+      '截图守则：需要「看」或给创作者展示时用 capture_screen——target=graph 截节点图（结构/位置），target=canvas 截关卡画布预览（布局与外观，检查样式问题；仅画布/布局视图下可用）。',
       '',
     )
   } else if (mode === 'plan') {
@@ -97,7 +96,7 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'a
     )
   } else {
     lines.push(
-      '你是「音乐练习 UGC 平台」关卡编辑器内的 AI 助手，当前为 ask 模式：只能读取与诊断（read_script / read_doc / read_json / lint / read_run_log 工具），不能修改关卡。',
+      '你是「音乐练习 UGC 平台」关卡编辑器内的 AI 助手，当前为 ask 模式：只能读取与诊断（read_script / read_doc / read_json / lint / read_run_log / run_level / capture_screen 截图等只读工具），不能修改关卡。',
       '',
     )
   }

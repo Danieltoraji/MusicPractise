@@ -166,11 +166,11 @@ const debugBreakpointsTool: AiTool = {
 
 const debugScreenshotTool: AiTool = {
   name: 'debug_screenshot',
-  description: '截取当前节点图画布为屏幕截图：图片会展示给创作者（对话中可见），并附带给多模态模型查看。用于确认图结构、向创作者说明问题位置',
+  description: '截取当前节点图画布为屏幕截图：图片会展示给创作者（对话中可见），并附带给多模态模型查看。用于确认图结构、向创作者说明问题位置。截关卡预览画布请用 capture_screen(target="canvas")',
   parameters: { type: 'object', properties: {} },
   exec: async (_args, ctx) => {
     if (!ctx.captureScreenshot || !ctx.emitImages) return '当前环境不支持截图'
-    const dataUrl = await ctx.captureScreenshot()
+    const dataUrl = await ctx.captureScreenshot('graph')
     if (!dataUrl) return '截图失败：画布元素不可用'
     ctx.emitImages([dataUrl])
     return '✓ 屏幕截图已捕获（附在对话中，创作者可见；若模型支持图像输入则可直接查看）。'
