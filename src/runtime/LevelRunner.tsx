@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { LevelDoc, TableRow } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { LevelSession } from './levelSession'
-import { getCtx, playNotes, playSynth, stopSynth } from './audio'
+import { runAudioEffects, nowSeconds } from './audioHost'
 import { appendRunLog, clearRunLog } from './runLog'
 import { ComponentView } from '../components/views'
 
@@ -33,8 +33,8 @@ export function LevelRunner({
   )
 }
 
-/** 题面文本：prompt 列支持对象 {text} 或纯字符串两种形态 */
-function promptText(row: TableRow | null): string {
+/** 题面文本：prompt 列支持对象 {text} 或纯字符串两种形态（调试画面顶条复用） */
+export function promptText(row: TableRow | null): string {
   const p = row?.prompt
   if (typeof p === 'string') return p
   if (p !== null && typeof p === 'object' && !Array.isArray(p)) {
@@ -73,22 +73,8 @@ function RunnerCore({
           setFinished(result)
           onFinished?.(result)
         },
-        runEffects: (effects) => {
-          for (const eff of effects) {
-            if (eff.type === 'audio.play') playNotes(eff.notes, eff.tempo)
-            else if (eff.type === 'audio.synth')
-              playSynth(eff.notes, {
-                wave: eff.wave,
-                tempo: eff.tempo,
-                attack: eff.attack,
-                release: eff.release,
-                gain: eff.gain,
-                cutoff: eff.cutoff,
-              })
-            else if (eff.type === 'audio.synthStop') stopSynth()
-          }
-        },
-        getNowSeconds: () => getCtx().currentTime,
+        runEffects: (effects) => runAudioEffects(effects),
+        getNowSeconds: nowSeconds,
         onLogicEvent: (e) => appendRunLog(levelId, e),
       }),
     [doc, onFinished, levelId],

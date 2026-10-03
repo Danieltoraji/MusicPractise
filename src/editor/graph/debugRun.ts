@@ -7,13 +7,27 @@
  * 模块级单例 + 可订阅快照（与会话 store 同款惯例）。
  */
 
-import type { LevelDoc } from '../../engine/level'
+import type { LevelDoc, TableRow } from '../../engine/level'
 import type { Json } from '../../engine/expr'
 import type { LogicRunEvent, SessionHost } from '../../runtime/levelSession'
 import { LevelSession } from '../../runtime/levelSession'
+import type { ComponentStore } from '../../runtime/store'
+import { runAudioEffects, nowSeconds } from '../../runtime/audioHost'
 import { loadLevelDoc } from '../../library/validate'
 
 export type DebugMode = 'idle' | 'running' | 'paused'
+
+/** 调试画面的渲染源（批次9 可视化）：组件层用它把会话画出来——与真实游玩同构 */
+export interface DebugStageSource {
+  /** 装载管线产出的规范文档（会话实际运行的副本） */
+  doc: LevelDoc
+  /** 会话组件状态 store（per-session 实例） */
+  store: ComponentStore
+  /** 组件事件发射（点击 = session.dispatch，与手动触发同路径） */
+  emitFor(id: string): (event: string, payload?: Json) => void
+  /** 会话代数（每次 start 自增；React 据此重挂画面） */
+  sessionNo: number
+}
 
 export interface DebugSnapshot {
   mode: DebugMode
@@ -28,9 +42,13 @@ export interface DebugSnapshot {
   view: string
   row: number
   total: number
+  /** 当前题目行数据（画面顶条题面用） */
+  rowData: TableRow | null
   finished: { score: Json; passed: boolean } | null
   /** 启动失败原因（装载被拒） */
   loadErrors: string[] | null
+  /** 可见画面渲染源；null = 无运行中的会话 */
+  stage: DebugStageSource | null
 }
 
 // ---------------------------------------------------------------------------
@@ -57,11 +75,14 @@ const debugHost = {
     controller.pendingPause = false
     controller.pausedAt = nodeId
     controller.pausedEvent = event
+    // 挂起时冻结计时器（timer __tick 绕过门控直改组件状态——不冻结会出现画面已停倒计时还在跳）
+    session?.setTimersPaused(true)
     commit({ mode: 'paused', pausedAt: nodeId, pausedEvent: event })
     return new Promise<void>((resolve) => {
       controller.resolvers.push(() => {
         controller.pausedAt = null
         controller.pausedEvent = null
+        session?.setTimersPaused(false)
         commit({ mode: session ? 'running' : 'idle', pausedAt: null, pausedEvent: null })
         resolve()
       })
@@ -96,8 +117,10 @@ let snapshot: DebugSnapshot = {
   view: '',
   row: 0,
   total: 0,
+  rowData: null,
   finished: null,
   loadErrors: null,
+  stage: null,
 }
 
 function notify(): void {
@@ -125,6 +148,7 @@ export function getDebugSnapshot(): DebugSnapshot {
 let session: LevelSession | null = null
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 let docIdRef: string | null = null
+let sessionNo = 0
 
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -150,15 +174,16 @@ export async function startDebugRun(doc: LevelDoc): Promise<string | null> {
   if (session) stopDebugRun()
   const check = loadLevelDoc(structuredClone(doc))
   if (!check.ok) {
-    commit({ mode: 'idle', loadErrors: check.errors })
+    commit({ mode: 'idle', loadErrors: check.errors, stage: null })
     return check.errors.join('；')
   }
   docIdRef = doc.id
+  sessionNo += 1
   commit({ mode: 'running', events: [], finished: null, loadErrors: null, pausedAt: null, pausedEvent: null })
 
   const host: SessionHost = {
-    onRow: (index, total) => {
-      commit({ row: index, total })
+    onRow: (index, total, rowData) => {
+      commit({ row: index, total, rowData: rowData ?? null })
     },
     onView: (id) => {
       commit({ view: id })
@@ -166,9 +191,9 @@ export async function startDebugRun(doc: LevelDoc): Promise<string | null> {
     onFinished: (r) => {
       commit({ finished: r })
     },
-    runEffects: () => {
-      // 调试运行不播放音频/不驱动真实组件：效果只被丢弃（变量与日志照常）
-    },
+    // 批次9 可视化：调试会话播放真实音频——「正常的游玩画面」应有听感
+    runEffects: (effects) => runAudioEffects(effects),
+    getNowSeconds: nowSeconds,
     onLogicEvent: (e) => {
       const events = [...snapshot.events, e].slice(-100)
       commit({ events })
@@ -177,8 +202,17 @@ export async function startDebugRun(doc: LevelDoc): Promise<string | null> {
     debug: debugHost,
   }
   controller.enabled = true
-  session = new LevelSession(check.doc, host)
-  session.start()
+  const inst = new LevelSession(check.doc, host)
+  session = inst
+  // 画面渲染源：组件层从快照读它画游玩画面（引用稳定，运行中 commit 不替换）
+  const stage: DebugStageSource = {
+    doc: check.doc,
+    store: inst.store,
+    emitFor: (id) => inst.emitFor(id),
+    sessionNo,
+  }
+  commit({ stage })
+  inst.start()
   await flush()
   refreshLive()
   notify()
@@ -199,7 +233,19 @@ export function stopDebugRun(): void {
   session?.dispose()
   session = null
   docIdRef = null
-  commit({ mode: 'idle', pausedAt: null, pausedEvent: null })
+  commit({ mode: 'idle', pausedAt: null, pausedEvent: null, stage: null })
+}
+
+/** 重开当前调试会话（restart 语义：变量/组件/行复位重跑；断点与日志保留） */
+export function restartDebug(): string | null {
+  if (!session) return '调试会话未运行'
+  session.restart()
+  void Promise.resolve().then(async () => {
+    await flush()
+    refreshLive()
+    notify()
+  })
+  return null
 }
 
 /** 继续：放行当前挂起的节点，跑到下一个断点 */

@@ -54,7 +54,9 @@ export class LevelSession {
   private row: TableRow | null = null
   private view = ''
   private emitFns = new Map<string, (event: string, payload?: Json) => void>()
-  private timers = new Map<string, ReturnType<typeof setTimeout>>()
+  private timers = new Map<string, { handle: ReturnType<typeof setTimeout>; ms: number; repeat: boolean; startedAt: number }>()
+  private timersPaused = false
+  private pausedTimers = new Map<string, { ms: number; repeat: boolean; remaining: number }>()
 
   constructor(doc: LevelDoc, host: SessionHost) {
     this.doc = doc
@@ -283,20 +285,42 @@ export class LevelSession {
     }
     // 单次与重复分别用 timeout/interval；句柄统一用 clearTimeout 清理
     const handle = repeat ? setInterval(fire, ms) : setTimeout(fire, ms)
-    this.timers.set(cid, handle)
+    this.timers.set(cid, { handle, ms, repeat, startedAt: Date.now() })
   }
 
   private stopTimer(cid: string): void {
-    const handle = this.timers.get(cid)
-    if (handle !== undefined) {
-      clearTimeout(handle)
+    const rec = this.timers.get(cid)
+    if (rec !== undefined) {
+      clearTimeout(rec.handle)
       this.timers.delete(cid)
     }
   }
 
   private stopAllTimers(): void {
-    for (const handle of this.timers.values()) clearTimeout(handle)
+    for (const rec of this.timers.values()) clearTimeout(rec.handle)
     this.timers.clear()
+    this.pausedTimers.clear()
+  }
+
+  /**
+   * 暂停/恢复全部计时器（批次9 调试可视化）：调试门控挂起引擎时画面应完全冻结——
+   * timer 的 __tick 直改组件状态绕过门控，不冻结会出现「画面已暂停但倒计时还在跳」。
+   * 暂停记录剩余时间，恢复按剩余重挂（repeat 重挂后回到完整周期；wait 不受此管理）。
+   */
+  setTimersPaused(paused: boolean): void {
+    if (paused === this.timersPaused) return
+    this.timersPaused = paused
+    if (paused) {
+      for (const [cid, rec] of this.timers) {
+        clearTimeout(rec.handle)
+        const remaining = Math.max(0, rec.ms - (Date.now() - rec.startedAt))
+        this.pausedTimers.set(cid, { ms: rec.ms, repeat: rec.repeat, remaining })
+      }
+      this.timers.clear()
+    } else {
+      for (const [cid, p] of this.pausedTimers) this.startTimer(cid, p.repeat ? p.ms : Math.max(1, p.remaining), p.repeat)
+      this.pausedTimers.clear()
+    }
   }
 
   private finish(passedArg?: boolean): void {
