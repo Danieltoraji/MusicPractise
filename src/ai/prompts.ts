@@ -182,3 +182,49 @@ export function buildPlanExecutionPrompt(items: { text: string }[]): string {
     '无法完成的项标为 skipped 并说明原因；全部项处理完后简短汇报结果。',
   ].join('\n')
 }
+
+// ---------------------------------------------------------------------------
+// 一键预设指令（批次6d）：面板头部快捷按钮，一条指令完成常见任务
+// ---------------------------------------------------------------------------
+
+export interface PresetCommand {
+  key: string
+  label: string
+  tip: string
+  mode: 'ask' | 'agent'
+  instruction: string
+}
+
+export const PRESET_COMMANDS: PresetCommand[] = [
+  {
+    key: 'review',
+    label: '🔍 审查关卡',
+    tip: '全面体检：lint/逻辑/数据一致性/体验，输出结构化报告并标注问题节点（只读）',
+    mode: 'ask',
+    instruction:
+      '请对本关卡做一次全面审查，逐项检查后输出结构化报告，固定四个小节：' +
+      '【问题】（lint 错误、逻辑漏洞如未声明的变量/悬空引用/永假条件、数据表缺列空值、视图与组件错配——用 highlight_nodes 高亮问题节点）、' +
+      '【建议】（体验与结构改进，按优先级排序）、' +
+      '【亮点】（设计得好的地方）、' +
+      '【总结】（一句话总评）。只读取与诊断，不修改关卡。',
+  },
+  {
+    key: 'gen-questions',
+    label: '📝 批量出题',
+    tip: '按现有数据表结构批量追加题目行（agent：先读列结构，确认后写入）',
+    mode: 'agent',
+    instruction:
+      '请为数据表批量出题：先用 read_doc 读现有列结构与已有行做参考（风格/难度保持一致），' +
+      '然后追加 5 道新题（列 key 必须与现有列完全一致；notes 列用音符串格式 [{midi,dur}]）；' +
+      '完成后跑 lint 确认无警告，并汇报新增行数。',
+  },
+  {
+    key: 'gen-intro',
+    label: '📖 生成介绍',
+    tip: '根据关卡内容生成一段描述，写入 meta.description（agent）',
+    mode: 'agent',
+    instruction:
+      '请通读本关卡（read_script + read_doc），写一段 60–120 字的关卡介绍（面向玩家：练什么、怎么玩、难度如何），' +
+      '用 edit_meta 写入 meta.description；标题若仍是「未命名关卡」则一并起一个贴切的名字。',
+  },
+]

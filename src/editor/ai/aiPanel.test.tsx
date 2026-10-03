@@ -401,3 +401,39 @@ describe('AiPanel 开场自动发送与预设（批次4）', () => {
     expect((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement).value).toContain('这个关卡的逻辑')
   })
 })
+
+describe('一键预设指令（批次6d）', () => {
+  function setKey(): void {
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
+    const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
+    stored.profiles.deepseek.apiKey = 'sk-t'
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
+  }
+
+  it('预设按钮：审查→ask 只读 / 生成介绍→agent，指令下发', async () => {
+    setKey()
+    clearSession(DOC.id)
+    const fetchMock = vi.fn(async () => bodyResponse({ choices: [{ message: { content: '好的' } }] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+
+    // 审查（ask）
+    const reviewBtn = [...c.querySelectorAll('.ai-presets button')].find((b) => b.textContent?.includes('审查关卡')) as HTMLButtonElement
+    await act(async () => reviewBtn.click())
+    await flushUntil(() => c.textContent!.includes('好的'))
+    expect(getSession(DOC.id).mode).toBe('ask')
+    const body1 = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
+    const reviewMsg = body1.messages.at(-1)
+    expect(reviewMsg.role).toBe('user')
+    expect(reviewMsg.content).toContain('全面审查')
+
+    // 生成介绍（agent）
+    const introBtn = [...c.querySelectorAll('.ai-presets button')].find((b) => b.textContent?.includes('生成介绍')) as HTMLButtonElement
+    await act(async () => introBtn.click())
+    await flushUntil(() => c.textContent!.includes('好的'))
+    expect(getSession(DOC.id).mode).toBe('agent')
+    const body3 = JSON.parse(((fetchMock.mock.calls[1] as unknown[])[1] as { body: string }).body)
+    const introMsg = body3.messages.at(-1)
+    expect(introMsg.content).toContain('edit_meta')
+  })
+})

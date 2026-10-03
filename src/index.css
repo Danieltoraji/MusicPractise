@@ -4043,3 +4043,34 @@ a.lib-title:hover {
     opacity: 0;
   }
 }
+
+/* 一键预设指令行（批次6d） */
+.ai-presets {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+  flex-wrap: wrap;
+}
+.ai-presets button {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+}
+.ai-presets button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ge-dark .ai-presets button {
+  background: var(--ge-panel-2);
+  border-color: var(--ge-line);
+  color: var(--ge-ink);
+}
+.ge-dark .ai-presets button:hover {
+  border-color: var(--ge-accent);
+  color: var(--ge-accent);
+}

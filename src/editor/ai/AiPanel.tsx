@@ -11,7 +11,7 @@ import { toPng } from 'html-to-image'
 import { runAgentTurn, stopAgent } from '../../ai/agent'
 import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
 import type { AiProfileConfig, ChatMessage } from '../../ai/client'
-import { buildEditorSystemPrompt, buildPlanExecutionPrompt, formatSelectionContext, type AiSelectionContext } from '../../ai/prompts'
+import { buildEditorSystemPrompt, buildPlanExecutionPrompt, formatSelectionContext, PRESET_COMMANDS, type AiSelectionContext } from '../../ai/prompts'
 import { appendMessage, clearSession, getSession, hydrateSession, patchSession, subscribeAiSession, type AiMode, type PlanItemStatus } from '../../ai/session'
 import { buildPlan } from '../../ai/plan'
 import type { PlanState } from '../../ai/plan'
@@ -376,6 +376,24 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         <p className="ai-panel-hint">
           尚未配置 AI 供应商——<a href="#/settings">前往设置</a> 填入 API Key 后即可使用。
         </p>
+      )}
+
+      {!session.busy && profile && (
+        <div className="ai-presets">
+          {PRESET_COMMANDS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              title={p.tip}
+              onClick={() => {
+                patchSession(doc.id, { mode: p.mode })
+                void sendText(p.instruction)
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       )}
 
       <div className="ai-panel-form">
