@@ -4452,8 +4452,9 @@ a.lib-title:hover {
 }
 .flow-pass {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
+  flex-basis: 100%;
 }
 .flow-msg {
   font-size: 12px;
@@ -4468,4 +4469,15 @@ a.lib-title:hover {
 .flow-summary {
   flex-basis: 100%;
   font-size: 12px;
+}
+/* flow 条内的条件构造器：左/比较/右 横排（窄容器也保持一行），与属性面板观感一致 */
+.flow-editor .cond-b {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+}
+.flow-editor .cond-b .opv {
+  min-width: 160px;
 }
