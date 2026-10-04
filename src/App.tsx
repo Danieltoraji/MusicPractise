@@ -47,14 +47,17 @@ export default function App() {
     )
   }, [seedAttempt])
 
-  // 浏览器自动播放策略：首次手势解锁 AudioContext
+  // 浏览器自动播放策略：首次手势解锁 AudioContext（touchend 兜底老 Android/微信内核——
+  // 部分内核只认 touch 系事件；passive 避免阻塞滚动）
   useEffect(() => {
     const unlock = () => unlockAudio()
     window.addEventListener('pointerdown', unlock, { once: true })
     window.addEventListener('keydown', unlock, { once: true })
+    window.addEventListener('touchend', unlock, { once: true, passive: true })
     return () => {
       window.removeEventListener('pointerdown', unlock)
       window.removeEventListener('keydown', unlock)
+      window.removeEventListener('touchend', unlock)
     }
   }, [])
 

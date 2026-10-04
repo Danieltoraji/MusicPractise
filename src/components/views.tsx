@@ -291,6 +291,36 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
   const p = (spec.props ?? {}) as Record<string, Json>
   const low = typeof p.lowMidi === 'number' ? p.lowMidi : 48
   const high = typeof p.highMidi === 'number' ? p.highMidi : 72
+  // 滑奏（批次12）：按住拖划经过的键依次发声——PC 鼠标与触屏同一 pointer 通道。
+  // movedRef 抑制滑奏松手时浏览器对起始键补发的 click（避免重复发声）
+  const glideRef = useRef<{ pointerId: number; lastMidi: number | null } | null>(null)
+  const movedRef = useRef(false)
+
+  const strike = (midi: number): void => {
+    store.applyCommand(spec.id, '__strike', { midi })
+    emit('keyClicked', { midi, name: Note.fromMidi(midi) })
+  }
+
+  const onGlideMove = (e: React.PointerEvent): void => {
+    const glide = glideRef.current
+    if (!glide || e.pointerId !== glide.pointerId) return
+    const el = document.elementFromPoint(e.clientX, e.clientY)
+    const key = el instanceof Element ? el.closest<HTMLElement>('[data-midi]') : null
+    const midi = key ? Number(key.dataset.midi) : NaN
+    if (!Number.isFinite(midi) || midi === glide.lastMidi) return
+    glide.lastMidi = midi
+    movedRef.current = true
+    strike(midi)
+  }
+
+  const endGlide = (e: React.PointerEvent): void => {
+    if (glideRef.current?.pointerId !== e.pointerId) return
+    glideRef.current = null
+    // click 补发发生在 pointerup 之后：延迟一拍复位，让键的 onClick 跳过这一次
+    setTimeout(() => {
+      movedRef.current = false
+    }, 0)
+  }
 
   const keys: KeyInfo[] = []
   for (let midi = low; midi <= high; midi++) {
@@ -301,7 +331,26 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
   const blackW = whiteW * 0.62
 
   return (
-    <div style={boxStyle(spec)} className="comp-fingering">
+    <div
+      style={boxStyle(spec)}
+      className="comp-fingering"
+      onPointerDown={(e) => {
+        if (!e.isPrimary || glideRef.current) return
+        glideRef.current = { pointerId: e.pointerId, lastMidi: null }
+        // 按下瞬间即发声（钢琴语义；桌面点击从「松手响」变「按下响」），
+        // 该键的 click 由 movedRef 抑制——发声权已归 pointerdown
+        movedRef.current = true
+        const key = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-midi]') : null
+        const midi = key ? Number(key.dataset.midi) : NaN
+        if (Number.isFinite(midi)) {
+          glideRef.current.lastMidi = midi
+          strike(midi)
+        }
+      }}
+      onPointerMove={onGlideMove}
+      onPointerUp={endGlide}
+      onPointerCancel={endGlide}
+    >
       {whites.map((k, i) => {
         const hl = highlights?.[String(k.midi)]
         return (
@@ -313,8 +362,8 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
             data-midi={k.midi}
             title={Note.fromMidi(k.midi) ?? String(k.midi)}
             onClick={() => {
-              store.applyCommand(spec.id, '__strike', { midi: k.midi })
-              emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })
+              if (movedRef.current) return // 滑奏松手：起始键的补发 click 抑制
+              strike(k.midi)
             }}
           />
         )
@@ -333,8 +382,8 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
               data-midi={k.midi}
               title={Note.fromMidi(k.midi) ?? String(k.midi)}
               onClick={() => {
-                store.applyCommand(spec.id, '__strike', { midi: k.midi })
-                emit('keyClicked', { midi: k.midi, name: Note.fromMidi(k.midi) })
+                if (movedRef.current) return
+                strike(k.midi)
               }}
             />
           )

@@ -4499,3 +4499,8 @@ a.lib-title:hover {
   transform-origin: 0 0;
   touch-action: manipulation;
 }
+/* 触屏交互（批次12）：交互组件禁双击缩放（保留滚动），PC 无感 */
+.comp-staff,
+.comp-fingering {
+  touch-action: manipulation;
+}

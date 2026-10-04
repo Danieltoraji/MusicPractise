@@ -87,6 +87,25 @@ export function StaffView({ spec, store, emit }: ViewProps) {
           store.applyCommand(spec.id, '__strike', { midi })
           emit('noteClicked', { midi, name: Note.fromMidi(midi) })
         })
+        // 触屏/精确指针热区垫（批次12）：音头太小难命中——在 g 内加透明外扩矩形，
+        // 点击冒泡到 g 的既有 listener（零重复处理）。getBBox jsdom 无实现，守卫跳过
+        const svgGroup = svgEl as SVGGElement
+        if (typeof svgGroup.getBBox !== 'function') return
+        try {
+          const bb = svgGroup.getBBox()
+          const pad = Math.min(18, Math.max(8, bb.width * 0.3))
+          const padEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+          padEl.setAttribute('x', String(bb.x - pad))
+          padEl.setAttribute('y', String(bb.y - pad))
+          padEl.setAttribute('width', String(bb.width + pad * 2))
+          padEl.setAttribute('height', String(bb.height + pad * 2))
+          padEl.setAttribute('fill', 'transparent')
+          padEl.setAttribute('pointer-events', 'all')
+          padEl.setAttribute('data-hitpad', String(midi))
+          svgEl.appendChild(padEl)
+        } catch {
+          // getBBox 失败（隐藏容器等）：无垫，音头本体仍可点
+        }
       })
     }
 
