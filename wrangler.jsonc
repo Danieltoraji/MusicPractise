@@ -1,0 +1,16 @@
+// Cloudflare Workers 部署配置（纯静态资产阶段）。
+// name 必须与已手动部署的 Worker 同名，CI 发布才会覆盖同一实例，
+// 对外 URL 保持 https://musicpractise.danieltoraji.workers.dev/ 不变。
+//
+// 远期转全栈时的升级路径（无需改本文件之外的结构）：
+//   1. 增加 "main": "worker/index.ts" 入口，assets 增加 "binding": "ASSETS"
+//   2. 用 "run_worker_first": ["/api/*"] 让 API 请求先进 Worker 代码，
+//      其余路径继续由静态资产兜底（SPA fallback 不变）
+{
+  "name": "musicpractise",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

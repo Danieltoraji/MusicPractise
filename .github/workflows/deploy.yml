@@ -1,12 +1,18 @@
-# GitHub Pages 自动部署：push 到 main（或手动触发）→ 测试 → 构建 → 发布。
+# 双通道自动部署：push 到 main（或手动触发）→ 测试 → 并行发布到
+# GitHub Pages 与 Cloudflare Workers（https://musicpractise.danieltoraji.workers.dev/）。
 #
-# 首次启用需在仓库设置一次：Settings → Pages → Build and deployment →
-# Source 选择「GitHub Actions」。此后每次 push main 自动部署。
+# 首次启用各需在对应平台设置一次：
+# · Pages：Settings → Pages → Build and deployment → Source 选「GitHub Actions」
+# · Workers：仓库 Settings → Secrets and variables → Actions 添加两个 Secret——
+#     CLOUDFLARE_API_TOKEN  （Cloudflare 面板 → My Profile → API Tokens 自建，
+#                            权限 Account → Workers Scripts → Edit；远期加 KV/R2/D1 时再补）
+#     CLOUDFLARE_ACCOUNT_ID （Cloudflare 面板 → Workers & Pages 概览右侧）
 #
-# 项目使用 hash 路由（#/library），天然适配 Pages 的子路径部署；
-# 构建时以 --base=/MusicPractise/ 指定资源前缀，本地开发不受影响。
+# 两个目标对资源前缀的要求不同，各自独立构建：
+# · Pages 项目页部署在仓库子路径下，构建传 VITE_BASE=/MusicPractise/
+# · Workers 挂在自有域名根路径，构建用默认 base '/'
 
-name: Deploy to GitHub Pages
+name: Deploy（GitHub Pages + Cloudflare Workers）
 
 on:
   push:
@@ -20,11 +26,30 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: deploy
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  test:
+    name: 测试（vitest 全量）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 测试（vitest 全量）
+        run: npm test
+
+  deploy-pages:
+    name: 发布 GitHub Pages
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -39,9 +64,6 @@ jobs:
 
       - name: 安装依赖
         run: npm ci
-
-      - name: 测试（vitest 全量）
-        run: npm test
 
       - name: 构建（Pages 子路径 base）
         run: npm run build
@@ -59,3 +81,30 @@ jobs:
       - name: 发布到 GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  deploy-workers:
+    name: 发布 Cloudflare Workers
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建（Workers 根路径 base）
+        run: npm run build
+
+      - name: 发布到 Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          # 锁定 wrangler 版本，避免 latest 大版本变动导致 CI 突然失败
+          wranglerVersion: 4.147.0
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy

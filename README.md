@@ -18,6 +18,18 @@ npm run build    # tsc strict + Vite 生产构建
 - 练习进度（最高分/通过/次数）存 IndexedDB，首页与系列页展示
 - `#/tuner` 校音器（麦克风→音分） · `#/rhythm` 节奏判定
 
+## 部署
+
+push 到 `main`（或 Actions 手动触发）即自动「测试 → 双通道发布」，配置在 `.github/workflows/deploy.yml` + `wrangler.jsonc`：
+
+| 通道 | URL | 说明 |
+|---|---|---|
+| GitHub Pages | https://danieltoraji.github.io/MusicPractise/ | 以 `VITE_BASE=/MusicPractise/` 子路径构建 |
+| Cloudflare Workers | https://musicpractise.danieltoraji.workers.dev/ | 根路径构建，wrangler 发布静态资产；远期全栈的宿主 |
+
+Workers 通道首次启用需在 GitHub 仓库添加两个 Secret（值来自 Cloudflare 面板）：
+`CLOUDFLARE_API_TOKEN`（自定义 Token，权限 Account → Workers Scripts → Edit）与 `CLOUDFLARE_ACCOUNT_ID`。
+
 ## 文档
 
 | 文档 | 内容 |
