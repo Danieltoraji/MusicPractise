@@ -4504,3 +4504,41 @@ a.lib-title:hover {
 .comp-fingering {
   touch-action: manipulation;
 }
+
+/* ---------------------------------------------------------------------------
+   移动端/窄窗口基础断点（批次12）：topbar 紧凑、页边收窄、资源库行可换行。
+   桌面宽屏无感知；游玩画布缩放由 .stage-viewport 独立承担。
+--------------------------------------------------------------------------- */
+@media (max-width: 720px) {
+  .app {
+    padding: 0 10px 32px;
+  }
+  .topbar {
+    padding: 10px 0;
+    margin-bottom: 14px;
+  }
+  .brand {
+    font-size: 15px;
+  }
+  .brand small {
+    display: none;
+  }
+  .topbar nav a {
+    margin-left: 10px;
+    font-size: 13px;
+  }
+  .page {
+    font-size: 14px;
+  }
+  .level-head {
+    gap: 8px;
+    font-size: 13px;
+  }
+  .level-title {
+    font-size: 14px;
+  }
+  .lib-row {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+}
