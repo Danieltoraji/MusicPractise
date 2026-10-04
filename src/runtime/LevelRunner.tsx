@@ -6,9 +6,9 @@ import { useEffect, useMemo, useState } from 'react'
 import type { LevelDoc, TableRow } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { LevelSession } from './levelSession'
+import { LevelStage } from './LevelStage'
 import { runAudioEffects, nowSeconds } from './audioHost'
 import { appendRunLog, clearRunLog } from './runLog'
-import { ComponentView } from '../components/views'
 
 export function LevelRunner({
   doc,
@@ -86,8 +86,6 @@ function RunnerCore({
     return () => session.dispose()
   }, [session])
 
-  const visibleComps = doc.content.components.filter((c) => (c.view ?? firstView) === view)
-
   return (
     <div className="level-runner">
       <div className="level-head">
@@ -97,13 +95,14 @@ function RunnerCore({
           第 {Math.min(progress.index + 1, progress.total)} / {progress.total} 题
         </span>
       </div>
-      <div className="level-canvas-wrap">
-        <div className="level-canvas">
-          {visibleComps.map((c) => (
-            <ComponentView key={c.id} spec={c} store={session.store} emit={session.emitFor(c.id)} />
-          ))}
-        </div>
-      </div>
+      <LevelStage
+        doc={doc}
+        store={session.store}
+        emitFor={(id) => session.emitFor(id)}
+        view={view}
+        viewportClassName="level-canvas-wrap"
+        canvasClassName="level-canvas"
+      />
       <div className="level-foot">
         {finished ? (
           <span className={finished.passed ? 'pass' : 'nopass'}>

@@ -4481,3 +4481,21 @@ a.lib-title:hover {
 .flow-editor .cond-b .opv {
   min-width: 160px;
 }
+
+/* ---------------------------------------------------------------------------
+   共享游玩舞台（批次12）：玩家页与调试画面同一 fit-scale 实现——
+   800×470 设计坐标系等比缩放（上限 1），窄屏/手机整幅缩小居中而非横向滚动。
+   宿主类（level-canvas-wrap/level-canvas/gdb-stage-*）挂同一元素提供各自的尺寸/边框。
+--------------------------------------------------------------------------- */
+.stage-viewport {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+.stage-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  touch-action: manipulation;
+}
