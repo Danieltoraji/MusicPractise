@@ -2,8 +2,8 @@
  * 导入导出：单文档 = JSON；series/topic = refs 闭包打 zip（manifest + resources/*.json）。
  * 导入管线：信封校验 → 包内去重 → refs 闭包检查（缺件整包拒绝）→ 冲突策略（单态：
  * 同 id 同 version 跳过 / 异 version 覆盖更新）→ 报告 added/updated/skipped/rejected/missing。
+ * fflate 按需动态加载（批次11）：只有真正导入/导出时才下载。
  */
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { db, getResource, putResource, type ResourceKind } from './db'
 import { resolveClosure, type ResourceLite } from './refs'
 import { validateEnvelope } from './validate'
@@ -18,7 +18,8 @@ export interface BundleManifest {
   entries: { file: string; id: string; kind: ResourceKind; version: string }[]
 }
 
-export function packBundle(docs: Record<string, unknown>[]): Uint8Array {
+export async function packBundle(docs: Record<string, unknown>[]): Promise<Uint8Array> {
+  const { strToU8, zipSync } = await import('fflate')
   const manifest: BundleManifest = { schemaVersion: 1, exportedAt: new Date().toISOString(), entries: [] }
   const files: Record<string, Uint8Array> = {}
   for (const doc of docs) {
@@ -35,7 +36,8 @@ export function packBundle(docs: Record<string, unknown>[]): Uint8Array {
 const MAX_ENTRY_BYTES = 50_000_000
 const MAX_TOTAL_BYTES = 100_000_000
 
-export function unpackBundle(bytes: Uint8Array): { entries: { file: string; doc: unknown }[]; parseErrors: string[] } {
+export async function unpackBundle(bytes: Uint8Array): Promise<{ entries: { file: string; doc: unknown }[]; parseErrors: string[] }> {
+  const { strFromU8, unzipSync } = await import('fflate')
   let total = 0
   const unzipped = unzipSync(bytes, {
     filter: (f) => {
@@ -151,12 +153,13 @@ export async function importDocuments(
 
 /** 从文件字节导入（.json 单文档或 .zip 包），聚合为一次导入报告 */
 export async function importFromFiles(files: { name: string; bytes: Uint8Array }[]): Promise<ImportReport> {
+  const { strFromU8 } = await import('fflate')
   const entries: ImportEntry[] = []
   const preRejected: { file: string; reasons: string[] }[] = []
   for (const f of files) {
     if (f.name.toLowerCase().endsWith('.zip')) {
       try {
-        const { entries: unpacked, parseErrors } = unpackBundle(f.bytes)
+        const { entries: unpacked, parseErrors } = await unpackBundle(f.bytes)
         entries.push(...unpacked.map((e) => ({ file: `${f.name}/${e.file}`, raw: e.doc })))
         for (const msg of parseErrors) preRejected.push({ file: f.name, reasons: [msg] })
       } catch (err) {
@@ -194,6 +197,7 @@ export async function exportResource(id: string): Promise<ExportedFile> {
   const slug = slugify(rec.title, rec.id)
 
   if (rec.kind === 'level' || rec.kind === 'instrument') {
+    const { strToU8 } = await import('fflate')
     return {
       filename: `${slug}.json`,
       bytes: strToU8(JSON.stringify(rec.doc, null, 2)),
@@ -212,7 +216,7 @@ export async function exportResource(id: string): Promise<ExportedFile> {
     .map((cid) => pool.find((p) => p.id === cid)!.doc)
   return {
     filename: `${slug}.zip`,
-    bytes: packBundle(docs),
+    bytes: await packBundle(docs),
     mime: 'application/zip',
   }
 }

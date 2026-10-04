@@ -9,6 +9,16 @@ const base = process.env.VITE_BASE ?? '/'
 export default defineConfig({
   base,
   plugins: [react()],
+  build: {
+    // react 全家桶独立 vendor chunk：业务发版时浏览器缓存命中（批次11 Bundle 瘦身）
+    rolldownOptions: {
+      output: {
+        advancedChunks: {
+          groups: [{ name: 'react-vendor', test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/ }],
+        },
+      },
+    },
+  },
   server: {
     // Windows 下 chokidar 可能漏文件事件（表现为浏览器持续运行旧模块），轮询监视更可靠
     watch: {

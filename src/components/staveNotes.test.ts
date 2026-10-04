@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { toStaveNotes } from './views'
+import { toStaveNotes } from './staffViews'
 
 describe('toStaveNotes（P1 bass 音位回归）', () => {
   it('同一音符在 bass/treble 谱号下落在不同线；不传 clef 的回归已由组件内默认 treble 兜住', () => {

@@ -5,13 +5,22 @@ import { LevelPage } from './pages/LevelPage'
 import { LibraryPage } from './pages/LibraryPage'
 import { SeriesPage } from './pages/SeriesPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { EditorPage } from './editor/EditorPage'
-import { TunerDemo } from './pages/TunerDemo'
-import { RhythmDemo } from './pages/RhythmDemo'
 import { ensureSeeded } from './library/db'
 
-/** 节点图/编辑器涉及 React Flow 等重组件，路由级懒加载控制主包体积 */
+/**
+ * 路由级懒加载（批次11 Bundle 瘦身）：重组件只随路由按需加载，控制主包体积。
+ * 编辑器（含 React Flow/VexFlow/StaffEditor 子树）、校音器（pitchy）、节奏训练不进首屏。
+ */
 const GraphPage = lazy(() => import('./pages/GraphPage').then((m) => ({ default: m.GraphPage })))
+const EditorPage = lazy(() => import('./editor/EditorPage').then((m) => ({ default: m.EditorPage })))
+const TunerDemo = lazy(() => import('./pages/TunerDemo').then((m) => ({ default: m.TunerDemo })))
+const RhythmDemo = lazy(() => import('./pages/RhythmDemo').then((m) => ({ default: m.RhythmDemo })))
+
+const PageLoading = (
+  <p className="muted" style={{ padding: 24 }}>
+    加载中…
+  </p>
+)
 
 function useHashRoute(): string {
   const [hash, setHash] = useState(() => window.location.hash)
@@ -73,15 +82,27 @@ export default function App() {
       </Suspense>
     )
   } else if (hash.startsWith('#/edit/')) {
-    page = <EditorPage key={hash} id={hash.slice('#/edit/'.length)} />
+    page = (
+      <Suspense fallback={PageLoading}>
+        <EditorPage key={hash} id={hash.slice('#/edit/'.length)} />
+      </Suspense>
+    )
   } else if (hash === '#/library') {
     page = <LibraryPage />
   } else if (hash === '#/settings') {
     page = <SettingsPage />
   } else if (hash === '#/tuner') {
-    page = <TunerDemo />
+    page = (
+      <Suspense fallback={PageLoading}>
+        <TunerDemo />
+      </Suspense>
+    )
   } else if (hash === '#/rhythm') {
-    page = <RhythmDemo />
+    page = (
+      <Suspense fallback={PageLoading}>
+        <RhythmDemo />
+      </Suspense>
+    )
   } else {
     page = <HomePage />
   }

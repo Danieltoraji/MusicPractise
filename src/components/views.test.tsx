@@ -4,7 +4,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentInstance } from '../engine/level'
 import { ComponentStore } from '../runtime/store'
-import { ButtonView, ChoiceView, FingeringView, SoundView, StaffView, SynthView } from './views'
+import { ButtonView, ChoiceView, FingeringView, SoundView, SynthView } from './views'
+import { StaffView } from './staffViews'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 

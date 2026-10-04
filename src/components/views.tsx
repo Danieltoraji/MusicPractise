@@ -2,15 +2,13 @@
  * 组件视图层：把 store 里的组件状态渲染出来，并把用户交互作为事件发回逻辑引擎。
  * 视图不包含业务判定——一切判定都在逻辑引擎的规则里（数据即关卡）。
  */
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Accidental, Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Note } from 'tonal'
 import type { ComponentInstance } from '../engine/level'
 import type { Json } from '../engine/expr'
-import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, RhythmState, SliderState, SoundState, StaffState, SynthState, TunerState } from '../runtime/componentDef'
+import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, RhythmState, SliderState, SoundState, SynthState } from '../runtime/componentDef'
 import { SYNTH_WAVE_ZH } from '../runtime/componentDef'
 import type { ComponentStore } from '../runtime/store'
-import type { MusicDoc } from '../engine/level'
 
 export interface ViewProps {
   spec: ComponentInstance
@@ -23,7 +21,7 @@ export function useComponentState<S = unknown>(store: ComponentStore, id: string
   return snap.state as S
 }
 
-function boxStyle(spec: ComponentInstance): React.CSSProperties {
+export function boxStyle(spec: ComponentInstance): React.CSSProperties {
   const l = spec.layout
   if (!l) return { position: 'relative' }
   return { position: 'absolute', left: l.x, top: l.y, width: l.w, height: l.h }
@@ -31,99 +29,18 @@ function boxStyle(spec: ComponentInstance): React.CSSProperties {
 
 // ---------------------------------------------------------------------------
 
-const DUR_MAP: Record<string, string> = { '1n': 'w', '2n': 'h', '4n': 'q', '8n': '8', '16n': '16', '32n': '32' }
-const HIGHLIGHT_FILL: Record<string, string> = { correct: '#16a34a', wrong: '#dc2626' }
+// 五线谱/校音视图按需加载（批次11 Bundle 瘦身）：VexFlow+tonal 与 pitchy 约数百 KB，
+// 拆分至 staffViews.tsx / tunerView.tsx，只有关卡真的用到对应组件时才下载。
+const StaffView = lazy(() => import('./staffViews').then((m) => ({ default: m.StaffView })))
+const TunerView = lazy(() => import('./tunerView').then((m) => ({ default: m.TunerView })))
 
-/** MusicDoc → VexFlow 音符数组（纯函数，便于单测：音位/附点/升降号/休止符） */
-export function toStaveNotes(doc: MusicDoc): StaveNote[] {
-  const clef = doc.clef ?? 'treble'
-  return doc.notes.map((n) => {
-    // 音位由 StaveNote 自身的 clef 决定（与 Stave 上画的谱号无关），必须显式传入
-    const dur = n.dur ?? '4n'
-    const dotted = dur.endsWith('.')
-    const base = DUR_MAP[dotted ? dur.slice(0, -1) : dur] ?? 'q'
-    if (n.rest === true || typeof n.midi !== 'number') {
-      // 休止符：VexFlow 记法 duration 'qr'（keys 仅为占位，渲染忽略）
-      const rest = new StaveNote({ keys: ['b/4'], duration: `${base}r`, clef })
-      if (dotted) rest.addModifier(new Dot(), 0)
-      return rest
-    }
-    const info = Note.get(Note.fromMidi(n.midi) ?? 'C4')
-    const sn = new StaveNote({
-      keys: [`${info.letter.toLowerCase()}${info.acc ?? ''}/${info.oct}`],
-      duration: base,
-      clef,
-    })
-    if (info.acc) sn.addModifier(new Accidental(info.acc), 0)
-    if (dotted) sn.addModifier(new Dot(), 0)
-    return sn
-  })
-}
-
-export function StaffView({ spec, store, emit }: ViewProps) {
-  const { music, highlights, clearToken } = useComponentState<StaffState>(store, spec.id)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const clickable = ((spec.props ?? {}) as Record<string, Json>).clickable !== false
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    el.innerHTML = ''
-    const w = spec.layout?.w ?? 720
-    const h = spec.layout?.h ?? 160
-    const hasMusic = music !== null && music !== undefined && Array.isArray((music as { notes?: unknown }).notes)
-    const doc = hasMusic ? (music as unknown as MusicDoc) : null
-
-    // 谱架始终绘制：行数据尚未装载（预览/首帧）也呈现五线谱形态，而不是空白盒
-    const renderer = new Renderer(el, Renderer.Backends.SVG)
-    renderer.resize(w, h)
-    const rc = renderer.getContext()
-    const stave = new Stave(10, Math.max(10, h / 2 - 50), w - 30)
-    stave.addClef(doc?.clef ?? 'treble')
-    if (doc?.timeSig) stave.addTimeSignature(`${doc.timeSig[0]}/${doc.timeSig[1]}`)
-    stave.setContext(rc).draw()
-    if (!doc) return
-
-    const staveNotes = toStaveNotes(doc)
-
-    const voice = new Voice({ numBeats: Math.max(1, staveNotes.length), beatValue: 4 }).setStrict(false)
-    voice.addTickables(staveNotes)
-    new Formatter().joinVoices([voice]).format([voice], Math.max(120, w - 120))
-    voice.draw(rc, stave)
-
-    // 命中区域：VexFlow 5 不再暴露 attrs.el；voice.draw 按顺序把每个音符画成
-    // SVG 根下的 g.vf-stavenote，用 DOM 顺序与 notes[] 对齐（v1 仅支持单声部）。
-    // 休止符也是 vf-stavenote（无音头）：数量对不齐时整体跳过命中区，防错位
-    const noteGroups = el.querySelectorAll('svg > g.vf-stavenote')
-    if (noteGroups.length === doc.notes.length) {
-      noteGroups.forEach((svgEl, i) => {
-        const midi = doc.notes[i]?.midi
-        if (typeof midi !== 'number') return
-        if (!svgEl) return
-        svgEl.setAttribute('data-midi', String(midi))
-        if (!clickable) return
-        ;(svgEl as HTMLElement).style.cursor = 'pointer'
-        svgEl.addEventListener('click', () => {
-          store.applyCommand(spec.id, '__strike', { midi })
-          emit('noteClicked', { midi, name: Note.fromMidi(midi) })
-        })
-      })
-    }
-
-    // 高亮样式
-    for (const [midiStr, style] of Object.entries(highlights ?? {})) {
-      const fill = HIGHLIGHT_FILL[style] ?? '#f59e0b'
-      noteGroups.forEach((svgEl, i) => {
-        if (doc.notes[i]?.midi !== Number(midiStr)) return
-        svgEl.querySelectorAll('.vf-notehead').forEach((head) => {
-          head.setAttribute('fill', fill)
-          head.setAttribute('stroke', fill)
-        })
-      })
-    }
-  }, [music, highlights, clearToken, spec.layout?.w, spec.layout?.h, clickable, emit])
-
-  return <div ref={containerRef} style={boxStyle(spec)} className="comp-staff" />
+/** 懒视图包装：加载占位保持组件布局盒，避免面板跳动 */
+function lazyView(C: React.LazyExoticComponent<React.ComponentType<ViewProps>>, props: ViewProps): React.ReactNode {
+  return (
+    <Suspense fallback={<div style={boxStyle(props.spec)} />}>
+      <C {...props} />
+    </Suspense>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -274,7 +191,7 @@ export function ComponentView(props: ViewProps): React.ReactNode {
   if (baseState?.__visible === false) return null
   switch (spec.type) {
     case 'staff':
-      return <StaffView {...props} />
+      return lazyView(StaffView, props)
     case 'label':
       return <LabelView {...props} />
     case 'button':
@@ -290,7 +207,7 @@ export function ComponentView(props: ViewProps): React.ReactNode {
     case 'rhythm':
       return <RhythmView {...props} />
     case 'tuner':
-      return <TunerView {...props} />
+      return lazyView(TunerView, props)
     case 'synth':
       return <SynthView {...props} />
     case 'sound':
@@ -511,88 +428,5 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
 }
 
 // ---------------------------------------------------------------------------
-// 校音器：麦克风音高流 + 表盘
+// 校音器视图已拆分至 tunerView.tsx（批次11：pitchy 按需加载）
 // ---------------------------------------------------------------------------
-
-import { PitchDetector } from 'pitchy'
-
-const TUNER_CLARITY_GATE = 0.9
-
-export function TunerView({ spec, store, emit }: ViewProps) {
-  const { running } = useComponentState<TunerState>(store, spec.id)
-  const [display, setDisplay] = useState<{ name: string; freq: number; cents: number; clarity: number } | null>(null)
-  const [micError, setMicError] = useState('')
-
-  useEffect(() => {
-    if (!running) return
-    let alive = true
-    let stream: MediaStream | null = null
-    let source: MediaStreamAudioSourceNode | null = null
-    let analyser: AnalyserNode | null = null
-    let timer: number | null = null
-    ;(async () => {
-      try {
-        setMicError('')
-        const ctx = getCtx()
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-        })
-        if (!alive) {
-          stream.getTracks().forEach((t) => t.stop())
-          return
-        }
-        source = ctx.createMediaStreamSource(stream)
-        analyser = ctx.createAnalyser()
-        analyser.fftSize = 2048
-        source.connect(analyser)
-        const buf = new Float32Array(analyser.fftSize)
-        const detector = PitchDetector.forFloat32Array(analyser.fftSize)
-        timer = window.setInterval(() => {
-          if (!analyser) return
-          analyser.getFloatTimeDomainData(buf)
-          const [freq, clarity] = detector.findPitch(buf, ctx.sampleRate)
-          if (freq > 40 && clarity > TUNER_CLARITY_GATE) {
-            const midi = Math.round(69 + 12 * Math.log2(freq / 440))
-            const target = 440 * Math.pow(2, (midi - 69) / 12)
-            const cents = Math.round(1200 * Math.log2(freq / target))
-            const name = Note.fromMidi(midi) ?? String(midi)
-            setDisplay({ freq, clarity, cents, name })
-            emit('pitch', { freq, midi, cents, clarity })
-          }
-        }, 100)
-      } catch (e) {
-        setMicError(e instanceof Error ? e.message : String(e))
-        stream?.getTracks().forEach((t) => t.stop())
-      }
-    })()
-    return () => {
-      alive = false
-      if (timer !== null) window.clearInterval(timer)
-      source?.disconnect()
-      stream?.getTracks().forEach((t) => t.stop())
-    }
-  }, [running])
-
-  const cents = display?.cents ?? 0
-  const inTune = display !== null && Math.abs(cents) <= 5
-
-  return (
-    <div style={boxStyle(spec)} className="comp-tuner">
-      {micError ? (
-        <p className="tone-error">麦克风不可用：{micError}</p>
-      ) : (
-        <>
-          <div className={`tuner-note ${inTune ? 'ok-text' : ''}`}>{display ? display.name : '—'}</div>
-          <div className="tuner-freq">{display ? `${display.freq.toFixed(1)} Hz · ${cents > 0 ? '+' : ''}${cents}¢` : '等待检测…'}</div>
-          <div className="cents-bar">
-            <div className="cents-tick" />
-            <div className={`cents-needle ${inTune ? 'ok' : ''}`} style={{ left: `${50 + Math.max(-50, Math.min(50, cents))}%` }} />
-          </div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            {running ? '♪ 对麦克风演奏…' : '已停止'}
-          </div>
-        </>
-      )}
-    </div>
-  )
-}

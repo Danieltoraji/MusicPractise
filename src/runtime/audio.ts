@@ -1,8 +1,9 @@
 /**
  * 音频引擎：全局单例 AudioContext + smplr 采样钢琴。
  * 一切调度以 AudioContext.currentTime 为唯一时间基准。
+ * 钢琴采样器（smplr）按需加载：首次 audio.play 才动态 import——首页与纯节奏/合成器关卡无需下载（批次11）。
  */
-import { SplendidGrandPiano } from 'smplr'
+import type { SplendidGrandPiano } from 'smplr'
 import type { Note } from '../engine/level'
 
 let ctx: AudioContext | null = null
@@ -24,7 +25,8 @@ function ensurePiano(): Promise<SplendidGrandPiano> {
   if (piano) return Promise.resolve(piano)
   if (!pianoLoading) {
     pianoLoading = (async () => {
-      const p = new SplendidGrandPiano(getCtx(), {})
+      const { SplendidGrandPiano: Piano } = await import('smplr')
+      const p = new Piano(getCtx(), {})
       await p.ready
       piano = p
       return p

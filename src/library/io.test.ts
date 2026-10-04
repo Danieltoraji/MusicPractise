@@ -16,10 +16,10 @@ beforeEach(async () => {
 })
 
 describe('打包 / 解包', () => {
-  it('packBundle → unpackBundle 往返无损', () => {
+  it('packBundle → unpackBundle 往返无损', async () => {
     const docs = [noteClickDoc, starterSeries] as unknown as Record<string, unknown>[]
-    const bytes = packBundle(docs)
-    const { entries, parseErrors } = unpackBundle(bytes)
+    const bytes = await packBundle(docs)
+    const { entries, parseErrors } = await unpackBundle(bytes)
     expect(parseErrors).toEqual([])
     expect(entries).toHaveLength(2)
     const restored = entries.map((e) => e.doc)
@@ -27,14 +27,14 @@ describe('打包 / 解包', () => {
     expect(restored).toContainEqual(starterSeries)
   })
 
-  it('空包与非 JSON 条目', () => {
-    expect(() => unpackBundle(packBundle([]))).toThrow(/没有 resources/)
+  it('空包与非 JSON 条目', async () => {
+    await expect(unpackBundle(await packBundle([]))).rejects.toThrow(/没有 resources/)
     // 一个合法条目 + 一个坏条目：好的照常解析，坏的进 parseErrors
-    const bytes = packBundle([noteClickDoc as unknown as Record<string, unknown>])
+    const bytes = await packBundle([noteClickDoc as unknown as Record<string, unknown>])
     const unzipped = unzipSync(bytes)
     unzipped['resources/broken.json'] = strToU8('{ not json')
     const rebuilt = zipSync(unzipped)
-    const { entries, parseErrors } = unpackBundle(rebuilt)
+    const { entries, parseErrors } = await unpackBundle(rebuilt)
     expect(entries).toHaveLength(1)
     expect(parseErrors).toHaveLength(1)
     expect(parseErrors[0]).toContain('broken.json')
@@ -133,7 +133,7 @@ describe('importFromFiles / exportResource', () => {
 
     const seriesExport = await exportResource(starterSeries.id)
     expect(seriesExport.filename).toMatch(/\.zip$/)
-    const { entries } = unpackBundle(seriesExport.bytes)
+    const { entries } = await unpackBundle(seriesExport.bytes)
     const docs = entries.map((e) => e.doc)
     // 自包含：1 系列 + 2 专题 + 5 关卡
     expect(docs).toHaveLength(8)
