@@ -539,3 +539,27 @@ describe('LevelSession', () => {
     }
   })
 })
+
+describe('运行日志命令参数摘要（批次13）', () => {
+  it('command 条目带 args 摘要：play 可见音符串、stop 可见空参', async () => {
+    const events: { kind: string; path?: string; detail?: string }[] = []
+    const { host } = makeHost()
+    const wrapped: SessionHost = {
+      ...host,
+      onLogicEvent: (e) => events.push({ kind: e.kind, path: e.kind === 'command' ? e.path : undefined, detail: e.kind === 'command' ? e.detail : undefined }),
+    }
+    const rules = [
+      { id: 'cmd', on: 'staff1.noteClicked', do: [{ cmd: 'sound1.play', args: { notes: [{ midi: 60 }, { midi: 64 }], tempo: 120 } }, { cmd: 'sound1.stop', args: {} as Json }] },
+    ]
+    const session = new LevelSession(makeDoc({ rules }), wrapped)
+    session.start()
+    await flush()
+    session.dispatch('staff1.noteClicked', {})
+    await flush()
+    const play = events.find((e) => e.kind === 'command' && e.path === 'sound1.play')
+    const stop = events.find((e) => e.kind === 'command' && e.path === 'sound1.stop')
+    expect(play?.detail).toBeTruthy()
+    expect(play?.detail).toContain('midi')
+    expect(stop?.detail).toBe('{}')
+  })
+})

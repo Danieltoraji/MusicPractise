@@ -19,7 +19,7 @@ import type { Effect } from './componentDef'
 /** 运行日志事件（节点图「运行日志」面板的数据源；nodeId 可定位到图上节点） */
 export type LogicRunEvent =
   | { kind: 'error'; message: string; nodeId?: string; event?: string; t: number }
-  | { kind: 'command'; path: string; event?: string; t: number }
+  | { kind: 'command'; path: string; /** 参数摘要（截断 JSON，批次13） */ detail?: string; event?: string; t: number }
 
 export interface SessionHost {
   /** 每行装载后回调（渲染层更新进度与题面） */
@@ -206,7 +206,15 @@ export class LevelSession {
   }
 
   private handleCommand(path: string, args: Json, context?: { nodeId?: string; event?: string }): void {
-    this.host.onLogicEvent?.({ kind: 'command', path, t: Date.now() })
+    // 参数摘要（批次13）：play 的音符数/wave、stop 调用等进日志——「点了没反应」排查直接受益
+    let detail: string | undefined
+    try {
+      const text = JSON.stringify(args ?? {})
+      detail = text === undefined ? undefined : text.length > 80 ? text.slice(0, 80) + '…' : text
+    } catch {
+      detail = undefined // 循环引用等极端情况：无摘要不影响执行
+    }
+    this.host.onLogicEvent?.({ kind: 'command', path, detail, t: Date.now() })
     const dot = path.indexOf('.')
     if (dot <= 0) return
     const cid = path.slice(0, dot)

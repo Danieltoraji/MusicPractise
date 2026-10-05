@@ -4611,3 +4611,11 @@ a.lib-title:hover {
 .synth-keys .key.black:hover {
   background: #3a4150;
 }
+
+/* 运行日志命令参数摘要（批次13）：路径后的小字 detail */
+.graph-log-detail {
+  margin-left: 8px;
+  color: #8b93a5;
+  font-size: 10.5px;
+  word-break: break-all;
+}

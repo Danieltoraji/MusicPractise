@@ -10,6 +10,8 @@ export interface RunLogEntry {
   message?: string
   /** command: 命令路径（实例id.方法） */
   path?: string
+  /** command: 参数摘要（截断的 JSON，批次13——play 带了什么/stop 何时调用从此可见） */
+  detail?: string
   /** error 关联的节点 id（GraphEngine fail 的 context），可定位 */
   nodeId?: string
   /** 触发该处理器的源事件 */

@@ -1075,7 +1075,10 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
                   }}
                 >
                   <span className={`graph-log-kind ${e.kind}`}>{e.kind === 'error' ? '错误' : '命令'}</span>
-                  <span className="graph-log-msg">{e.kind === 'command' ? (e.path ?? '') : (e.message ?? '')}</span>
+                  <span className="graph-log-msg">
+                    {e.kind === 'command' ? (e.path ?? '') : (e.message ?? '')}
+                    {e.kind === 'command' && e.detail && <span className="graph-log-detail">{e.detail}</span>}
+                  </span>
                   {e.nodeId && <span className="graph-log-node">{e.nodeId}</span>}
                 </button>
               ))}
