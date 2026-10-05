@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { AiClientError, testConnection } from '../ai/client'
 import { PRESET_BY_ID, PROVIDER_PRESETS, isCustomProfileId, newCustomProfileId } from '../ai/providers'
 import { loadAiSettings, saveAiSettings, type AiProviderProfile, type AiSettings } from '../ai/settings'
+import { getMasterVolume, playNotes, setMasterVolume } from '../runtime/audio'
 
 interface TestResult {
   ok: boolean
@@ -22,6 +23,12 @@ export function SettingsPage() {
   const [showKey, setShowKey] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
+  // 音量即改即存（不混入 AI 设置的「保存设置」）；试听顺带验证钢琴发声链
+  const [volume, setVolumeState] = useState(() => getMasterVolume())
+  const applyVolume = (v: number): void => {
+    setVolumeState(v)
+    setMasterVolume(v)
+  }
 
   const profile: AiProviderProfile | undefined = settings.profiles[settings.activeId]
   const isCustom = isCustomProfileId(settings.activeId)
@@ -211,6 +218,31 @@ export function SettingsPage() {
           </p>
         </div>
       )}
+
+      <h2>音频</h2>
+      <div className="settings-audio">
+        <label className="audio-volume">
+          <span>主音量（影响钢琴 / 合成器 / 节拍点击）</span>
+          <span className="audio-volume-row">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(volume * 100)}
+              onChange={(e) => applyVolume(Number(e.target.value) / 100)}
+            />
+            <b>{Math.round(volume * 100)}%</b>
+            <button
+              type="button"
+              onClick={() => playNotes([{ midi: 60 }, { midi: 64, t: 1 }, { midi: 67, t: 1 }, { midi: 72, t: 2 }], 120)}
+              title="播放一串琶音试听"
+            >
+              ▶ 试听
+            </button>
+          </span>
+        </label>
+        <p className="muted">音量保存于本机浏览器（此设备所有关卡生效）。</p>
+      </div>
 
       <div className="settings-save">
         <button type="button" className="primary" onClick={save}>

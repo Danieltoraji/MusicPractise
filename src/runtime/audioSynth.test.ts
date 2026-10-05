@@ -1,7 +1,7 @@
 // playSynth / stopSynth 回归测试：用 mock AudioContext 记录自动化事件序列
 // （评审 P2-7：包络时序类缺陷只有这种测试能捕获——P1-1 sustain 平顶缺失即由此类探针发现）
 import { describe, expect, it, vi } from 'vitest'
-import { getCtx, playSynth, stopSynth } from './audio'
+import { getCtx, getMasterGain, playSynth, setMasterVolume, stopSynth } from './audio'
 
 class FakeParam {
   events: Array<{ op: string; value?: number; time?: number }> = []
@@ -19,6 +19,10 @@ class FakeParam {
   cancelScheduledValues(t: number): void {
     this.events.push({ op: 'cancel', time: t })
   }
+  setTargetAtTime(v: number, t: number): void {
+    this.events.push({ op: 'target', value: v, time: t })
+    this.value = v
+  }
 }
 
 class FakeNode {
@@ -27,7 +31,9 @@ class FakeNode {
   type = ''
   startTime: number | null = null
   stopTime: number | null = null
+  connectedTo: unknown = null
   connect(n: unknown): unknown {
+    this.connectedTo = n
     return n
   }
   start(t?: number): void {
@@ -140,5 +146,48 @@ describe('playSynth / stopSynth（mock AudioContext 回归）', () => {
     const afterFirst = envs.map((g) => g.gain.events.length)
     stopSynth()
     expect(envs.map((g) => g.gain.events.length)).toEqual(afterFirst)
+  })
+})
+
+describe('主音量总线（批次13）', () => {
+  it('setMasterVolume 持久化并实时应用到总线增益', () => {
+    const store = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => store.set(k, v),
+      removeItem: (k: string) => store.delete(k),
+    })
+    try {
+      const g = getMasterGain() as unknown as FakeNode
+      setMasterVolume(0.4)
+      expect(g.gain.value).toBeCloseTo(0.4)
+      expect(store.get('master-volume')).toBe('0.4')
+      setMasterVolume(0.75)
+      expect(g.gain.value).toBeCloseTo(0.75)
+      // gain 事件里有 target 应用（实时生效而非等下次创建）
+      expect(g.gain.events.some((e) => e.op === 'target' && e.value === 0.75)).toBe(true)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('playSynth 的包络输出接到主总线而非 destination', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    })
+    try {
+      const fake = getCtx() as unknown as FakeCtx
+      playSynth([{ midi: 60, dur: '4n' }], { wave: 'sine' })
+      const env = envelopeGains(fake)[0]
+      expect(env).toBeTruthy()
+      // env → master → destination 的两级链
+      const master = env.connectedTo as FakeNode
+      expect(master).toBeTruthy()
+      expect(master.connectedTo).toBe(fake.destination)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

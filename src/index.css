@@ -4543,3 +4543,38 @@ a.lib-title:hover {
     row-gap: 2px;
   }
 }
+
+/* 设置页音频卡（批次13） */
+.settings-audio {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.audio-volume {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.audio-volume > span:first-child {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.audio-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.audio-volume-row input[type='range'] {
+  flex: 1;
+  max-width: 320px;
+}
+.audio-volume-row b {
+  min-width: 44px;
+  text-align: right;
+  font-size: 13.5px;
+}

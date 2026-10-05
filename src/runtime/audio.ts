@@ -9,6 +9,44 @@ import type { Note } from '../engine/level'
 let ctx: AudioContext | null = null
 let piano: SplendidGrandPiano | null = null
 let pianoLoading: Promise<SplendidGrandPiano> | null = null
+let masterGain: GainNode | null = null
+
+/** 主音量（0-1，默认 1）持久化键；惯例同 graph-theme 的裸 kebab 键 */
+const MASTER_VOLUME_KEY = 'master-volume'
+
+export function getMasterVolume(): number {
+  try {
+    const raw = localStorage.getItem(MASTER_VOLUME_KEY)
+    // 缺键 ≠ 0：Number(null) 是 0，必须先判空再取默认 1
+    if (raw === null) return 1
+    const n = Number(raw)
+    return Number.isFinite(n) && n >= 0 && n <= 1 ? n : 1
+  } catch {
+    return 1
+  }
+}
+
+/** 设置主音量并实时应用到总线（0 静音 - 1 全响）；设置页滑条与播放中调用均可 */
+export function setMasterVolume(v: number): void {
+  const clamped = Math.min(1, Math.max(0, v))
+  try {
+    localStorage.setItem(MASTER_VOLUME_KEY, String(clamped))
+  } catch {
+    // 隐私模式等：仅本次会话生效
+  }
+  if (masterGain && ctx) masterGain.gain.setTargetAtTime(clamped, ctx.currentTime, 0.02)
+}
+
+/** 主音量总线（批次13）：三条发声链（钢琴/合成器/节拍点击）统一经此出声，支持全局音量 */
+export function getMasterGain(): GainNode {
+  const c = getCtx()
+  if (!masterGain) {
+    masterGain = c.createGain()
+    masterGain.gain.value = getMasterVolume()
+    masterGain.connect(c.destination)
+  }
+  return masterGain
+}
 
 export function getCtx(): AudioContext {
   if (!ctx) ctx = new AudioContext()
@@ -26,7 +64,7 @@ function ensurePiano(): Promise<SplendidGrandPiano> {
   if (!pianoLoading) {
     pianoLoading = (async () => {
       const { SplendidGrandPiano: Piano } = await import('smplr')
-      const p = new Piano(getCtx(), {})
+      const p = new Piano(getCtx(), { destination: getMasterGain() })
       await p.ready
       piano = p
       return p
@@ -121,7 +159,7 @@ export function playClick(time: number, accent = false): () => void {
   osc.frequency.value = accent ? 1600 : 1000
   gain.gain.setValueAtTime(accent ? 0.5 : 0.3, time)
   gain.gain.exponentialRampToValueAtTime(0.001, time + 0.08)
-  osc.connect(gain).connect(c.destination)
+  osc.connect(gain).connect(getMasterGain())
   osc.start(time)
   osc.stop(time + 0.1)
   return () => {
@@ -202,7 +240,7 @@ function synthVoice(c: AudioContext, midi: number, vel: number, t: number, dur: 
     filter.connect(env)
     inNode = filter
   }
-  env.connect(c.destination)
+  env.connect(getMasterGain())
 
   const oscs: OscillatorNode[] = []
   const carrier = c.createOscillator()

@@ -3,6 +3,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AI_SETTINGS_KEY } from '../ai/settings'
+import * as audio from '../runtime/audio'
 import { SettingsPage } from './SettingsPage'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -147,5 +148,37 @@ describe('SettingsPage（jsdom）', () => {
     const bad = c.querySelector('.settings-test-bad')
     expect(bad?.textContent).toContain('鉴权失败')
     expect(bad?.textContent).toContain('Invalid API key')
+  })
+})
+
+describe('设置页音频卡（批次13）', () => {
+  beforeEach(() => {
+    localStorage.removeItem('master-volume')
+  })
+
+  function audioSlider(c: HTMLElement): HTMLInputElement {
+    const el = c.querySelector('.audio-volume-row input[type="range"]') as HTMLInputElement
+    expect(el, '找不到音量滑条').toBeTruthy()
+    return el
+  }
+
+  it('音量滑条拖动即写 localStorage（master-volume）并显示百分比', async () => {
+    const c = renderEl(<SettingsPage />)
+    const slider = audioSlider(c)
+    expect(slider.value).toBe('100') // 缺省 1
+    await type(slider, '40')
+    expect(localStorage.getItem('master-volume')).toBe('0.4')
+    expect(c.querySelector('.audio-volume-row b')?.textContent).toBe('40%')
+  })
+
+  it('重挂读取持久化音量；试听按钮不抛错', async () => {
+    localStorage.setItem('master-volume', '0.3')
+    const c = renderEl(<SettingsPage />)
+    expect(audioSlider(c).value).toBe('30')
+    const play = vi.spyOn(audio, 'playNotes').mockReturnValue(undefined)
+    await act(async () => {
+      ;(c.querySelector('.audio-volume-row button') as HTMLButtonElement).click()
+    })
+    expect(play).toHaveBeenCalledTimes(1)
   })
 })
