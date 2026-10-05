@@ -5,6 +5,7 @@
  */
 import type { SplendidGrandPiano } from 'smplr'
 import type { Note } from '../engine/level'
+import type { SoundInstrument } from './componentDef'
 
 let ctx: AudioContext | null = null
 let piano: SplendidGrandPiano | null = null
@@ -76,6 +77,40 @@ function ensurePiano(): Promise<SplendidGrandPiano> {
   return pianoLoading
 }
 
+// 采样器注册表（批次13）：instrument → 已装载实例；全部接主总线，按需动态 import smplr
+type AnySampler = { ready: Promise<unknown>; start(opts: { note: number; velocity: number; time: number; duration: number }): void }
+const samplers = new Map<SoundInstrument, Promise<AnySampler>>()
+
+function ensureSampler(instrument: SoundInstrument): Promise<AnySampler> {
+  const cached = samplers.get(instrument)
+  if (cached) return cached
+  const loading = (async () => {
+    const smplr = await import('smplr')
+    const c = getCtx()
+    const dest = getMasterGain()
+    switch (instrument) {
+      case 'electric-piano': {
+        const s = new smplr.ElectricPiano(c, { destination: dest, instrument: 'WurlitzerEP200' })
+        await s.ready
+        return s as unknown as AnySampler
+      }
+      case 'mallet': {
+        const s = new smplr.Mallet(c, { destination: dest, instrument: 'Vibraphone - Hard Mallets' })
+        await s.ready
+        return s as unknown as AnySampler
+      }
+      default: {
+        const s = new smplr.SplendidGrandPiano(c, { destination: dest })
+        await s.ready
+        return s as unknown as AnySampler
+      }
+    }
+  })()
+  loading.catch(() => samplers.delete(instrument))
+  samplers.set(instrument, loading)
+  return loading
+}
+
 /** 时值记法（"4n"、"2n."…）→ 四分音符拍数（tempo 无关） */
 export function durToQuarters(dur: string): number {
   const dotted = dur.endsWith('.')
@@ -130,12 +165,13 @@ export function scheduleNoteEvents(notes: Note[]): ScheduledNote[] {
  * 播放一组音符（钢琴）：时序完全由音符串表达——t 缺省接排、相同 t 同时、休止符占位。
  * duration 在时值之外延长 0.4s 余韵（钢琴自然衰减），上限 3.5s。
  */
-export function playNotes(notes: Note[], tempo = 90): void {
+export function playNotes(notes: Note[], tempo = 90, instrument: SoundInstrument = 'piano'): void {
   if (!Array.isArray(notes) || notes.length === 0) return
   const events = scheduleNoteEvents(notes)
   if (events.length === 0) return
   getCtx()
-  ensurePiano()
+  const samplerReady = instrument === 'piano' ? ensurePiano() : ensureSampler(instrument)
+  samplerReady
     .then((p) => {
       const t0 = getCtx().currentTime + 0.06
       const spb = 60 / Math.min(300, Math.max(20, tempo))

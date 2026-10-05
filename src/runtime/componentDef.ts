@@ -9,7 +9,7 @@ import type { ComponentInstance, Note } from '../engine/level'
 import type { Json } from '../engine/expr'
 
 export type Effect =
-  | { type: 'audio.play'; notes: Note[]; tempo?: number }
+  | { type: 'audio.play'; notes: Note[]; tempo?: number; /** 采样音色（批次13）；缺省钢琴，旧 effect 数据兼容 */ instrument?: SoundInstrument }
   | {
       type: 'audio.synth'
       notes: Note[]
@@ -97,6 +97,20 @@ export interface StaffState {
 }
 export interface SoundState {
   lastPlay: Json | null
+  /** 采样音色（批次13；props.instrument 装载进状态，effect 随 play 下发） */
+  instrument: SoundInstrument
+}
+
+/** 采样音色清单（批次13）：smplr 采样器映射，缺省钢琴向后兼容 */
+export type SoundInstrument = 'piano' | 'electric-piano' | 'mallet'
+export const SOUND_INSTRUMENTS: SoundInstrument[] = ['piano', 'electric-piano', 'mallet']
+export const SOUND_INSTRUMENT_ZH: Record<SoundInstrument, string> = {
+  piano: '采样音色 · 钢琴',
+  'electric-piano': '采样音色 · 电钢',
+  mallet: '采样音色 · 木琴',
+}
+export function isSoundInstrument(v: unknown): v is SoundInstrument {
+  return typeof v === 'string' && (SOUND_INSTRUMENTS as string[]).includes(v)
 }
 export interface TimerState {
   running: boolean
@@ -290,9 +304,15 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
     events: {},
     // 时序关系由音符串的 t（起始拍）/dur 表达（docs/27）；mode 已废弃为运行时兼容键
     commands: { play: '{ notes: Note[], tempo?: number }', stop: '无参数' },
-    state: { lastPlay: 'Json' },
+    state: { lastPlay: 'Json', instrument: 'piano | electric-piano | mallet' },
+    propsFields: [
+      { key: 'instrument', label: '采样音色', type: 'string', fallback: 'piano', options: [...SOUND_INSTRUMENTS] },
+    ],
   },
-  initialState: () => ({ lastPlay: null }),
+  initialState: (spec) => {
+    const p = (spec.props ?? {}) as Record<string, Json>
+    return { lastPlay: null, instrument: isSoundInstrument(p.instrument) ? p.instrument : 'piano' }
+  },
   applyCommand: (s, cmd, args) => {
     if (cmd === 'play') {
       const raw = Array.isArray(args.notes) ? (args.notes as unknown as Note[]) : []
@@ -301,8 +321,8 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
       // tempo 钳到常规音乐区间，防止 60/0=Infinity 把后续音符排到无穷远
       const tempo = typeof args.tempo === 'number' ? Math.min(300, Math.max(20, args.tempo)) : undefined
       return {
-        state: { lastPlay: args.notes ?? null },
-        effects: [{ type: 'audio.play', notes, tempo }],
+        state: { ...s, lastPlay: args.notes ?? null },
+        effects: [{ type: 'audio.play', notes, tempo, instrument: s.instrument }],
       }
     }
     return { state: s }

@@ -8,7 +8,7 @@ import { useKeyGlide } from './useKeyGlide'
 import type { ComponentInstance } from '../engine/level'
 import type { Json } from '../engine/expr'
 import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, RhythmState, SliderState, SoundState, SynthState } from '../runtime/componentDef'
-import { SYNTH_WAVE_ZH } from '../runtime/componentDef'
+import { SOUND_INSTRUMENT_ZH, SYNTH_WAVE_ZH } from '../runtime/componentDef'
 import type { ComponentStore } from '../runtime/store'
 
 export interface ViewProps {
@@ -203,7 +203,7 @@ export function SynthView({ spec, store }: ViewProps) {
 // ---------------------------------------------------------------------------
 
 export function SoundView({ spec, store }: ViewProps) {
-  const { lastPlay } = useComponentState<SoundState & { __enabled?: boolean }>(store, spec.id)
+  const { lastPlay, instrument } = useComponentState<SoundState & { __enabled?: boolean }>(store, spec.id)
   const [pulse, setPulse] = useState(false)
 
   useEffect(() => {
@@ -218,7 +218,7 @@ export function SoundView({ spec, store }: ViewProps) {
   return (
     <div style={boxStyle(spec)} className={`comp-sound ${pulse ? 'is-playing' : ''}`}>
       <div className="sound-icon">🔊</div>
-      <div className="sound-name">采样音色 · 钢琴</div>
+      <div className="sound-name">{SOUND_INSTRUMENT_ZH[instrument] ?? SOUND_INSTRUMENT_ZH.piano}</div>
       <div className="sound-meta muted">{pulse ? `▶ ${count} 音` : '就绪'}</div>
     </div>
   )
