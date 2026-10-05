@@ -529,6 +529,12 @@ export const SYNTH_DEF: ComponentDef<SynthState> = {
     if (cmd === 'stop') {
       return { state: { ...s, lastPlay: null }, effects: [{ type: 'audio.synthStop' }] }
     }
+    if (cmd === '__strike') {
+      // 面板键盘发声（批次13 内部命令，双下划线不进 contract）：不改状态，
+      // 用当前音色/音量发一个 8 分音——effect 由宿主 runAudioEffects 播放
+      if (typeof args.midi !== 'number') return { state: s }
+      return { state: s, effects: [{ type: 'audio.synth', notes: [{ midi: args.midi, dur: '8n' }], wave: s.wave, gain: s.gain }] }
+    }
     return { state: s }
   },
 }

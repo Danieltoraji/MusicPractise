@@ -160,7 +160,7 @@ describe('SynthView（合成器面板）', () => {
     store.init([spec])
     const c = renderEl(<SynthView spec={spec} store={store} emit={() => {}} />)
     expect(c.textContent).toContain('钟琴 · 空灵')
-    expect(c.textContent).toContain('音量 35%')
+    expect(c.textContent).toContain('点击琴键可试音')
     expect(c.querySelector('.comp-synth.is-playing')).toBeNull()
     act(() => store.applyCommand('synth1', 'play', { notes: [{ midi: 60 }] }))
     expect(c.querySelector('.comp-synth.is-playing')).toBeTruthy()
@@ -289,5 +289,31 @@ describe('触屏/指针修复（批次12）', () => {
     })
     expect(emits).toHaveLength(1)
     expect(emits[0]).toMatchObject({ event: 'keyClicked', payload: { midi: 60 } })
+  })
+})
+
+describe('SynthView 面板键盘（批次13 交互化）', () => {
+  function renderSynth(): { c: HTMLElement; strikeSpy: ReturnType<typeof vi.spyOn> } {
+    const store = new ComponentStore()
+    const spec: ComponentInstance = { id: 'synth1', type: 'synth', layout: { x: 0, y: 0, w: 260, h: 200 } }
+    store.init([spec])
+    const strikeSpy = vi.spyOn(store, 'applyCommand')
+    const c = renderEl(<SynthView spec={spec} store={store} emit={() => {}} />)
+    return { c, strikeSpy }
+  }
+
+  it('渲染 C4-B4 迷你键盘（7 白键 + 5 黑键），data-midi 60-71', () => {
+    const { c } = renderSynth()
+    expect(c.querySelectorAll('.synth-keys .key.white')).toHaveLength(7)
+    expect(c.querySelectorAll('.synth-keys .key.black')).toHaveLength(5)
+    expect(c.querySelector('.synth-keys [data-midi="60"]')).toBeTruthy()
+    expect(c.querySelector('.synth-keys [data-midi="71"]')).toBeTruthy()
+  })
+
+  it('点击琴键调 __strike（当前音色发声）', () => {
+    const { c, strikeSpy } = renderSynth()
+    const key = c.querySelector('.synth-keys [data-midi="64"]') as HTMLElement
+    act(() => key.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(strikeSpy).toHaveBeenCalledWith('synth1', '__strike', { midi: 64 })
   })
 })

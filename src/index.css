@@ -4578,3 +4578,36 @@ a.lib-title:hover {
   text-align: right;
   font-size: 13.5px;
 }
+
+/* 合成器面板迷你键盘（批次13 交互化）：C4-B4 一个八度，键位样式沿用指法键盘惯例 */
+.synth-keys {
+  position: relative;
+  height: 38%;
+  min-height: 34px;
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+}
+.synth-keys .key {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  cursor: pointer;
+  padding: 0;
+  touch-action: manipulation;
+  border: 1px solid var(--line);
+  background: #fbfbfe;
+}
+.synth-keys .key.white:hover {
+  background: #eef0fb;
+}
+.synth-keys .key.black {
+  height: 60%;
+  z-index: 2;
+  background: #2a2f3a;
+  border-color: #14181f;
+  border-radius: 0 0 4px 4px;
+}
+.synth-keys .key.black:hover {
+  background: #3a4150;
+}

@@ -4,6 +4,7 @@
  */
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Note } from 'tonal'
+import { useKeyGlide } from './useKeyGlide'
 import type { ComponentInstance } from '../engine/level'
 import type { Json } from '../engine/expr'
 import type { ButtonState, ChoiceState, FingeringState, InputState, LabelState, RhythmState, SliderState, SoundState, SynthState } from '../runtime/componentDef'
@@ -121,9 +122,16 @@ export function ChoiceView({ spec, store, emit }: ViewProps) {
 // ---------------------------------------------------------------------------
 
 export function SynthView({ spec, store }: ViewProps) {
-  const { wave, gain, lastPlay, playSeq } = useComponentState<SynthState & { __enabled?: boolean }>(store, spec.id)
+  const { wave, lastPlay, playSeq } = useComponentState<SynthState & { __enabled?: boolean }>(store, spec.id)
   const [pulse, setPulse] = useState(false)
   const seqRef = useRef(playSeq)
+
+  // 面板键盘（批次13 交互化）：按下用当前音色/音量发声（__strike 内部命令），
+  // 滑奏与 fingering 共用同一 pointer 通道（useKeyGlide）
+  const strike = (midi: number): void => {
+    store.applyCommand(spec.id, '__strike', { midi })
+  }
+  const { movedRef, pointerHandlers } = useKeyGlide(strike)
 
   useEffect(() => {
     if (playSeq === seqRef.current) return
@@ -138,8 +146,17 @@ export function SynthView({ spec, store }: ViewProps) {
   const notes = Array.isArray(lastPlay) ? (lastPlay as unknown as { midi: number }[]).length : 0
   const bars = [0.55, 0.85, 1, 0.7, 0.4]
 
+  // 一个八度 C4–B4 的迷你键盘
+  const keyInfos = Array.from({ length: 12 }, (_, i) => ({ midi: 60 + i, isBlack: BLACK_PITCH_CLASSES.has((60 + i) % 12) }))
+  const whiteKeys = keyInfos.filter((k) => !k.isBlack)
+  const whiteW = 100 / whiteKeys.length
+  const strikeKey = (midi: number): void => {
+    if (movedRef.current) return
+    strike(midi)
+  }
+
   return (
-    <div style={boxStyle(spec)} className={`comp-synth ${pulse ? 'is-playing' : ''}`}>
+    <div style={boxStyle(spec)} className={`comp-synth ${pulse ? 'is-playing' : ''}`} {...pointerHandlers}>
       <div className="synth-wave">{waveZh}</div>
       <div className="synth-bars" aria-hidden key={playSeq}>
         {/* key=playSeq：电平条随播放重挂载，CSS 动画每次 play 都重放（评审 P2-5） */}
@@ -147,7 +164,36 @@ export function SynthView({ spec, store }: ViewProps) {
           <span key={i} className={`synth-bar bar-${i}`} style={{ height: `${h * 100}%` }} />
         ))}
       </div>
-      <div className="synth-meta muted">{pulse ? `▶ ${notes} 音` : `音量 ${Math.round(gain * 100)}%`}</div>
+      <div className="synth-meta muted">{pulse ? `▶ ${notes} 音` : '点击琴键可试音'}</div>
+      <div className="synth-keys">
+        {whiteKeys.map((k, i) => (
+          <button
+            key={k.midi}
+            type="button"
+            className="key white"
+            style={{ left: `${i * whiteW}%`, width: `${whiteW}%` }}
+            data-midi={k.midi}
+            title={Note.fromMidi(k.midi) ?? String(k.midi)}
+            onClick={() => strikeKey(k.midi)}
+          />
+        ))}
+        {keyInfos
+          .filter((k) => k.isBlack)
+          .map((k) => {
+            const whitesBefore = whiteKeys.filter((w) => w.midi < k.midi).length
+            return (
+              <button
+                key={k.midi}
+                type="button"
+                className="key black"
+                style={{ left: `${whitesBefore * whiteW - whiteW * 0.31}%`, width: `${whiteW * 0.62}%` }}
+                data-midi={k.midi}
+                title={Note.fromMidi(k.midi) ?? String(k.midi)}
+                onClick={() => strikeKey(k.midi)}
+              />
+            )
+          })}
+      </div>
     </div>
   )
 }
@@ -291,36 +337,12 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
   const p = (spec.props ?? {}) as Record<string, Json>
   const low = typeof p.lowMidi === 'number' ? p.lowMidi : 48
   const high = typeof p.highMidi === 'number' ? p.highMidi : 72
-  // 滑奏（批次12）：按住拖划经过的键依次发声——PC 鼠标与触屏同一 pointer 通道。
-  // movedRef 抑制滑奏松手时浏览器对起始键补发的 click（避免重复发声）
-  const glideRef = useRef<{ pointerId: number; lastMidi: number | null } | null>(null)
-  const movedRef = useRef(false)
-
+  // 滑奏（批次12 引入、批次13 抽共享 hook）：按下发声 + 拖划换键连发 + click 抑制
   const strike = (midi: number): void => {
     store.applyCommand(spec.id, '__strike', { midi })
     emit('keyClicked', { midi, name: Note.fromMidi(midi) })
   }
-
-  const onGlideMove = (e: React.PointerEvent): void => {
-    const glide = glideRef.current
-    if (!glide || e.pointerId !== glide.pointerId) return
-    const el = document.elementFromPoint(e.clientX, e.clientY)
-    const key = el instanceof Element ? el.closest<HTMLElement>('[data-midi]') : null
-    const midi = key ? Number(key.dataset.midi) : NaN
-    if (!Number.isFinite(midi) || midi === glide.lastMidi) return
-    glide.lastMidi = midi
-    movedRef.current = true
-    strike(midi)
-  }
-
-  const endGlide = (e: React.PointerEvent): void => {
-    if (glideRef.current?.pointerId !== e.pointerId) return
-    glideRef.current = null
-    // click 补发发生在 pointerup 之后：延迟一拍复位，让键的 onClick 跳过这一次
-    setTimeout(() => {
-      movedRef.current = false
-    }, 0)
-  }
+  const { movedRef, pointerHandlers } = useKeyGlide(strike)
 
   const keys: KeyInfo[] = []
   for (let midi = low; midi <= high; midi++) {
@@ -331,26 +353,7 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
   const blackW = whiteW * 0.62
 
   return (
-    <div
-      style={boxStyle(spec)}
-      className="comp-fingering"
-      onPointerDown={(e) => {
-        if (!e.isPrimary || glideRef.current) return
-        glideRef.current = { pointerId: e.pointerId, lastMidi: null }
-        // 按下瞬间即发声（钢琴语义；桌面点击从「松手响」变「按下响」），
-        // 该键的 click 由 movedRef 抑制——发声权已归 pointerdown
-        movedRef.current = true
-        const key = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-midi]') : null
-        const midi = key ? Number(key.dataset.midi) : NaN
-        if (Number.isFinite(midi)) {
-          glideRef.current.lastMidi = midi
-          strike(midi)
-        }
-      }}
-      onPointerMove={onGlideMove}
-      onPointerUp={endGlide}
-      onPointerCancel={endGlide}
-    >
+    <div style={boxStyle(spec)} className="comp-fingering" {...pointerHandlers}>
       {whites.map((k, i) => {
         const hl = highlights?.[String(k.midi)]
         return (

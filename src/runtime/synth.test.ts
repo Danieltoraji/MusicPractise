@@ -87,3 +87,17 @@ describe('synth 经 ComponentStore（效果进 sink 统一执行通道）', () =
     expect(store.snapshot('synth1').state).toMatchObject({ wave: 'sawtooth' })
   })
 })
+
+describe('SYNTH_DEF __strike（批次13 面板键盘）', () => {
+  it('用当前音色/音量产 8 分音 audio.synth 效果，state 不变（内部命令不进 contract）', () => {
+    const def = SYNTH_DEF
+    const s = def.initialState({ id: 'synth1', type: 'synth', props: { wave: 'triangle', gain: 0.5 } } as never)
+    const r = def.applyCommand(s, '__strike', { midi: 64 })
+    expect(r.state).toBe(s) // 内部命令不改状态
+    expect(r.effects).toEqual([{ type: 'audio.synth', notes: [{ midi: 64, dur: '8n' }], wave: 'triangle', gain: 0.5 }])
+    // 双下划线内部命令不进对外契约
+    expect(Object.keys(def.contract.commands)).not.toContain('__strike')
+    // midi 非数字：原样返回
+    expect(def.applyCommand(s, '__strike', {}).effects).toBeUndefined()
+  })
+})
