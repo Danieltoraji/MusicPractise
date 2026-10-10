@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
 import { unlockAudio } from './runtime/audio'
 import { HomePage } from './pages/HomePage'
 import { LevelPage } from './pages/LevelPage'
@@ -6,6 +6,7 @@ import { LibraryPage } from './pages/LibraryPage'
 import { SeriesPage } from './pages/SeriesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ensureSeeded } from './library/db'
+import { getAccountSnapshot, probeAccount, subscribeAccount } from './account/store'
 
 /**
  * 路由级懒加载（批次11 Bundle 瘦身）：重组件只随路由按需加载，控制主包体积。
@@ -37,6 +38,7 @@ export default function App() {
   const [seeded, setSeeded] = useState(false)
   const [seedError, setSeedError] = useState('')
   const [seedAttempt, setSeedAttempt] = useState(0)
+  const account = useSyncExternalStore(subscribeAccount, getAccountSnapshot)
 
   // 首次启动把内置示例关卡入库；此后一切内容只从库读取
   useEffect(() => {
@@ -46,6 +48,11 @@ export default function App() {
       (err) => setSeedError(String(err instanceof Error ? err.message : err)),
     )
   }, [seedAttempt])
+
+  // 账户探测（docs/31 §7）：后台运行不阻塞首屏；结果驱动设置页账户区与顶栏昵称
+  useEffect(() => {
+    void probeAccount()
+  }, [])
 
   // 浏览器自动播放策略：首次手势解锁 AudioContext（touchend 兜底老 Android/微信内核——
   // 部分内核只认 touch 系事件；passive 避免阻塞滚动）
@@ -133,6 +140,11 @@ export default function App() {
             ⚙ 设置
           </a>
         </nav>
+        {account.user && (
+          <a className="topbar-user" href="#/settings" title="账户设置">
+            👤 {account.user.nickname}
+          </a>
+        )}
       </header>
       <main>{page}</main>
     </div>

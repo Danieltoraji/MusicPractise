@@ -4619,3 +4619,62 @@ a.lib-title:hover {
   font-size: 10.5px;
   word-break: break-all;
 }
+
+/* 设置页账户区（批次 B1，docs/31 §7）：三态提示 + 登录/注册切换 + 顶栏昵称 */
+.account-status {
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.account-form {
+  max-width: 440px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 24px;
+}
+.account-mode {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.account-mode button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  padding: 5px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13.5px;
+}
+.account-mode button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+.account-current {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+.account-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.topbar-user {
+  margin-left: 14px;
+  font-size: 13.5px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.topbar-user:hover {
+  color: var(--accent);
+}

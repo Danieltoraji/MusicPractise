@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { AiClientError, testConnection } from '../ai/client'
 import { PRESET_BY_ID, PROVIDER_PRESETS, isCustomProfileId, newCustomProfileId } from '../ai/providers'
 import { loadAiSettings, saveAiSettings, type AiProviderProfile, type AiSettings } from '../ai/settings'
+import { AccountSection } from '../account/AccountSection'
 import { getMasterVolume, playNotes, setMasterVolume } from '../runtime/audio'
 
 interface TestResult {
@@ -104,6 +105,9 @@ export function SettingsPage() {
         配置 AI 接入，供编辑器的 AI 辅助功能（伪代码生成、节点图解释、题目与关卡生成）使用。
         API Key 仅保存在本机浏览器的 localStorage 中，不会上传到任何服务器；请勿在共享电脑上保存 Key。
       </p>
+
+      <h2>账户</h2>
+      <AccountSection />
 
       <h2>AI 供应商</h2>
       <div className="provider-cards">
