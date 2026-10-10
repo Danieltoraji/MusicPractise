@@ -5,11 +5,19 @@
  */
 import { errorJson, jsonResponse, HttpError } from './http'
 import { Router } from './router'
+import { changePassword, login, logout, me, register, updateNickname } from './handlers/auth'
 import type { Env, ExecutionContext } from './types'
 
 const api = new Router()
 
 api.add('GET', '/api/health', () => jsonResponse({ ok: true, time: Date.now() }))
+
+api.add('POST', '/api/auth/register', register)
+api.add('POST', '/api/auth/login', login)
+api.add('POST', '/api/auth/logout', logout)
+api.add('GET', '/api/auth/me', me)
+api.add('PATCH', '/api/auth/nickname', updateNickname)
+api.add('POST', '/api/auth/password', changePassword)
 
 export default {
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
