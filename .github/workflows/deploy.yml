@@ -1,29 +1,24 @@
-# 双通道自动部署：push 到 main（或手动触发）→ 测试 → 并行发布到
-# GitHub Pages 与 Cloudflare Workers（https://musicpractise.danieltoraji.workers.dev/）。
+# 单通道自动部署（docs/31 §3.3）：push 到 main（或手动触发）→ 测试 → 构建 →
+# D1 远端迁移 → 发布 Cloudflare Workers（https://musicpractise.danieltoraji.workers.dev/）。
 #
-# 首次启用各需在对应平台设置一次：
-# · Pages：Settings → Pages → Build and deployment → Source 选「GitHub Actions」
-# · Workers：仓库 Settings → Secrets and variables → Actions 添加两个 Secret——
+# 前置（一次性）：
+# · 仓库 Settings → Secrets and variables → Actions：
 #     CLOUDFLARE_API_TOKEN  （Cloudflare 面板 → My Profile → API Tokens 自建，
-#                            权限 Account → Workers Scripts → Edit；远期加 KV/R2/D1 时再补）
+#                            权限 Account → Workers Scripts: Edit + Account → D1: Edit）
 #     CLOUDFLARE_ACCOUNT_ID （Cloudflare 面板 → Workers & Pages 概览右侧）
-#
-# 两个目标对资源前缀的要求不同，各自独立构建：
-# · Pages 项目页部署在仓库子路径下，构建传 VITE_BASE=/MusicPractise/
-# · Workers 挂在自有域名根路径，构建用默认 base '/'
+# · D1 数据库 musicpractise-db 需已创建（面板 Storage & Databases → D1，
+#   database_id 已写入 wrangler.jsonc）。
 
-name: Deploy（GitHub Pages + Cloudflare Workers）
+name: Deploy（Cloudflare Workers）
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-# Pages 部署需要的最小权限；并发组保证旧的部署在途时新推送只会部署最后一次
+# 并发组保证旧的部署在途时新推送只会部署最后一次
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: deploy
@@ -47,42 +42,7 @@ jobs:
       - name: 测试（vitest 全量）
         run: npm test
 
-  deploy-pages:
-    name: 发布 GitHub Pages
-    needs: test
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: 安装依赖
-        run: npm ci
-
-      - name: 构建（Pages 子路径 base）
-        run: npm run build
-        env:
-          VITE_BASE: /MusicPractise/
-
-      - name: 禁用 Jekyll（跳过 Pages 的冗余处理）
-        run: touch dist/.nojekyll
-
-      - name: 上传构建产物
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-      - name: 发布到 GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-  deploy-workers:
+  deploy:
     name: 发布 Cloudflare Workers
     needs: test
     runs-on: ubuntu-latest
@@ -97,13 +57,22 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 构建（Workers 根路径 base）
+      # Workers 根路径 base（单通道后无差异化构建）
+      - name: 构建
         run: npm run build
+
+      - name: 应用 D1 迁移（远端）
+        uses: cloudflare/wrangler-action@v3
+        with:
+          # 锁定 wrangler 版本，避免 latest 大版本变动导致 CI 突然失败
+          wranglerVersion: 4.147.0
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply musicpractise-db --remote
 
       - name: 发布到 Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
-          # 锁定 wrangler 版本，避免 latest 大版本变动导致 CI 突然失败
           wranglerVersion: 4.147.0
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -1,6 +1,7 @@
 # 音乐练习 · UGC 平台（预研 + POC）
 
-纯前端 Web 应用：内容层级为 **系列 → 专题 → 关卡 → 题目**，全部层级支持 UGC。
+Web 应用：前端 SPA + Cloudflare Workers 后端（静态资产与 `/api` 同源，D1 数据库）。
+内容层级为 **系列 → 专题 → 关卡 → 题目**，全部层级支持 UGC。
 关卡由组件拼装（五线谱/发声/按钮/文本/选择器…），组件间关系与题目判据由统一接口上的
 ECA 规则引擎（"简易代码"）描述；节点图编辑器是后续阶段对同一运行时的可视化前端。
 
@@ -8,9 +9,11 @@ ECA 规则引擎（"简易代码"）描述；节点图编辑器是后续阶段�
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm test         # Vitest：引擎单测 + JSON Schema 校验 + 资源库/导入导出
-npm run build    # tsc strict + Vite 生产构建
+npm run dev              # http://localhost:5173（纯前端；/api 走 vite 代理 → wrangler dev）
+npm run db:migrate:local # D1 迁移应用到本地模拟库（本地全栈流程一次）
+npm run dev:worker       # wrangler dev 全栈验证（先 npm run build 产出 dist/）
+npm test                 # Vitest：引擎单测 + JSON Schema 校验 + 资源库/导入导出 + worker API
+npm run build            # tsc strict + Vite 生产构建
 ```
 
 - `#/` 首页（系列与独立关卡） · `#/series/:id` 系列详情（专题→关卡+进度） · `#/library` 资源库（导入/导出/删除/试玩） · `#/level/:id` 运行关卡 · `#/graph/:id` 逻辑图谱（只读节点图）
@@ -22,15 +25,14 @@ npm run build    # tsc strict + Vite 生产构建
 
 站点唯一入口：**https://musicpractise.danieltoraji.workers.dev/**（Cloudflare Workers：静态资产与后端 `/api` 同源服务，HTTPS 由边缘自动签发）。
 
-已裁决**放弃 GitHub Pages 通道**（2026-10，[docs/31](docs/31-后端与账户体系设计.md) §3）：
-其 CI job 将随批次 B1 移除，在此之前 push 到 `main` 仍会双发；原 Pages URL
-（`danieltoraji.github.io/MusicPractise/`）不再作为正式入口，可在仓库 Settings → Pages 关闭。
+已裁决**放弃 GitHub Pages 通道**（2026-10，[docs/31](docs/31-后端与账户体系设计.md) §3）：Pages CI job 已随批次 B1 移除，
+原 Pages URL（`danieltoraji.github.io/MusicPractise/`）停更，可在仓库 Settings → Pages 关闭。
 
-后端（账户 / 云盘 / 通关记录 / 管理后台，docs/31 批次 B1 起）首次启用需一次性：
+后端（账户 / 云盘 / 通关记录 / 管理后台，docs/31 批次 B1 起）一次性前置（2026-10 已完成）：
 
-1. GitHub 仓库添加两个 Secret（值来自 Cloudflare 面板）：`CLOUDFLARE_API_TOKEN`（自定义 Token，权限 Account → Workers Scripts: Edit + D1: Edit）与 `CLOUDFLARE_ACCOUNT_ID`；
-2. 本地执行 `npx wrangler d1 create musicpractise-db` 建库，将返回的 `database_id` 填入 `wrangler.jsonc`；
-3. 首次部署前 `npx wrangler d1 migrations apply musicpractise-db --remote` 应用建表迁移（CI 每次部署亦会执行）。
+1. GitHub 仓库两个 Secret（值来自 Cloudflare 面板）：`CLOUDFLARE_API_TOKEN`（自定义 Token，权限 Account → Workers Scripts: Edit + D1: Edit）与 `CLOUDFLARE_ACCOUNT_ID`；
+2. D1 数据库 `musicpractise-db` 已创建（面板 Storage & Databases → D1），`database_id` 已填入 `wrangler.jsonc`；
+3. 建表迁移由 CI 在每次部署前自动执行（`d1 migrations apply musicpractise-db --remote`）。
 
 ## 文档
 
