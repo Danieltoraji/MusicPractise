@@ -34,6 +34,13 @@ npm run build            # tsc strict + Vite 生产构建
 2. D1 数据库 `musicpractise-db` 已创建（面板 Storage & Databases → D1），`database_id` 已填入 `wrangler.jsonc`；
 3. 建表迁移由 CI 在每次部署前自动执行（`d1 migrations apply musicpractise-db --remote`）。
 
+创建管理员（一次性，脚本本地计算哈希、不经网络）：
+
+```bash
+node scripts/seed-admin.ts   # 按提示输入昵称密码，输出 INSERT 语句
+npx wrangler d1 execute musicpractise-db --remote --command "<输出整句>"
+```
+
 ## 文档
 
 | 文档 | 内容 |
