@@ -1,0 +1,808 @@
+% !TEX program = xelatex
+% =====================================================================
+% 音乐练习 UGC 平台 —— 关卡编辑器新手教程（由浅入深）
+% 编译方式：xelatex 本文件（请编译两遍以生成目录）
+% 依赖：ctex 文档类（MiKTeX / TeX Live 可自动安装缺包）
+% =====================================================================
+\documentclass[UTF8,a4paper,zihao=-4]{ctexart}
+
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black,bookmarksnumbered=true]{hyperref}
+
+\setlength{\headheight}{14pt}
+\setlength{\parskip}{0.45em}
+\sloppy
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small 关卡编辑器新手教程}
+\fancyhead[R]{\small 音乐练习 UGC 平台}
+\fancyfoot[C]{\small \thepage}
+
+% —— 行内记号 ——
+\newcommand{\code}[1]{\texttt{#1}}   % 代码、标识符、表达式
+\newcommand{\ui}[1]{「\textbf{#1}」}  % 界面按钮 / 面板 / 文案
+\newcommand{\ra}{\ $\rightarrow$\ }  % 流程箭头
+
+% —— 提示 / 注意 / 小练习环境 ——
+\newenvironment{tip}[1][提示]{%
+  \begin{quote}\small\textbf{【#1】}\ignorespaces
+}{\end{quote}}
+\newenvironment{practice}{%
+  \begin{quote}\small\textbf{【小练习】}\ignorespaces
+}{\end{quote}}
+
+% —— 代码块样式 ——
+\lstdefinestyle{plain}{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{black!30},
+  backgroundcolor=\color{black!4},
+  columns=fullflexible,
+  keepspaces=true,
+  xleftmargin=1.2em, xrightmargin=1.2em,
+  framesep=4pt
+}
+\lstset{style=plain}
+
+\hypersetup{pdftitle={音乐练习 UGC 平台：关卡编辑器新手教程},pdfauthor={MusicPractise 项目}}
+
+\title{\heiti 关卡编辑器新手教程\\[0.3em]\large 音乐练习 UGC 平台 · 由浅入深}
+\author{}
+\date{2026 年 10 月 · 基于编辑器 v3（画布 + 数据表 + 节点图）架构撰写}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{center}
+\begin{minipage}{0.86\textwidth}
+\small
+本教程面向第一次接触本平台编辑器的音乐老师与内容创作者：\textbf{不需要任何编程基础}。
+全文按「由浅入深」排列——先认识平台与界面（第 1 章），搭出第一幅画面（第 2 章），填入题目内容（第 3 章），再学习用节点图给关卡加入逻辑（第 4 章），并用两个完整案例把前三章串起来（第 5 章）；第 6--7 章覆盖调试技巧、进阶控制流、脚本与 JSON 视图以及 AI 协作。各章末尾的小练习建议逐个完成，全部走完约需 60--90 分钟。
+\end{minipage}
+\end{center}
+
+\vspace{1em}
+{\setlength{\parskip}{0.12em}\tableofcontents}
+\newpage
+
+% =====================================================================
+\section{认识平台与编辑器}
+% =====================================================================
+
+\subsection{这是一个什么平台}
+
+音乐练习 UGC 平台是一个在浏览器里运行的\textbf{音乐练习内容创作与游玩工具}：
+老师或创作者在\textbf{编辑器}里搭建练习关卡，学习者在\textbf{游玩页}里答题、听音、练节奏。
+所有内容保存在本地浏览器数据库中，也可以导出成文件分享给别人。
+
+内容按三个层级组织：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+层级 & 类比 & 说明 \\
+\midrule
+系列 & 一本教材 & 一个完整的课程包，可整体导出为 .zip 分享 \\
+专题 & 一章 & 系列下的分组 \\
+关卡 & 一节练习课 & 真正可游玩的单元，也是编辑器编辑的对象 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{关卡由哪几部分组成（核心概念）}
+
+打开编辑器后，一个关卡被拆成五个可以分别编辑的组成部分。
+理解这张表，后面的所有操作都会有归属感：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+组成部分 & 在哪个标签页编辑 & 回答的问题 \\
+\midrule
+视图（画面） & \ui{画布} & 玩家看到哪些画面？ \\
+组件 & \ui{画布} & 画面上摆放哪些元素（按钮、五线谱……）？ \\
+数据表 & \ui{数据表} & 题目内容是什么？ \\
+逻辑（节点图） & \ui{节点图} & 玩家操作之后发生什么？ \\
+推进设置 & \ui{数据表}（表格上方） & 按什么顺序出题、怎样算过关？ \\
+变量 & \ui{节点图}（变量面板） & 得分等状态记在哪里？ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+整个编辑器最重要的设计思想是一条黄金法则：
+
+\begin{tip}[黄金法则：改哪层，去哪层]
+\begin{itemize}[nosep]
+  \item 想\textbf{换内容}（换题目、换音符、改文案）——只改\textbf{数据表}，逻辑一行不动；
+  \item 想\textbf{换画面}（挪按钮、加个标题）——只改\textbf{画布}；
+  \item 想\textbf{换行为}（答对加几分、点按钮去哪）——只改\textbf{节点图}。
+\end{itemize}
+内置示例「音色实验室」最能体现这一点：想加第七种音色，只需在数据表\textbf{加一行}，逻辑零改动。
+\end{tip}
+
+几个贯穿全文的名词，先混个脸熟即可，后文会反复解释：
+
+\begin{itemize}[nosep]
+  \item \textbf{组件实例}：拖到画布上的每一个具体元素（比如一个按钮），都有一个名字（如 \code{button1}）；
+  \item \textbf{行}：数据表的每一行就是一道题；行号（从 0 开始）记在系统变量 \code{v.\_\_row} 里；
+  \item \textbf{\code{q.列名}}：在逻辑里引用「当前行某列」的内容，例如 \code{q.title}、\code{q.notes}；
+  \item \textbf{\code{v.变量名}}：引用一个变量，例如默认就有的分数变量 \code{v.score}；
+  \item \textbf{事件}：玩家操作或系统状态变化时发出的信号（如「答对了」「进入了视图」），是节点图里一切逻辑的起点。
+\end{itemize}
+
+\subsection{从哪里进入编辑器}
+
+打开应用后，顶部导航栏有：\ui{首页}、\ui{资源库}、\ui{校音器}、\ui{节奏}、\ui{设置}。
+编辑器从\textbf{资源库}进入，共四种方式：
+
+\begin{enumerate}[nosep]
+  \item \textbf{新建空白关卡}：资源库顶部点 \ui{新建关卡}，会创建一个带默认结构的关卡并直接进入编辑器；
+  \item \textbf{编辑现有关卡}：任意关卡行点 \ui{编辑}。编辑内置示例时不必有顾虑——首次保存会自动\textbf{另存为你的副本}，内置原版不会被覆盖；
+  \item \textbf{从游玩页进入}：试玩某关时点顶部的 \ui{编辑此关}；
+  \item \textbf{AI 新建关卡}：点 \ui{AI 新建关卡}，用一句自然语言描述想要的内容（如「大三和弦听辨练习，10 题，每题 10 分」），先建关卡再让 AI 助手继续完善（需要先在设置页配置 AI，见第 7 章）。
+\end{enumerate}
+
+\subsection{编辑器界面导览}
+
+进入编辑器后，界面分两层：\textbf{顶部工具栏} + \textbf{五个标签页}。
+
+顶部工具栏从左到右：
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+元素 & 作用 \\
+\midrule
+\ui{返回资源库} & 回到资源库列表 \\
+标题输入框 & 修改关卡标题（保存在关卡信息里） \\
+\ui{撤销} / \ui{重做} & 快捷键 Ctrl+Z / Ctrl+Shift+Z（也支持 Ctrl+Y），最多 50 步 \\
+\ui{保存} & 保存当前修改；有未保存修改时按钮会带星号（\ui{保存 *}） \\
+\ui{试运行} & 先自动保存，然后跳到游玩页真实试玩本关 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+保存后界面上方可能出现三种颜色的提示条，含义固定：
+
+\begin{itemize}[nosep]
+  \item \textbf{红条}「无法保存，请修正：」——存在结构性错误（附错误清单），修正后才能保存；
+  \item \textbf{黄条}「lint：\ldots」——能保存，但存在可疑之处（如引用了不存在的列），建议处理；
+  \item \textbf{绿条}「已保存（v 版本号）」——保存成功。
+\end{itemize}
+
+五个标签页即 1.2 节五层结构的入口：\ui{画布}、\ui{节点图}、\ui{脚本}、\ui{数据表}、\ui{JSON}，
+标签栏最右侧还有一个 \ui{AI} 按钮（AI 助手在所有标签页共享同一会话，见第 7 章）。
+\ui{脚本} 与 \ui{JSON} 是同一份逻辑的两种「文字形态」，属于进阶内容，新手可以先无视。
+
+\begin{tip}[离开页面的保护]
+有未保存修改时切换到站内其他页面或关闭标签页，编辑器会弹窗确认，防止误丢内容。养成「改一段就点一次保存」的习惯最稳妥。
+\end{tip}
+
+\subsection{上手前的建议：先玩两个内置关卡}
+
+资源库顶部的「教程与示例」分区里，有两个专为新手准备的关卡：
+
+\begin{enumerate}[nosep]
+  \item \textbf{新手引导 · 交互教程}：一个 5 步的可玩教程，带你以玩家身份体验按钮点击、滑块拖动、听音选答和重开关卡——玩完它，你就知道玩家能做什么操作；
+  \item \textbf{音色实验室 · 合成器示例}：一条逻辑图驱动一张 6 行数据表。先玩一遍，再点 \ui{编辑} 看它的\textbf{数据表}：每种音色就是一行数据——这是「数据驱动」最好的示范。
+\end{enumerate}
+
+\begin{tip}
+想偷看内置关卡的内部构造，可以打开它的 \ui{编辑}，在 \ui{节点图} 和 \ui{数据表} 里随意浏览（不点保存就不会改动任何东西）；游玩页顶部的 \ui{逻辑图谱} 也能以只读方式查看整关的逻辑图与变量表。
+\end{tip}
+
+% =====================================================================
+\section{画布：搭出你的第一个界面}
+% =====================================================================
+
+画布标签页是三栏布局：\textbf{左侧组件面板}、\textbf{中间视图条 + 画布}、\textbf{右侧属性检查器}。
+
+\subsection{组件面板：三种类型的元素}
+
+左侧组件面板按用途分三组，点击某项即可把它添加到当前视图：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+分组 & 组件 & 用途 \\
+\midrule
+音乐 & 五线谱 & 展示乐谱，可配置「音符可点击」 \\
+音乐 & 发声器 & 播放音符串（采样音色：钢琴、电钢、木琴等） \\
+音乐 & 指法 / 键盘 & 屏幕键盘，可点按键发声 \\
+音乐 & 节奏训练 & 跟拍点击的节奏练习 \\
+音乐 & 校音器 & 麦克风校音 \\
+音乐 & 合成器 & 电子音色播放（多种波形） \\
+\midrule
+交互 & 文本 & 显示一段文字（题面、反馈、进度……） \\
+交互 & 按钮 & 玩家点击触发事件 \\
+交互 & 选择器 & 选项列表，玩家点选作答 \\
+交互 & 滑块 & 拖动取值 \\
+交互 & 输入框 & 文本输入 \\
+\midrule
+隐形 & 计时器 & 不显示在画面上，只按时间发信号 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{tip}[关于「隐形」组件]
+隐形组件在画布上显示为半透明的幽灵框（方便你选中它），但在游玩页\textbf{完全不渲染}，只参与逻辑——典型的例子是计时器：到点发信号，画面上看不见它。
+\end{tip}
+
+\subsection{摆放与调整组件}
+
+对画布上的组件：
+
+\begin{itemize}[nosep]
+  \item \textbf{点选}：单击选中，右侧出现属性检查器；
+  \item \textbf{移动}：按住拖动（画布内自动吸收、不会拖出边界）；
+  \item \textbf{缩放}：拖右下角的手柄；
+  \item \textbf{预览}：画布上渲染的是真实组件外观，但禁用交互——想真正点一点，用 \ui{试运行}。
+\end{itemize}
+
+\subsection{属性检查器}
+
+选中组件后，右侧面板可以设置：
+
+\begin{itemize}[nosep]
+  \item \textbf{名称}：组件的引用名（节点图里靠它找到这个组件，建议起有意义的名字，如 \code{question\_label}、\code{answer\_choice}）；
+  \item \textbf{可见}：取消勾选后运行时隐藏（画布上显示为幽灵框）；
+  \item \textbf{所属视图}：把组件挪到另一个视图；
+  \item \textbf{X / Y / 宽 / 高}：位置与尺寸的精确数值；
+  \item \textbf{属性设置}：每种组件自己的参数，用表单呈现。例如：按钮有「按钮文字」「初始可用」；滑块有「最小值 / 最大值 / 步长 / 初始值」；指法键盘有「最低音 / 最高音」；合成器有「音色」「音量」；五线谱有「音符可点击」；
+  \item \textbf{props JSON（高级）}：以 JSON 形式查看/编辑上述属性，新手可不使用；
+  \item \textbf{删除组件}：删除选中的组件。
+\end{itemize}
+
+\subsection{视图：互斥的多幅画面}
+
+画布中间顶部是\textbf{视图条}。视图（view）就是「一幅独立的画面」：
+运行时\textbf{同一时刻只显示一个视图}，适合做「欢迎页 $\rightarrow$ 练习页 $\rightarrow$ 结算页」这样的流程切换。
+
+\begin{itemize}[nosep]
+  \item 新建关卡默认只有一个「主视图」；点 \ui{+ 视图} 可添加（自动命名为视图 2、视图 3\ldots）；
+  \item 点击视图 chip 切换编辑对象（当前视图前有箭头标记）；
+  \item chip 右侧 $\times$ 删除视图——\textbf{视图里的组件会被一并删除}；至少要保留一个视图；
+  \item 想把组件挪到别的视图，用属性检查器里的「所属视图」下拉。
+\end{itemize}
+
+\subsection{保存并试运行}
+
+点 \ui{保存} 保存文档；点 \ui{试运行} 会先保存再跳转游玩页。
+游玩页的构成：顶部是标题、当前题面与「第 N / M 题」进度；中间是关卡画面（你的组件）；底部是结算信息与 \ui{重开本关} 按钮。
+
+\begin{practice}
+新建一个关卡，在主视图里完成：添加一个\textbf{文本}组件写上欢迎语，再添加一个\textbf{按钮}，把按钮文字改成「开始」。保存后点 \ui{试运行}，确认画面正常显示。现在点按钮不会发生任何事——因为还没写逻辑，这正是下一章的内容。
+\end{practice}
+
+% =====================================================================
+\section{数据表：填入题目内容}
+% =====================================================================
+
+\subsection{一行就是一道题}
+
+切到 \ui{数据表} 标签页。这里的核心约定非常简单：
+
+\begin{tip}[数据表的三个约定]
+\begin{enumerate}[nosep]
+  \item \textbf{每一行是一道题}；
+  \item \textbf{行号从 0 开始}，当前行号保存在系统变量 \code{v.\_\_row} 中；
+  \item 逻辑里用 \code{q.列名} 引用「当前行」的内容。比如第 2 行正在出题时，\code{q.title} 就是第 2 行「title」列的值。
+\end{enumerate}
+\end{tip}
+
+空模板的数据表自带两列：\code{data}（JSON 高级）与 \code{scoring}（数字，默认 10，表示本题分值）。
+你可以直接使用、改名或删掉它们，按需搭自己的列。
+
+\subsection{列与列类型}
+
+数据表上方点 \ui{+ 添加行} 增加题目；在\textbf{列头}定义列：每列有「列名」（逻辑引用用，即 \code{q.列名}）和「显示名」（给人看的），以及一个\textbf{类型}。类型决定了单元格用什么控件编辑、以及逻辑里取出来的数据形状：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+类型 & 单元格控件 & 适合放什么 \\
+\midrule
+文本 & 文本输入框 & 题面、答案、反馈文案 \\
+数字 & 数字输入框 & 分值、正确序号、目标值 \\
+布尔 & 勾选框 & 是/否标记 \\
+音符串 & 五线谱编辑器 & 要播放/展示的乐谱 \\
+字符串列表 & 条目列表（增删条目） & 选择题的选项 \\
+JSON 高级 & JSON 编辑弹层 & 复杂结构（兜底用） \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{tip}
+列头可以拖右缘调宽，行头可以拖下缘调高。改列名后，逻辑里旧的 \code{q.旧列名} 引用会被 lint（静态检查）提示，跟着提示改即可。类型不符的旧数据会自动回落到「编辑 JSON」兜底入口。
+\end{tip}
+
+\subsection{五线谱编辑器}
+
+「音符串」列的单元格点开后是一个可视化五线谱编辑弹窗：可以直接\textbf{点谱线加音}，也支持一套接近 MuseScore 的键盘输入：
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+按键 & 作用 \\
+\midrule
+C--G & 录入对应音名（自动落到最近的合适白键） \\
+Shift（按住） & 横向叠加，构成和弦 \\
+0 & 插入休止符 \\
+1--6 & 选择基础时值（数字越小音符越长） \\
+. & 附加附点（延长一半） \\
+上/下方向键 & 升高 / 降低八度 \\
++ / $-$ & 升半音 / 降半音 \\
+左/右方向键 & 移动插入光标 \\
+Delete & 删除光标处元素 \\
+空格 & 试听当前内容 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{推进与过关设置}
+
+数据表表格上方是\textbf{推进设置}，控制题目怎么出、怎样算过关：
+
+\begin{itemize}[nosep]
+  \item \textbf{顺序}：\ui{顺序出题}（按行序）或 \ui{随机乱序}；
+  \item \textbf{本局题数}：留空表示全部行都出；填数字则本局只出 N 题（配合乱序可做「10 题池抽 5 题」）；
+  \item \textbf{结算校验过关条件}：勾选后可用条件构造器写过关线。空模板默认是 \code{v.score >= 10}——得分达到 10 分才算通过。条件里引用了未声明的变量时会出现黄色警告。
+\end{itemize}
+
+\begin{practice}
+把数据表改成你自己的：删掉或保留默认两列，新建三列——\code{title}（文本，题面）、\code{notes}（音符串，要听的音）、\code{answer}（文本，正确答案）。用 \ui{+ 添加行} 做 3 道题，音符列用五线谱编辑器各录一个音。这份表就是第 4--5 章要用的素材。
+\end{practice}
+
+% =====================================================================
+\section{节点图：让关卡活起来}
+% =====================================================================
+
+前两章搭好了「画面」和「内容」，但现在的关卡是静止的：点按钮没反应，答对不加分。
+\textbf{节点图}负责回答「什么时刻、发生什么」。它的思路不是写代码，而是把一个个「节点卡」用线连成流程。
+
+\subsection{工作台导览}
+
+节点图标签页是一个可自由摆放大面板的工作台，顶部工具栏可以开关各个面板（布局会自动记住）：
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+按钮 / 面板 & 作用 \\
+\midrule
+\ui{组件库} & 节点库：按分组浏览所有可添加的节点，支持搜索 \\
+\ui{事件} & 事件管理器：本关所有可用的「信号源」一览 \\
+\ui{变量} & 变量面板：查看/新增/改名/删除变量 \\
+\ui{属性} & 属性检查器：编辑选中节点的参数 \\
+\ui{AI} & AI 助手面板（与编辑器其他页共用会话） \\
+\ui{调试} & 调试面板：断点、单步、实时变量（见 6.4 节） \\
+\ui{整理布局} & 自动把节点排整齐 \\
+\ui{查看脚本} & 只读查看本图对应的伪代码 \\
+\ui{运行日志} & 最近一次运行的日志与错误（点错误可定位节点） \\
+\ui{画布对照} & 右下角显示画布缩略图，点组件可高亮相关节点 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+画布基本操作（界面上也有提示）：\ui{右键画布空白}加节点 $\cdot$ \ui{拖端口}连线（真/假出口）$\cdot$ \ui{双击连线}断开 $\cdot$ \ui{Delete} 删除选中节点。
+
+\subsection{事件：一切逻辑的起点}
+
+打开 \ui{事件} 面板，会看到本关所有可用的事件，按来源分组：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+分组 & 事件 & 触发时机 \\
+\midrule
+关卡 & \code{level.started} & 进入关卡后触发一次（做初始化） \\
+关卡 & \code{level.finished} & 结算时触发（负载带得分与通过状态） \\
+题目 & \code{question.loaded} & 每行数据装载后触发（做本题的展示） \\
+视图 & \code{view.entered} & 切换到某视图后触发 \\
+组件 & 各组件自己的事件 & 玩家操作了某个组件 \\
+内部 & 自定义（名:名） & 你自己发出、自己接收的信号 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+常用组件事件一览：按钮 \code{clicked}（被点击）；选择器 \code{chosen}（被点选，负载带选项序号与值）；滑块 \code{changed}（值变化）；输入框 \code{submitted}（提交）；五线谱 \code{noteClicked}（点了音符）；键盘 \code{keyClicked}（点了琴键）；计时器 \code{tick}（到点）。
+
+每个事件行上的 \ui{+ 处理器} 按钮会把一个紫色\textbf{事件节点}放到画布上——它就是一条流程的起点。
+
+\begin{tip}[空模板自带的半成品]
+新建关卡时，图里已经有一条链：\code{level:correct} \ra 分数加 10。\code{level:correct} 是一个约定的「答对」内部事件，但空关卡里\textbf{还没有人发出它}，所以这条链暂时不会触发——你需要在判定答对的地方用「触发内部事件」节点发出 \code{level:correct}（参考内置示例「听音点击」的做法），或者干脆删掉它，直接在自己的判断分支里加分。
+\end{tip}
+
+\subsection{连节点：把流程画出来}
+
+除了事件节点，常用的还有：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+节点 & 颜色 & 作用 \\
+\midrule
+动作（call） & 蓝 & 指挥某个组件或系统做事 \\
+赋值（assign） & 绿 & 给变量赋值 \\
+条件分支 & 橙 & 按条件走「真 / 假」两条出口 \\
+循环 & 橙 & 重复执行一段流程（固定次数或按条件） \\
+等待 & 橙 & 停顿指定毫秒 \\
+触发内部事件 & 黄 & 发出一个自定义信号 \\
+注释 & 灰 & 写备注，不参与运行 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+连线规则对新手非常友好：
+
+\begin{itemize}[nosep]
+  \item 流程\textbf{从上往下}连：把上一个节点的出口拖到下一个节点的入口；
+  \item \textbf{事件节点没有入口}（它本来就是起点），其他节点都有入口；
+  \item 条件分支和循环有两个出口，标着\textbf{真 / 假}（真出口绿色、假出口红色），普通出口是蓝灰色；
+  \item 没有独立的「数据线」——所有数据（引用哪个列、比较什么值）都\textbf{内联写在节点参数里}。
+\end{itemize}
+
+\begin{tip}[不想从零画？用模板]
+节点库顶部的「模板」分组提供两条预连好的常用链，一键放入画布：\ui{计分初始化与门槛结算}（关卡开始清零分数、结算时按过关线处理）与 \ui{防卡死守卫}（当画布里有计时器组件时出现，防止逻辑卡死后无法结算）。
+\end{tip}
+
+\subsection{动作节点：指挥组件做事}
+
+选中一个蓝色动作节点，右侧属性面板依次选三样东西：
+
+\begin{enumerate}[nosep]
+  \item \textbf{实例}：指挥谁？下拉里有系统对象（关卡 level / 题目 question / 视图 views）和你画布上的每个组件（按「名称（id）」列出）；
+  \item \textbf{动作}：做什么？下拉按所选实例列出可用命令，每项附灰色说明文字；
+  \item \textbf{参数}：怎么做？多数参数是表单；发声类命令还提供音符可视化编辑。
+\end{enumerate}
+
+常用的系统动作只有几个，都很好记：\ui{进入下一题}（\code{question.next}，推进到下一行，末题自动结算）、\ui{重开本关}（\code{level.restart}）、\ui{结算关卡}（\code{level.finish}）、\ui{前往视图}（\code{views.goto}，下拉选目标视图）。
+
+\begin{tip}[三条「把当前行刷到画面上」的命令]
+这是数据驱动玩法的核心。在 \code{question.loaded} 事件后面接动作节点，把当前行的内容应用到组件上：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+命令 & 作用对象 & 从数据表取哪类列 \\
+\midrule
+\code{setText} & 文本组件（改文字） & 文本 / 数字 / 布尔 \\
+\code{setOptions} & 选择器（改选项） & 字符串列表 \\
+\code{setMusic} & 五线谱（改乐谱） & 音符串 / JSON \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+配置参数时会出现\textbf{数据表列下拉}，每项形如「显示名（列名）· 类型」，点选即可，完全不用手写表达式；特殊需求可切到「高级表达式」模式。列的类型与命令不匹配时会有黄色警告。
+\end{tip}
+
+\subsection{变量与计分}
+
+打开 \ui{变量} 面板：列表首行是系统变量 \code{\_\_row}（当前题目行，只读）；点新增可创建自己的变量（默认初值 0），可改名、可删除。以 \code{\_\_} 开头的系统变量不开放编辑。
+
+绿色\textbf{赋值节点}给变量赋值。值的类型可以切换：数字 / 文本 / 开关（布尔）/ 变量或路径 / 查询（读取组件当前值，如滑块的值）/ 表达式。例如「答对加 10 分」就是：
+
+\begin{center}
+\code{v.score = v.score + 10}
+\end{center}
+
+\subsection{保存、检查、试运行}
+
+逻辑写完回到 \ui{保存}。若节点图有问题，工具栏会出现红色 \ui{N 个问题} 按钮，点开是问题清单，\textbf{点任意一条可直接定位到对应节点}（比如引用了不存在的列、类型不匹配、连线断裂）。改完后 \ui{试运行} 实测一遍。
+
+\begin{practice}
+继续第 3 章小练习的关卡：(1) 在 \code{question.loaded} 后接三个动作——文本组件 \code{setText} 选 \code{title} 列、选择器 \code{setOptions} 选 \code{options} 列（可再加一列字符串列表）、发声组件 \code{play} 选 \code{notes} 列；(2) 加「答对加分」：在选择器 \code{chosen} 事件后接条件分支，判断 \code{event.value == q.answer}，真出口接「分数加 10」赋值与 \ui{进入下一题}；(3) 保存并试运行——一个能玩、能计分、能过关的听音选择题就诞生了。
+\end{practice}
+
+% =====================================================================
+\section{实战：两个完整案例}
+% =====================================================================
+
+本章把前三章串成两个可直接套用的关卡形态。做完它们，大多数练习题都能变着花样做出来。
+
+\subsection{案例一：听音选择题（数据驱动）}
+
+\textbf{目标}：每题播放一个音或一段旋律，玩家从选项中选出答案；答对加分，全部结束按总分结算。
+
+\textbf{第一步：设计数据表}。建议的列：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+列名 & 类型 & 内容 \\
+\midrule
+\code{title} & 文本 & 题面（如「这是什么音？」） \\
+\code{notes} & 音符串 & 要播放的音 \\
+\code{options} & 字符串列表 & 选项（如 Do / Re / Mi） \\
+\code{answer} & 文本 & 正确选项的文本 \\
+\code{scoring} & 数字 & 本题分值 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{第二步：搭画布}（都在主视图）：一个\textbf{文本}组件显示题面；一个\textbf{发声器}或\textbf{合成器}播放 \code{notes}；一个\textbf{选择器}展示选项；一个\textbf{文本}组件作为反馈区；可加一个\textbf{按钮}「重播」。
+
+\textbf{第三步：画节点图}：
+
+\begin{enumerate}[nosep]
+  \item 放入模板 \ui{计分初始化与门槛结算}；
+  \item \code{question.loaded} \ra \code{setText}（题面）\ra \code{setOptions}（选项）\ra \code{setMusic} 或发声命令（播放 \code{q.notes}）；
+  \item 选择器 \code{chosen} \ra 条件分支 \code{event.value == q.answer}：真出口 \ra 加分（\code{v.score = v.score + q.scoring}）\ra 反馈文本 \code{show}「答对了」（语气选 success）\ra \ui{进入下一题}；假出口 \ra 反馈文本 \code{show}「再想想」（语气选 error），停留本题；
+  \item 「重播」按钮 \code{clicked} \ra 发声命令再播 \code{q.notes}。
+\end{enumerate}
+
+\begin{tip}[防重复计分]
+\code{chosen} 在玩家点选后触发；若想杜绝反复点击刷分，可以在真出口加一把「锁」：先判断 \code{v.answered == 0}，加分后立刻 \code{v.answered = 1}，并在 \code{question.loaded} 里把它清回 0。另外可对选择器执行 \code{reveal} 命令（参数为正确项序号），界面会高亮正确项并锁定选项。
+\end{tip}
+
+\textbf{体验数据驱动的威力}：想从 3 题扩到 20 题？数据表加 17 行，逻辑一个节点都不用动。
+
+\subsection{案例二：多视图闯关流程（视图驱动）}
+
+\textbf{目标}：欢迎页 $\rightarrow$ 练习页 $\rightarrow$ 结算页的完整流程，结算页可「再学一遍」。
+
+\textbf{第一步：搭三个视图}：\ui{+ 视图} 两次，把三个视图分别布置好——欢迎页放引导文字和「开始」按钮；练习页放题目相关组件（可沿用案例一的全部逻辑）；结算页放结果文字和「再学一遍」按钮。
+
+\textbf{第二步：连线}：
+
+\begin{enumerate}[nosep]
+  \item \code{level.started} \ra \ui{前往视图}（欢迎页）；
+  \item 欢迎页「开始」按钮 \code{clicked} \ra \ui{前往视图}（练习页）；
+  \item 练习页逻辑照案例一配置（题面刷新靠 \code{question.loaded}，\textbf{换题不换视图}）；
+  \item \code{level.finished} \ra 按得分给结算页文本赋文案 \ra \ui{前往视图}（结算页）；
+  \item 结算页「再学一遍」按钮 \code{clicked} \ra \ui{重开本关}（变量与组件状态全部复位，回到 \code{level.started}）。
+\end{enumerate}
+
+内置关卡「新手引导 · 交互教程」就是这一形态的完整范例（五个视图分步教学），拿不准细节时直接看它的节点图。
+
+\subsection{两种形态怎么选}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+ & 数据驱动（案例一） & 视图驱动（案例二） \\
+\midrule
+画面 & 一个主视图，内容随行刷新 & 多个视图手动切换 \\
+适合 & 题库型练习（刷题、听辨） & 流程型内容（引导、闯关） \\
+加题成本 & 加一行数据 & 视情况（练习区随行刷新） \\
+参考示例 & 音色实验室 & 新手引导 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+两种形态可以混用：欢迎/结算用视图切换，中间练习区交给数据表。
+
+% =====================================================================
+\section{进阶技巧}
+% =====================================================================
+
+\subsection{条件、循环、等待与自定义事件}
+
+\begin{itemize}[nosep]
+  \item \textbf{条件分支}：属性面板提供条件构造器——左操作数、比较符、右操作数三段式（也可切换真值判断或高级表达式）。例如「滑块值等于 42」：\code{event.value == 42}；
+  \item \textbf{循环}：两种模式——重复固定次数、满足条件时循环；
+  \item \textbf{等待}：停顿指定毫秒，适合做「亮一下再消失」之类的时间效果；
+  \item \textbf{触发内部事件}：发出一个「名:名」格式的自定义信号（如 \code{app:hint}），图中对应的事件节点会响应它。适合把一段流程抽出来复用，或在多个地方触发同一段逻辑（前文的 \code{level:correct} 就是这个机制）。
+\end{itemize}
+
+\subsection{表达式速成}
+
+节点参数里的值有六种形态：数字、文本、开关（布尔）、变量或路径、查询、表达式。常用的引用写法：
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+写法 & 含义 \\
+\midrule
+\code{v.score} & 变量 \\
+\code{q.title} & 数据表当前行的列 \\
+\code{event.value} & 刚触发事件的负载字段（随事件不同而不同） \\
+\code{v.\_\_row} & 当前题目行号（系统变量） \\
+\code{slider1.getValue()} & 查询：读取组件当前值 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+常用比较符：\code{==}（相等）、\code{!=}、\code{>}、\code{>=}、\code{<}、\code{<=}；可用 \code{+}、\code{-} 等做算术。\textbf{注意 \code{==} 是严格相等}：数字 10 与文本 "10" 不相等，判断前先确认列类型。
+
+\begin{tip}
+记不住写法也没关系：几乎所有表达式输入框都支持下拉候选（数据表列会出现在候选池里），先选后改，比手写快且不易错。
+\end{tip}
+
+\subsection{计时器与隐形组件}
+
+计时器组件（隐形）有两个命令：\code{start}（参数：毫秒数，可选重复）与 \code{stop}；到点发出 \code{tick} 事件。典型用法：开始答题时启动 10 秒计时，\code{tick} 触发后执行「时间到」的分支（提示、扣分或强制结算）。注意隐形组件\textbf{不会因为切视图而停止}——不需要时要显式 \code{stop}，画布含计时器时节点库里的「防卡死守卫」模板值得一用。
+
+\subsection{调试模式：看得见的排错}
+
+写复杂逻辑时，\ui{试运行} 只能看结果，\textbf{调试模式}能看过程。在节点图工具栏打开 \ui{调试} 面板，点 \ui{启动调试}：
+
+\begin{itemize}[nosep]
+  \item 工作台切换为调试布局：\textbf{左侧是真实可玩的游玩画面}（你的点击会作为真实事件进入调试会话），右侧是调试面板与 AI；
+  \item \textbf{断点}：点节点卡左侧的小圆点设为断点，运行到此暂停；暂停时画布自动定位并高亮挂起的节点；
+  \item \textbf{控制}：继续 / 单步 / 暂停 / 停止；
+  \item \textbf{实时变量}：查看所有变量当前值，也可以直接改值再继续——改一个临界值试试分支走向，非常直观；
+  \item \textbf{手动触发事件}：不点界面也能派发事件（可选事件、填负载），用来复现「如果玩家点了选项会发生什么」；
+  \item 点 \ui{停止调试} 结束并恢复编辑布局。
+\end{itemize}
+
+\subsection{排错工具箱}
+
+\begin{itemize}[nosep]
+  \item \textbf{lint 问题面板}（红色「N 个问题」按钮）：保存前的静态检查，点条目定位节点；
+  \item \textbf{运行日志}：最近一次运行的日志与错误，同样可点击定位；
+  \item \textbf{画布对照}：右下角缩略图，点画布组件高亮图中与它相关的节点——「这个按钮都连了什么」一目了然；
+  \item \textbf{查看脚本}：以伪代码形式只读预览整张图（见 7.1 节）。
+\end{itemize}
+
+% =====================================================================
+\section{高级：脚本、JSON 与 AI 协作}
+% =====================================================================
+
+\subsection{脚本页：用文字写逻辑}
+
+\ui{脚本} 标签页展示与节点图\textbf{完全等价的伪代码}（C/JS 大括号风格），与图一一对应、双向无损：
+
+\begin{lstlisting}
+on level.started {
+    v.score = 0;
+}
+
+on question.loaded {
+    question_label.setText(q.title);
+    answer_choice.setOptions(q.options);
+    voice.play(q.notes);
+}
+
+on answer_choice.chosen {
+    if (event.value == q.answer) {
+        v.score = v.score + q.scoring;
+        question.next();
+    }
+}
+\end{lstlisting}
+
+两个按钮构成工作流：\ui{应用到节点图}（按脚本重建整张图，变量保留；解析失败会精确报出「第 X 行第 Y 列」且原文档不受影响）与\ui{从节点图重新生成}（把图翻译成文字）。若图在脚本页之外被修改过，会出现黄色脏提示条，让你选择对齐或覆盖。
+
+\begin{tip}
+变量不在脚本里——它们由变量面板单独管理。对新手而言，脚本页更适合\textbf{阅读与复查}（比大片节点直观），修改仍建议在节点图完成；复杂图若超出伪代码能表达的结构，页面会明确提示并建议改用节点图或 JSON。
+\end{tip}
+
+\subsection{JSON 页：关卡的原始形态}
+
+\ui{JSON} 页直接展示关卡文档全文，可编辑后点 \ui{应用 JSON 到编辑器}。两条硬约束：文档 \code{kind} 必须是 level；关卡 \code{id} 被强制保留（改了不生效）。应用前会自动做一次格式归一化，防止旧格式混入。适合做\textbf{整关备份}或把一段结构复制给另一关。
+
+\subsection{AI 助手：你的创作副驾驶}
+
+先配置：\ui{设置} 页添加供应商——填名称、API 地址（OpenAI 兼容格式，通常以 /v1 结尾）、模型名与 API Key（仅保存在本机浏览器），点 \ui{测试连接} 确认后保存。
+
+编辑器里点标签栏 \ui{AI} 打开面板，三种模式按「放手程度」递增：
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+模式 & 行为 & 适合 \\
+\midrule
+ask & 只读问答，不改文档 & 问概念、求诊断 \\
+plan & 先产出编号计划，确认后执行 & 大改前先对齐思路 \\
+agent & 直接修改关卡 & 让 AI 动手，改前自动存检查点，可一键回滚 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+输入区上方有三个快捷指令：\ui{审查关卡}（输出问题/建议/亮点/总结并标注问题节点）、\ui{批量出题}（按现有列结构追加 5 道题）、\ui{生成介绍}（为关卡写一段介绍文案）。还支持粘贴截图（最多 4 张）让 AI「看图说话」；会话按关卡分别保存，下次打开继续聊。
+
+\begin{tip}[AI 也会错]
+agent 模式改完务必自己 \ui{试运行} 验证；不满意就 \ui{回滚} 到检查点。AI 的每次修改与手动编辑共用同一套撤销栈（Ctrl+Z 也能撤销 AI 的改动）。
+\end{tip}
+
+\subsection{导入、导出与分享}
+
+资源库中任意关卡行可 \ui{导出}：单个关卡是 \code{.json} 文件；整个系列会打包成 \code{.zip}（内含清单与全部资源）。资源库顶部 \ui{导入} 接受这两种文件，完成后报告「新增 / 更新 / 跳过 / 拒绝」数量；若包里缺了被引用的文件会明确提示。想分享练习给朋友或学生：导出文件，对方导入即可，全程不需要服务器。
+
+% =====================================================================
+\section{附录}
+% =====================================================================
+
+\subsection*{附录 A · 组件速查表}
+
+\begin{center}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{llll}
+\toprule
+组件 & 事件 & 常用命令 & 备注 \\
+\midrule
+\endfirsthead
+\toprule
+组件 & 事件 & 常用命令 & 备注 \\
+\midrule
+\endhead
+文本 & — & \code{setText}、\code{show}（可带语气） & 题面、反馈首选 \\
+按钮 & \code{clicked} & \code{setText}、\code{setEnabled} & 流程推进常用 \\
+选择器 & \code{chosen} & \code{setOptions}、\code{reveal}、\code{reset} & \code{reveal} 高亮正确项并锁定 \\
+五线谱 & \code{noteClicked} & \code{setMusic}、\code{highlight}、\code{clear} & 可配置音符可点击 \\
+发声器 & — & \code{play}（音符串/速度）、\code{stop} & 采样音色（钢琴等） \\
+合成器 & — & \code{play}（音符串/波形等）、\code{setWave}、\code{stop} & 电子音色 \\
+指法 / 键盘 & \code{keyClicked} & \code{highlight}、\code{clear} & 属性可设音域 \\
+滑块 & \code{changed} & \code{setValue} & 可查询当前值 \\
+输入框 & \code{submitted} & \code{setValue}、\code{clear} & 提交时触发 \\
+计时器 & \code{tick} & \code{start}（毫秒/重复）、\code{stop} & 隐形组件 \\
+节奏训练 & \code{tap}、\code{roundDone} & \code{start}（bpm/拍数）、\code{stop} & 跟拍练习 \\
+校音器 & \code{pitch}（约 10Hz） & \code{start}（需麦克风）、\code{stop} & 隐形组件 \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+所有组件另有两个通用命令：\code{setVisible}（显示/隐藏）与 \code{setEnabled}（启用/禁用）。
+
+\subsection*{附录 B · 节点类型速查表}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+节点 & 参数要点 & 说明 \\
+\midrule
+事件（on） & 选择事件 & 唯一起点，无入口 \\
+动作（call） & 实例 \ra 动作 \ra 参数 & 指挥组件或系统 \\
+赋值（assign） & 变量 + 值 & 值支持六种形态 \\
+条件分支 & 条件 & 真 / 假双出口 \\
+循环 & 次数或条件 & 双出口 \\
+等待 & 毫秒 & 停顿 \\
+触发内部事件 & 事件名（名:名）+ 负载 & 发自定义信号 \\
+注释 & 文本 & 不参与运行 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+常用系统动作：\code{question.next}（进入下一题）、\code{level.restart}（重开本关）、\code{level.finish}（结算关卡）、\code{views.goto}（前往视图）、\code{v.\_\_row} 赋值（跳转到指定题目行）。
+
+\subsection*{附录 C · 列类型与命令匹配表}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+命令 & 接受的列类型 & 说明 \\
+\midrule
+\code{setText} & 文本 / 数字 / 布尔 & 数字与布尔自动转文本 \\
+\code{setOptions} & 字符串列表 & 每个条目即一个选项 \\
+\code{setMusic} & 音符串 / JSON & 直接取整列乐谱 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+类型不匹配时：静态检查报错或警告、下拉选择处黄色提示、运行时做宽松转换并在日志提示——三层防线，越早发现越好改。
+
+\subsection*{附录 D · 常见问题（FAQ)}
+
+\begin{description}[style=nextline]
+  \item[保存出现红条？] 按提示清单逐条修正。常见原因：JSON 高级单元格语法错误、必填信息缺失。
+  \item[出现黄色 lint 提示？] 多为引用了不存在的列或类型不匹配。点工具栏「N 个问题」直接定位。
+  \item[编辑内置示例后保存提示「另存为副本」？] 正常保护机制：内置示例不可覆盖，你的修改会存成自己的副本。
+  \item[组件在游玩页不见了？] 两种可能：属性里「可见」被取消（画布上呈幽灵框）；或它属于另一个视图（当前视图不渲染）。
+  \item[试运行没有声音？] 先到设置页用「主音量 · 试听」排查设备；再检查组件的音量属性；部分浏览器要求先与页面交互一次才允许发声。
+  \item[表达式不生效？] 检查 \code{q.列名} 拼写（改过列名会有 lint 提示）、确认 \code{==} 两边类型一致（数字 vs 文本）。
+  \item[调试启动后停住不动？] 多半停在断点上：点「继续」，或不再需要时「清空」断点列表。
+  \item[加了行但游玩时题数不对？] 检查推进设置的「本局题数」是否填了数字（留空才是全部行）。
+\end{description}
+
+\subsection*{附录 E · 下一步}
+
+按这个顺序继续深入最顺：\textbf{改数据}（第 3 章）\ra \textbf{改画面}（第 2 章）\ra \textbf{改逻辑}（第 4--6 章）\ra \textbf{读懂内置示例的图与表}（资源库教程与示例分区）\ra \textbf{让 AI 当助手}（第 7 章）。卡住的时候，内置示例的节点图永远是最好的参考书。
+
+\vspace{2em}
+\begin{center}
+\small 本文基于 2026 年 10 月的编辑器界面与行为撰写；若界面后续更新，请以实际软件为准。
+\end{center}
+
+\end{document}
