@@ -20,15 +20,17 @@ npm run build    # tsc strict + Vite 生产构建
 
 ## 部署
 
-push 到 `main`（或 Actions 手动触发）即自动「测试 → 双通道发布」，配置在 `.github/workflows/deploy.yml` + `wrangler.jsonc`：
+站点唯一入口：**https://musicpractise.danieltoraji.workers.dev/**（Cloudflare Workers：静态资产与后端 `/api` 同源服务，HTTPS 由边缘自动签发）。
 
-| 通道 | URL | 说明 |
-|---|---|---|
-| GitHub Pages | https://danieltoraji.github.io/MusicPractise/ | 以 `VITE_BASE=/MusicPractise/` 子路径构建 |
-| Cloudflare Workers | https://musicpractise.danieltoraji.workers.dev/ | 根路径构建，wrangler 发布静态资产；远期全栈的宿主 |
+已裁决**放弃 GitHub Pages 通道**（2026-10，[docs/31](docs/31-后端与账户体系设计.md) §3）：
+其 CI job 将随批次 B1 移除，在此之前 push 到 `main` 仍会双发；原 Pages URL
+（`danieltoraji.github.io/MusicPractise/`）不再作为正式入口，可在仓库 Settings → Pages 关闭。
 
-Workers 通道首次启用需在 GitHub 仓库添加两个 Secret（值来自 Cloudflare 面板）：
-`CLOUDFLARE_API_TOKEN`（自定义 Token，权限 Account → Workers Scripts → Edit）与 `CLOUDFLARE_ACCOUNT_ID`。
+后端（账户 / 云盘 / 通关记录 / 管理后台，docs/31 批次 B1 起）首次启用需一次性：
+
+1. GitHub 仓库添加两个 Secret（值来自 Cloudflare 面板）：`CLOUDFLARE_API_TOKEN`（自定义 Token，权限 Account → Workers Scripts: Edit + D1: Edit）与 `CLOUDFLARE_ACCOUNT_ID`；
+2. 本地执行 `npx wrangler d1 create musicpractise-db` 建库，将返回的 `database_id` 填入 `wrangler.jsonc`；
+3. 首次部署前 `npx wrangler d1 migrations apply musicpractise-db --remote` 应用建表迁移（CI 每次部署亦会执行）。
 
 ## 文档
 
@@ -36,6 +38,7 @@ Workers 通道首次启用需在 GitHub 仓库添加两个 Secret（值来自 Cl
 |---|---|
 | [docs/01-预研报告.md](docs/01-预研报告.md) | 技术选型对比、架构、风险清单、POC 验证记录 |
 | [docs/02-数据结构设计.md](docs/02-数据结构设计.md) | 数据结构规范（人读版）：资源信封、组件契约、逻辑程序、题目模型 |
+| [docs/31-后端与账户体系设计.md](docs/31-后端与账户体系设计.md) | 后端扩充规划：Workers 单通道 + D1 选型、负载测算、数据模型、API 契约、安全设计与批次 B1–B5 路线 |
 
 ## 目录
 
