@@ -66,11 +66,12 @@ export function AccountSection() {
         () => (isRegister ? register(nickname, password) : login(nickname, password)),
         isRegister ? '注册成功，已登录' : '登录成功',
       ).then(() => {
-        // 成功后清空表单（失败保留输入便于修正）
+        // 成功后清空表单并复位到登录模式（失败保留输入便于修正）
         if (getAccountSnapshot().user) {
           setNickname('')
           setPassword('')
           setConfirm('')
+          setMode('login')
         }
       })
     }
@@ -162,7 +163,18 @@ export function AccountSection() {
         <button type="button" disabled={snap.busy || newNickname.trim() === ''} onClick={submitNickname}>
           保存昵称
         </button>
-        <button type="button" disabled={snap.busy} onClick={() => void run(() => logout(), '已退出登录')}>
+        <button
+          type="button"
+          disabled={snap.busy}
+          onClick={() =>
+            void run(() => logout(), '已退出登录').then(() => {
+              // 退出后固定落在登录页（注册态不复用），并清空敏感输入
+              setMode('login')
+              setPassword('')
+              setConfirm('')
+            })
+          }
+        >
           退出登录
         </button>
         {feedbackSpan}

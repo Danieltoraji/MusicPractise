@@ -179,6 +179,8 @@ describe('设置页账户区（批次 B1）', () => {
     await act(async () => buttonByText(c, '退出登录').click())
     await flushUntil(() => c.querySelector('.account-mode') !== null)
     expect(c.textContent).toContain('忘记密码')
+    // 退出后固定落在登录模式（注册态不复用）
+    expect(c.querySelector('.account-mode button.active')?.textContent).toBe('登录')
   })
 
   it('改密码：成功反馈；输入为空时按钮禁用', async () => {
