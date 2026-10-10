@@ -25,6 +25,10 @@ export default defineConfig({
       usePolling: true,
       interval: 300,
     },
+    // 本地全栈开发（docs/31 §3.4）：/api 转发到 wrangler dev（npm run dev:worker，默认端口 8787）
+    proxy: {
+      '/api': 'http://127.0.0.1:8787',
+    },
   },
   test: {
     environment: 'node',
