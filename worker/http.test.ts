@@ -52,6 +52,25 @@ describe('http 工具（错误信封 / 请求体 / Origin 校验）', () => {
     expect(() => assertSameOrigin(req)).not.toThrow()
   })
 
+  it('assertSameOrigin：开发代理双 loopback 放行（vite 5173 → wrangler dev 8787）', () => {
+    const req = new Request('http://127.0.0.1:8787/api/auth/register', {
+      method: 'POST',
+      body: '{}',
+      headers: { Origin: 'http://localhost:5173' },
+    })
+    expect(() => assertSameOrigin(req)).not.toThrow()
+  })
+
+  it('assertSameOrigin：远程 Origin 打 loopback 目标不放行', () => {
+    // 目标 host 非 loopback（模拟生产），Origin 是 loopback —— 不属于双 loopback 开发态
+    const req = new Request('http://musicpractise.example/api/auth/register', {
+      method: 'POST',
+      body: '{}',
+      headers: { Origin: 'http://localhost:5173' },
+    })
+    expect(() => assertSameOrigin(req)).toThrowError(/跨站/)
+  })
+
   it('assertSameOrigin：跨站 Origin 403；非法 Origin 403', () => {
     const cross = new Request('http://localhost:8787/api/auth/login', {
       method: 'POST',

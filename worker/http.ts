@@ -50,23 +50,32 @@ export async function readJsonBody(req: Request, maxBytes: number): Promise<Reco
 }
 
 /**
- * CSRF 防线（docs/31 §6.3）：写方法携带 Origin 时，其 host:port 必须与 Host 一致。
- * 生产同源天然通过；vite 代理开发态 Host 保留前端端口、与 Origin 一致亦通过；
- * 无 Origin 的非浏览器客户端放行（CSRF 威胁模型只针对浏览器承载的跨站请求）。
+ * CSRF 防线（docs/31 §6.3）：写方法携带 Origin 时，其 host:port 必须与请求目标一致
+ * （Host 头，缺省回落请求 URL host）。生产同源天然通过；无 Origin 的非浏览器客户端
+ * 放行（CSRF 威胁模型只针对浏览器承载的跨站请求）。
+ * 开发放行：vite(5173) 代理转发到 wrangler dev(8787) 时 Host 会被改写为内部地址，
+ * 两端均为 loopback（localhost/127.0.0.1/[::1]）时视为同源——远程恶意页面的 Origin
+ * 不可能是 loopback，故此放宽不构成生产弱点。
  */
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/
+
 export function assertSameOrigin(req: Request): void {
   const method = req.method.toUpperCase()
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return
   const origin = req.headers.get('Origin')
   if (!origin) return
-  const host = req.headers.get('Host') ?? new URL(req.url).host
   let originHost: string
   try {
     originHost = new URL(origin).host
   } catch {
     throw new HttpError(403, 'bad_origin', 'Origin 头非法')
   }
-  if (originHost !== host) {
-    throw new HttpError(403, 'bad_origin', '跨站请求被拒绝')
+  const hostHeader = req.headers.get('Host')
+  const urlHost = new URL(req.url).host
+  if (originHost === hostHeader || originHost === urlHost) return
+  const candidates = [hostHeader, urlHost].filter((h): h is string => h !== null)
+  if (LOOPBACK_HOST.test(originHost) && candidates.some((h) => LOOPBACK_HOST.test(h))) {
+    return
   }
+  throw new HttpError(403, 'bad_origin', '跨站请求被拒绝')
 }
