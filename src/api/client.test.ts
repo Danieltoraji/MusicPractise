@@ -58,14 +58,17 @@ describe('api 客户端（信封解析 / 错误分类 / 超时）', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(
-        (_path: string, init?: RequestInit) =>
+        (_path: string | URL, init?: RequestInit) =>
           new Promise<Response>((_resolve, reject) => {
             init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
           }),
       ),
     )
     const pending = apiFetch('/api/health', { timeoutMs: 50 })
+    // 先挂断言再推时钟：rejection 在 advanceTimersByTimeAsync 内部发生，
+    // 后挂处理器会在部分 Node 版本上被判为 unhandled rejection
+    const assertion = expect(pending).rejects.toBeInstanceOf(ApiUnavailableError)
     await vi.advanceTimersByTimeAsync(60)
-    await expect(pending).rejects.toBeInstanceOf(ApiUnavailableError)
+    await assertion
   })
 })
