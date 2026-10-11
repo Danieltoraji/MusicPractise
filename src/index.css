@@ -196,9 +196,8 @@ a {
   color: var(--muted);
   font-size: 13px;
 }
-.level-canvas-wrap {
-  overflow-x: auto;
-}
+/* level-canvas-wrap 挂在 .stage-viewport 同一元素上（批次12 共享舞台），
+   滚动行为统一由 .stage-viewport 管理（见文件尾部分享舞台段），此处不再重复声明 */
 .level-canvas {
   position: relative;
   width: 800px;
@@ -4490,6 +4489,10 @@ a.lib-title:hover {
 .stage-viewport {
   position: relative;
   overflow: hidden;
+  /* 批次12 回归修复：overflow:hidden 曾盖掉旧 .level-canvas-wrap 的横向滚动，
+     超出 800 设计坐标系的宽内容（如长五线谱 layout.w>800）被直接裁掉无法左右滑动。
+     恢复横向滚动；纵向保持裁剪（fit-scale 已保证 800 内纵向不出界）。 */
+  overflow-x: auto;
   width: 100%;
   aspect-ratio: 800 / 470; /* 内在高度：canvas 已出流，玩家页靠此撑高；调试侧被 flex:1 覆盖 */
 }

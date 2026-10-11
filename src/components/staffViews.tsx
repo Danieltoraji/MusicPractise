@@ -99,7 +99,10 @@ export function StaffView({ spec, store, emit }: ViewProps) {
           padEl.setAttribute('y', String(bb.y - pad))
           padEl.setAttribute('width', String(bb.width + pad * 2))
           padEl.setAttribute('height', String(bb.height + pad * 2))
+          // fill/stroke 是 SVG 可继承属性：垫在 g.vf-stavenote 内会继承音符组的黑色描边，
+          // 把透明热区画成黑框（运行时音符四周黑框的根因）——两项都必须显式关掉
           padEl.setAttribute('fill', 'transparent')
+          padEl.setAttribute('stroke', 'none')
           padEl.setAttribute('pointer-events', 'all')
           padEl.setAttribute('data-hitpad', String(midi))
           svgEl.appendChild(padEl)

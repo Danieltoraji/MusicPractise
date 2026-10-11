@@ -215,6 +215,8 @@ describe('触屏/指针修复（批次12）', () => {
       const pad = container.querySelector('rect[data-hitpad="60"]') as SVGRectElement
       expect(pad).not.toBeNull()
       expect(pad.getAttribute('fill')).toBe('transparent')
+      // stroke 是 SVG 可继承属性：不显式关掉会继承音符组的黑色描边，把热区画成黑框
+      expect(pad.getAttribute('stroke')).toBe('none')
       expect(Number(pad.getAttribute('width'))).toBeGreaterThan(20) // 有外扩
 
       // 点击垫（冒泡到 g 的 listener）
