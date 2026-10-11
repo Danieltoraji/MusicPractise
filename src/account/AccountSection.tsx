@@ -163,7 +163,14 @@ export function AccountSection() {
     <div className="settings-form account-form">
       <p className="account-current">
         当前账号：<b>{user.nickname}</b>
-        {user.role === 'admin' && <span className="account-badge">管理员</span>}
+        {user.role === 'admin' && (
+          <>
+            <span className="account-badge">管理员</span>
+            <a className="account-admin-link" href="#/admin">
+              管理后台 →
+            </a>
+          </>
+        )}
       </p>
       <p className="muted account-sync">{syncText}</p>
       <label>

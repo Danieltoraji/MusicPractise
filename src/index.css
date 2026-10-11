@@ -4727,3 +4727,64 @@ a.lib-title:hover {
   margin: 0 0 12px;
   font-size: 12.5px;
 }
+
+/* 管理后台（批次 B4，docs/31 §5.4）：#/admin 页 + 账户区管理员入口 */
+.admin-hint a {
+  margin-left: 8px;
+}
+.admin-stats {
+  margin: 0 0 18px;
+  font-size: 14px;
+}
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.admin-toolbar input {
+  width: 240px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+.admin-table {
+  margin-bottom: 28px;
+}
+.admin-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+  flex-wrap: wrap;
+}
+.admin-row:first-child {
+  border-top: none;
+}
+.admin-status {
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.admin-status.is-ok {
+  background: var(--ok);
+  color: #fff;
+}
+.admin-status.is-bad {
+  background: var(--bad);
+  color: #fff;
+}
+.admin-row select {
+  font-size: 12.5px;
+  padding: 2px 4px;
+}
+.admin-audit-row {
+  align-items: baseline;
+}
+.account-admin-link {
+  margin-left: 10px;
+  font-size: 13px;
+}

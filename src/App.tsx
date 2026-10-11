@@ -16,6 +16,7 @@ const GraphPage = lazy(() => import('./pages/GraphPage').then((m) => ({ default:
 const EditorPage = lazy(() => import('./editor/EditorPage').then((m) => ({ default: m.EditorPage })))
 const TunerDemo = lazy(() => import('./pages/TunerDemo').then((m) => ({ default: m.TunerDemo })))
 const RhythmDemo = lazy(() => import('./pages/RhythmDemo').then((m) => ({ default: m.RhythmDemo })))
+const AdminPage = lazy(() => import('./admin/AdminPage').then((m) => ({ default: m.AdminPage })))
 
 const PageLoading = (
   <p className="muted" style={{ padding: 24 }}>
@@ -101,6 +102,12 @@ export default function App() {
     page = <LibraryPage />
   } else if (hash === '#/settings') {
     page = <SettingsPage />
+  } else if (hash === '#/admin') {
+    page = (
+      <Suspense fallback={PageLoading}>
+        <AdminPage />
+      </Suspense>
+    )
   } else if (hash === '#/tuner') {
     page = (
       <Suspense fallback={PageLoading}>
