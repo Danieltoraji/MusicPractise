@@ -5,6 +5,7 @@
  * 本地功能不受影响）。登录/注册/登出/改昵称走同一 commit 通道；busy 驱动按钮禁用。
  */
 import { accountApi, type ApiUser } from './api'
+import { resetSyncStatus, syncProgressOnce } from '../cloud/progress'
 
 export type AccountPhase = 'probing' | 'available' | 'unavailable'
 
@@ -47,6 +48,8 @@ export async function probeAccount(): Promise<void> {
   try {
     const { user } = await accountApi.me()
     commit({ phase: 'available', user: user ?? null })
+    // 已有会话（页面刷新/重开）：后台补一次通关记录同步（批次 B3）
+    if (user) void syncProgressOnce()
   } catch {
     // health 通但 me 异常：按未登录处理（不影响本地功能）
     commit({ phase: 'available', user: null })
@@ -66,6 +69,7 @@ export async function login(nickname: string, password: string): Promise<void> {
   await runBusy(async () => {
     const { user } = await accountApi.login(nickname, password)
     commit({ user })
+    void syncProgressOnce()
   })
 }
 
@@ -73,6 +77,7 @@ export async function register(nickname: string, password: string): Promise<void
   await runBusy(async () => {
     const { user } = await accountApi.register(nickname, password)
     commit({ user })
+    void syncProgressOnce()
   })
 }
 
@@ -80,6 +85,7 @@ export async function logout(): Promise<void> {
   await runBusy(async () => {
     await accountApi.logout()
     commit({ user: null })
+    resetSyncStatus()
   })
 }
 

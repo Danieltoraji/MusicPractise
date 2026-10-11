@@ -1,5 +1,8 @@
+// @vitest-environment node
+import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, ApiUnavailableError } from '../api/client'
+import { getSyncSnapshot, resetSyncForTests } from '../cloud/progress'
 import {
   changePassword,
   getAccountSnapshot,
@@ -11,6 +14,15 @@ import {
   subscribeAccount,
   updateNickname,
 } from './store'
+
+/** 轮询等待异步 void 链（syncProgressOnce 是 fire-and-forget） */
+async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+  const start = Date.now()
+  while (!predicate()) {
+    if (Date.now() - start > timeoutMs) throw new Error('waitFor 超时')
+    await new Promise((r) => setTimeout(r, 10))
+  }
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -33,6 +45,7 @@ const USER = { id: 'usr_A', nickname: '阿明', role: 'user' }
 
 beforeEach(() => {
   resetAccountForTests()
+  resetSyncForTests()
 })
 
 afterEach(() => {
@@ -134,6 +147,23 @@ describe('账户 store（探测三态 + 动作流转）', () => {
     await probeAccount() // 已探测过，no-op
     expect(seen.length).toBe(1)
     expect((seen[0] as { phase: string }).phase).toBe('unavailable')
+  })
+
+  it('登录成功触发通关记录同步（批次 B3）', async () => {
+    stubFetchByPath({
+      '/api/health': () => jsonResponse({ ok: true }),
+      '/api/auth/me': () => jsonResponse({ user: null }),
+    })
+    await probeAccount()
+
+    stubFetchByPath({
+      '/api/auth/login': () => jsonResponse({ user: USER }),
+      '/api/progress': (init) =>
+        (init.method ?? 'GET').toUpperCase() === 'PUT' ? jsonResponse({ ok: true }) : jsonResponse({ records: [] }),
+    })
+    await login('阿明', 'password-123')
+    await waitFor(() => getSyncSnapshot().status === 'ok')
+    expect(getSyncSnapshot().status).toBe('ok')
   })
 
   it('ApiError 原样穿透（不被包装成 ApiUnavailableError）', async () => {

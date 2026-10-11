@@ -5,6 +5,8 @@ import type { LevelDoc } from '../engine/level'
 import { ErrorBoundary } from '../library/ErrorBoundary'
 import { loadLevelDoc } from '../library/validate'
 import { LevelRunner } from '../runtime/LevelRunner'
+import { getAccountSnapshot } from '../account/store'
+import { pushProgress } from '../cloud/progress'
 
 
 export function LevelPage({ id }: { id: string }) {
@@ -17,7 +19,11 @@ export function LevelPage({ id }: { id: string }) {
   // hooks 必须在任何条件返回之前：结算回调按 id 稳定（避免 session 重建）
   const handleFinished = useCallback(
     (result: { score: unknown; passed: boolean }) => {
-      void saveProgress(id, { score: Number(result.score) || 0, passed: result.passed })
+      void saveProgress(id, { score: Number(result.score) || 0, passed: result.passed }).then((record) => {
+        // 云端上报（批次 B3）：登录态才发，fire-and-forget 失败静默——本地已落库
+        const snap = getAccountSnapshot()
+        if (snap.phase === 'available' && snap.user) void pushProgress(record)
+      })
     },
     [id],
   )

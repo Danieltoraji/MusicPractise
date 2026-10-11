@@ -9,6 +9,7 @@ import {
   subscribeAccount,
   updateNickname,
 } from './store'
+import { getSyncSnapshot, subscribeSync } from '../cloud/progress'
 
 /**
  * 设置页「账户」区（docs/31 §7）：按账户 store 三态渲染——
@@ -18,6 +19,7 @@ import {
  */
 export function AccountSection() {
   const snap = useSyncExternalStore(subscribeAccount, getAccountSnapshot)
+  const sync = useSyncExternalStore(subscribeSync, getSyncSnapshot)
 
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [nickname, setNickname] = useState('')
@@ -136,6 +138,14 @@ export function AccountSection() {
   }
 
   const user = snap.user
+  const syncText =
+    sync.status === 'syncing'
+      ? '进度同步中…'
+      : sync.status === 'ok' && sync.lastOkAt !== null
+        ? `通关记录已同步 · ${new Date(sync.lastOkAt).toLocaleTimeString()}`
+        : sync.status === 'error'
+          ? '进度同步失败——本地记录不受影响，下次登录自动重试'
+          : '登录后自动同步通关记录'
   const submitNickname = (): void => {
     const value = newNickname.trim()
     if (!value) return
@@ -155,6 +165,7 @@ export function AccountSection() {
         当前账号：<b>{user.nickname}</b>
         {user.role === 'admin' && <span className="account-badge">管理员</span>}
       </p>
+      <p className="muted account-sync">{syncText}</p>
       <label>
         修改昵称
         <input value={newNickname} onChange={(e) => setNewNickname(e.target.value)} placeholder={user.nickname} />

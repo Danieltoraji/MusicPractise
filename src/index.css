@@ -4723,3 +4723,7 @@ a.lib-title:hover {
   font-weight: 600;
   min-width: 140px;
 }
+.account-sync {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+}
