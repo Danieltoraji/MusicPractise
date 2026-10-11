@@ -26,4 +26,13 @@ describe('SOUND_DEF instrument（批次13）', () => {
     const bad = SOUND_DEF.initialState(spec({ instrument: 'honky-tonk' }))
     expect(bad.instrument).toBe('piano')
   })
+
+  it('stop：产出 audio.stop 效果并清 lastPlay（契约此前承诺 stop 但未实现，静默 no-op）', () => {
+    const s = SOUND_DEF.initialState(spec())
+    const played = SOUND_DEF.applyCommand(s, 'play', { notes: [{ midi: 60 }] })
+    expect(played.state.lastPlay).not.toBeNull()
+    const stopped = SOUND_DEF.applyCommand(played.state, 'stop', {})
+    expect(stopped.effects).toEqual([{ type: 'audio.stop' }])
+    expect(stopped.state.lastPlay).toBeNull()
+  })
 })

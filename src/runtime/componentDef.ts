@@ -22,6 +22,7 @@ export type Effect =
       cutoff?: number
     }
   | { type: 'audio.synthStop' }
+  | { type: 'audio.stop' }
   | { type: 'timer.start'; ms: number; repeat: boolean }
   | { type: 'timer.stop' }
   | { type: 'none' }
@@ -324,6 +325,11 @@ export const SOUND_DEF: ComponentDef<SoundState> = {
         state: { ...s, lastPlay: args.notes ?? null },
         effects: [{ type: 'audio.play', notes, tempo, instrument: s.instrument }],
       }
+    }
+    if (cmd === 'stop') {
+      // 静停本组件链路能及的全部音频（采样器 + 合成器）：重听/换题前清掉上一轮余音，
+      // 防止新旧序列叠着响——「重听后时序错乱」的第二根因（契约一直承诺 stop，此前未实现）
+      return { state: { ...s, lastPlay: null }, effects: [{ type: 'audio.stop' }] }
     }
     return { state: s }
   },

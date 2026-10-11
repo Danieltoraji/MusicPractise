@@ -8,8 +8,6 @@ import type { Note } from '../engine/level'
 import type { SoundInstrument } from './componentDef'
 
 let ctx: AudioContext | null = null
-let piano: SplendidGrandPiano | null = null
-let pianoLoading: Promise<SplendidGrandPiano> | null = null
 let masterGain: GainNode | null = null
 
 /** 主音量（0-1，默认 1）持久化键；惯例同 graph-theme 的裸 kebab 键 */
@@ -60,26 +58,56 @@ export function unlockAudio(): void {
   getCtx()
 }
 
-function ensurePiano(): Promise<SplendidGrandPiano> {
-  if (piano) return Promise.resolve(piano)
-  if (!pianoLoading) {
-    pianoLoading = (async () => {
-      const { SplendidGrandPiano: Piano } = await import('smplr')
-      const p = new Piano(getCtx(), { destination: getMasterGain() })
-      await p.ready
-      piano = p
-      return p
-    })()
-    pianoLoading.catch(() => {
-      pianoLoading = null
-    })
+/**
+ * 挂起安全的时间基准：等待 AudioContext 进入 running 再返回。
+ * 挂起时 currentTime 冻结——若直接在其上排程，多次 play 的音符会堆叠在同一冻结时刻，
+ * 首次用户手势解锁后全部同时炸响（听音关卡进关自动播放 + 首击的「时序错乱」根因）。
+ * state 不可读的伪造/异常上下文按 running 处理（测试替身直通）。
+ */
+async function ensureRunning(): Promise<AudioContext> {
+  const c = getCtx()
+  if (c.state !== 'suspended' && c.state !== 'interrupted') return c
+  try {
+    await c.resume()
+  } catch {
+    /* 无手势时 resume 会被拒绝：继续等 statechange（解锁即触发） */
   }
-  return pianoLoading
+  if (c.state !== 'suspended' && c.state !== 'interrupted') return c
+  await new Promise<void>((resolve) => {
+    const onStateChange = (): void => {
+      c.removeEventListener('statechange', onStateChange)
+      resolve()
+    }
+    c.addEventListener('statechange', onStateChange)
+  })
+  return c
+}
+
+/**
+ * 采样预加载（首击延迟根因：钢琴全音域 169 个采样文件，首次 play 才开始下载，
+ * 首个音符要等全部就绪才出声）。关卡装载即调用，把下载提前到进关瞬间。幂等。
+ */
+export function preloadAudio(instruments: readonly SoundInstrument[] = ['piano']): void {
+  for (const inst of new Set(instruments)) {
+    if (inst === 'piano') void ensurePiano().catch(() => {})
+    else void ensureSampler(inst).catch(() => {})
+  }
+}
+
+/**
+ * 钢琴采样器：与 ensureSampler('piano') 同一注册表实例——统一管理预热与 sound.stop 静停
+ * （此前钢琴走独立单例，stopAllAudio 遍历注册表时看不到它，stop 停不掉钢琴声部）。
+ */
+function ensurePiano(): Promise<SplendidGrandPiano> {
+  return ensureSampler('piano') as unknown as Promise<SplendidGrandPiano>
 }
 
 // 采样器注册表（批次13）：instrument → 已装载实例；全部接主总线，按需动态 import smplr
-type AnySampler = { ready: Promise<unknown>; start(opts: { note: number; velocity: number; time: number; duration: number }): void }
+type AnySampler = { ready: Promise<unknown>; start(opts: { note: number; velocity: number; time: number; duration: number }): void; stop(): void }
 const samplers = new Map<SoundInstrument, Promise<AnySampler>>()
+
+/** 播放代数：stopAllAudio 递增后，仍在等待解锁排程的播放链静默作废（幽灵音防线） */
+let playNotesGen = 0
 
 function ensureSampler(instrument: SoundInstrument): Promise<AnySampler> {
   const cached = samplers.get(instrument)
@@ -100,13 +128,18 @@ function ensureSampler(instrument: SoundInstrument): Promise<AnySampler> {
         return s as unknown as AnySampler
       }
       default: {
+        // piano：SplendidGrandPiano（与 ensurePiano 同一路径）
         const s = new smplr.SplendidGrandPiano(c, { destination: dest })
         await s.ready
         return s as unknown as AnySampler
       }
     }
   })()
-  loading.catch(() => samplers.delete(instrument))
+  loading.catch((err: unknown) => {
+    // 装载失败既无声音也无 UI 提示，至少留一条排查线索（「点了没声音」的常见根因）
+    console.warn(`[audio] 采样音色 "${instrument}" 装载失败`, err)
+    samplers.delete(instrument)
+  })
   samplers.set(instrument, loading)
   return loading
 }
@@ -169,14 +202,17 @@ export function playNotes(notes: Note[], tempo = 90, instrument: SoundInstrument
   if (!Array.isArray(notes) || notes.length === 0) return
   const events = scheduleNoteEvents(notes)
   if (events.length === 0) return
+  const gen = ++playNotesGen
   getCtx()
   const samplerReady = instrument === 'piano' ? ensurePiano() : ensureSampler(instrument)
   samplerReady
-    .then((p) => {
-      const t0 = getCtx().currentTime + 0.06
+    .then(async (sampler) => {
+      const c = await ensureRunning()
+      if (gen !== playNotesGen) return // 排队期间发生过 stopAllAudio：作废本轮
+      const t0 = c.currentTime + 0.06
       const spb = 60 / Math.min(300, Math.max(20, tempo))
       for (const ev of events) {
-        p.start({
+        sampler.start({
           note: ev.midi,
           velocity: ev.vel,
           time: t0 + ev.startBeat * spb,
@@ -185,6 +221,21 @@ export function playNotes(notes: Note[], tempo = 90, instrument: SoundInstrument
       }
     })
     .catch((err) => console.error('[audio] 钢琴音色加载失败', err))
+}
+
+/** 静停全部音频（sound.stop 命令）：作废排队中的播放 + 停掉全部采样器与合成器声部 */
+export function stopAllAudio(): void {
+  playNotesGen++
+  stopSynth()
+  for (const p of samplers.values()) {
+    void p.then((s) => {
+      try {
+        s.stop()
+      } catch {
+        /* 实例未就绪/已释放忽略 */
+      }
+    })
+  }
 }
 
 /** 节拍器短音（节奏组件用）：简单振荡器，无需采样。返回停用函数（换轮/清理时静停单轮已排程音） */
@@ -238,6 +289,9 @@ const SYNTH_VOICE_DEFAULTS: Record<
 
 /** 已排程的合成器声部（stopSynth 静停 + 过期修剪） */
 const synthVoices: { oscs: OscillatorNode[]; gain: GainNode; until: number }[] = []
+
+/** 合成器播放代数：stopSynth 递增，排队中（等待解锁）的播放静默作废 */
+let synthGen = 0
 
 function midiToFreq(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12)
@@ -306,35 +360,43 @@ function synthVoice(c: AudioContext, midi: number, vel: number, t: number, dur: 
 /**
  * 合成器播放：与 playNotes 相同的 t/dur 排程语义（docs/27），声部为振荡器包络。
  * wave 不认识时回退 sawtooth；音色缺省参数见 SYNTH_VOICE_DEFAULTS。
+ * 同样经 ensureRunning 取时间基准（挂起的上下文上排程会在解锁瞬间全部炸响）。
  */
-export function playSynth(notes: Note[], params: SynthParams): void {
-  if (!Array.isArray(notes) || notes.length === 0) return
-  const events = scheduleNoteEvents(notes)
-  if (events.length === 0) return
-  const c = getCtx()
-  const base = (SYNTH_VOICE_DEFAULTS as Record<string, (typeof SYNTH_VOICE_DEFAULTS)[SynthWave]>)[params.wave] ?? SYNTH_VOICE_DEFAULTS.sawtooth
-  const attack = Math.min(2, Math.max(0, params.attack ?? base.attack))
-  const release = Math.min(2.5, Math.max(0.01, params.release ?? base.release))
-  const gain = Math.min(1, Math.max(0, params.gain ?? 0.35)) * base.gainMul
-  const tempo = Math.min(300, Math.max(20, params.tempo ?? 90))
-  const spb = 60 / tempo
-  const cutoff = Math.min(12000, Math.max(0, params.cutoff ?? 0))
-  pruneSynthVoices(c)
-  const t0 = c.currentTime + 0.05
-  for (const ev of events) {
-    synthVoice(c, ev.midi, ev.vel, t0 + ev.startBeat * spb, Math.min(3.5, ev.durBeats * spb), {
-      ...base,
-      wave: params.wave,
-      attack,
-      release,
-      gain,
-      cutoff,
-    })
-  }
+export function playSynth(notes: Note[], params: SynthParams): Promise<void> {
+  const gen = ++synthGen
+  const queue = (async (): Promise<void> => {
+    if (!Array.isArray(notes) || notes.length === 0) return
+    const events = scheduleNoteEvents(notes)
+    if (events.length === 0) return
+    const c = await ensureRunning()
+    if (gen !== synthGen) return // 排队期间 stopSynth：作废本轮（挂起排队幽灵音防线）
+    const base = (SYNTH_VOICE_DEFAULTS as Record<string, (typeof SYNTH_VOICE_DEFAULTS)[SynthWave]>)[params.wave] ?? SYNTH_VOICE_DEFAULTS.sawtooth
+    const attack = Math.min(2, Math.max(0, params.attack ?? base.attack))
+    const release = Math.min(2.5, Math.max(0.01, params.release ?? base.release))
+    const gain = Math.min(1, Math.max(0, params.gain ?? 0.35)) * base.gainMul
+    const tempo = Math.min(300, Math.max(20, params.tempo ?? 90))
+    const spb = 60 / tempo
+    const cutoff = Math.min(12000, Math.max(0, params.cutoff ?? 0))
+    pruneSynthVoices(c)
+    const t0 = c.currentTime + 0.05
+    for (const ev of events) {
+      synthVoice(c, ev.midi, ev.vel, t0 + ev.startBeat * spb, Math.min(3.5, ev.durBeats * spb), {
+        ...base,
+        wave: params.wave,
+        attack,
+        release,
+        gain,
+        cutoff,
+      })
+    }
+  })()
+  queue.catch((err) => console.error('[audio] 合成器播放失败', err))
+  return queue
 }
 
 /** 静停全部已排程/进行中的合成器声部（synth.stop 命令；换视图不自动调用——合成器与计时器同为逻辑侧资源） */
 export function stopSynth(): void {
+  synthGen++ // 排队中（等待解锁）的 playSynth 一并作废
   if (!ctx) return
   const now = ctx.currentTime
   for (const v of synthVoices) {

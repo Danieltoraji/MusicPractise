@@ -76,9 +76,9 @@ function envelopeGains(fake: FakeCtx): FakeNode[] {
 }
 
 describe('playSynth / stopSynth（mock AudioContext 回归）', () => {
-  it('可持续音色：sustain 平顶事件落在 holdEnd，release 从 holdEnd 起算（P1-1 回归）', () => {
+  it('可持续音色：sustain 平顶事件落在 holdEnd，release 从 holdEnd 起算（P1-1 回归）', async () => {
     const fake = getCtx() as unknown as FakeCtx
-    playSynth([{ midi: 60 }], { wave: 'sine', tempo: 90, gain: 0.3 })
+    await playSynth([{ midi: 60 }], { wave: 'sine', tempo: 90, gain: 0.3 })
     const envs = envelopeGains(fake)
     expect(envs).toHaveLength(1)
     const ev = envs[0].gain.events
@@ -90,9 +90,9 @@ describe('playSynth / stopSynth（mock AudioContext 回归）', () => {
     expect(release!.time!).toBeCloseTo((holdSet!.time ?? 0) + 0.2, 5)
   })
 
-  it('衰减音色（bell）：holdEnd 前指数衰减到低位，再接释放段', () => {
+  it('衰减音色（bell）：holdEnd 前指数衰减到低位，再接释放段', async () => {
     const fake = getCtx() as unknown as FakeCtx
-    playSynth([{ midi: 60 }], { wave: 'bell', gain: 0.3 })
+    await playSynth([{ midi: 60 }], { wave: 'bell', gain: 0.3 })
     const env = envelopeGains(fake).at(-1)!
     const ramps = env.gain.events.filter((e) => e.op === 'expramp')
     // 第一段 expRamp 是 holdEnd 前的自然衰减（到峰值的低位），第二段是释放
@@ -101,10 +101,10 @@ describe('playSynth / stopSynth（mock AudioContext 回归）', () => {
     expect(ramps[ramps.length - 2].time!).toBeLessThan(ramps[ramps.length - 1].time!)
   })
 
-  it('接排排程：无 t 音符按 dur 连奏（与 playNotes 同语义，docs/27）', () => {
+  it('接排排程：无 t 音符按 dur 连奏（与 playNotes 同语义，docs/27）', async () => {
     const fake = getCtx() as unknown as FakeCtx
     const before = fake.oscs.length
-    playSynth(
+    await playSynth(
       [{ midi: 60 }, { midi: 64 }, { midi: 67 }],
       { wave: 'square', tempo: 90 },
     )
@@ -115,10 +115,10 @@ describe('playSynth / stopSynth（mock AudioContext 回归）', () => {
     expect(starts[2] - starts[1]).toBeCloseTo(spb, 5)
   })
 
-  it('t 起始拍：相同 t 同时响；休止符占位推进游标（docs/27）', () => {
+  it('t 起始拍：相同 t 同时响；休止符占位推进游标（docs/27）', async () => {
     const fake = getCtx() as unknown as FakeCtx
     const before = fake.oscs.length
-    playSynth(
+    await playSynth(
       [{ midi: 60, t: 0 }, { midi: 64, t: 0 }, { rest: true, dur: '4n' }, { midi: 67 }],
       { wave: 'square', tempo: 90 },
     )
@@ -129,9 +129,9 @@ describe('playSynth / stopSynth（mock AudioContext 回归）', () => {
     expect(starts[2] - starts[0]).toBeCloseTo(2 * spb, 5) // 休止 1 拍后第 2 拍起
   })
 
-  it('stopSynth：全部声部取消调度 + 50ms 淡出 + 短停振；二次调用无副作用', () => {
+  it('stopSynth：全部声部取消调度 + 50ms 淡出 + 短停振；二次调用无副作用', async () => {
     const fake = getCtx() as unknown as FakeCtx
-    playSynth([{ midi: 60 }, { midi: 64 }], { wave: 'sine' })
+    await playSynth([{ midi: 60 }, { midi: 64 }], { wave: 'sine' })
     const envs = envelopeGains(fake)
     expect(envs.length).toBeGreaterThanOrEqual(2)
     stopSynth()
@@ -171,7 +171,7 @@ describe('主音量总线（批次13）', () => {
     }
   })
 
-  it('playSynth 的包络输出接到主总线而非 destination', () => {
+  it('playSynth 的包络输出接到主总线而非 destination', async () => {
     vi.stubGlobal('localStorage', {
       getItem: () => null,
       setItem: () => {},
@@ -179,7 +179,7 @@ describe('主音量总线（批次13）', () => {
     })
     try {
       const fake = getCtx() as unknown as FakeCtx
-      playSynth([{ midi: 60, dur: '4n' }], { wave: 'sine' })
+      await playSynth([{ midi: 60, dur: '4n' }], { wave: 'sine' })
       const env = envelopeGains(fake)[0]
       expect(env).toBeTruthy()
       // env → master → destination 的两级链

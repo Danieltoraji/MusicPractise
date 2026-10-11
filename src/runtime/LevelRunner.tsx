@@ -7,7 +7,7 @@ import type { LevelDoc, TableRow } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { LevelSession } from './levelSession'
 import { LevelStage } from './LevelStage'
-import { runAudioEffects, nowSeconds } from './audioHost'
+import { preloadLevelAudio, runAudioEffects, nowSeconds } from './audioHost'
 import { appendRunLog, clearRunLog } from './runLog'
 
 export function LevelRunner({
@@ -82,6 +82,7 @@ function RunnerCore({
 
   useEffect(() => {
     clearRunLog(levelId) // 「最近一次试运行」语义：每次进入/重开清掉上一轮日志
+    preloadLevelAudio(doc) // 采样预热：进关即开始下载，用户首击即响（下载不依赖手势）
     session.start()
     return () => session.dispose()
   }, [session])
