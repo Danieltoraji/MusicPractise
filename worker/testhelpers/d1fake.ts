@@ -29,6 +29,15 @@ export interface CloudLevelRow {
   updated_at: number
 }
 
+export interface ProgressRow {
+  user_id: string
+  level_id: string
+  best_score: number
+  passed: number
+  attempts: number
+  updated_at: number
+}
+
 const norm = (sql: string): string => sql.replace(/\s+/g, ' ').trim()
 
 /**
@@ -44,6 +53,7 @@ export class D1Fake implements D1Database {
   sessions: SessionRow[] = []
   login_attempts: LoginAttemptRow[] = []
   cloud_levels: CloudLevelRow[] = []
+  progress: ProgressRow[] = []
   /** 已执行的规范化 SQL（断言/排查用） */
   executedSql: string[] = []
 
@@ -274,6 +284,36 @@ export class D1Fake implements D1Database {
       const before = this.cloud_levels.length
       this.cloud_levels = this.cloud_levels.filter((r) => !(r.id === p[0] && r.user_id === p[1]))
       return { results: [], changes: before - this.cloud_levels.length }
+    }
+
+    // ---- progress ----
+    m = /^SELECT level_id, best_score, passed, attempts, updated_at FROM progress WHERE user_id = \?$/.exec(sql)
+    if (m) {
+      return { results: this.progress.filter((r) => r.user_id === p[0]) as unknown as Row[], changes: 0 }
+    }
+
+    m = /^INSERT INTO progress \(user_id, level_id, best_score, passed, attempts, updated_at\) VALUES \(\?, \?, \?, \?, \?, \?\) ON CONFLICT\(user_id, level_id\) DO UPDATE SET best_score = MAX\(excluded\.best_score, progress\.best_score\), passed = MAX\(excluded\.passed, progress\.passed\), attempts = MAX\(excluded\.attempts, progress\.attempts\), updated_at = MAX\(excluded\.updated_at, progress\.updated_at\)$/.exec(
+      sql,
+    )
+    if (m) {
+      const incoming: ProgressRow = {
+        user_id: String(p[0]),
+        level_id: String(p[1]),
+        best_score: Number(p[2]),
+        passed: Number(p[3]),
+        attempts: Number(p[4]),
+        updated_at: Number(p[5]),
+      }
+      const existing = this.progress.find((r) => r.user_id === incoming.user_id && r.level_id === incoming.level_id)
+      if (!existing) {
+        this.progress.push(incoming)
+      } else {
+        existing.best_score = Math.max(existing.best_score, incoming.best_score)
+        existing.passed = Math.max(existing.passed, incoming.passed)
+        existing.attempts = Math.max(existing.attempts, incoming.attempts)
+        existing.updated_at = Math.max(existing.updated_at, incoming.updated_at)
+      }
+      return { results: [], changes: 1 }
     }
 
     throw new Error(`D1Fake 未支持的语句: ${sql}`)
