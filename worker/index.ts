@@ -8,6 +8,15 @@ import { Router } from './router'
 import { changePassword, login, logout, me, register, updateNickname } from './handlers/auth'
 import { deleteLevel, getLevel, listLevels, replaceLevel, uploadLevel } from './handlers/cloud'
 import { listProgress, putProgress } from './handlers/progress'
+import {
+  adminDeleteLevel,
+  adminDeleteUser,
+  adminListAudit,
+  adminListLevels,
+  adminListUsers,
+  adminPatchUser,
+  adminStats,
+} from './handlers/admin'
 import type { Env, ExecutionContext } from './types'
 
 const api = new Router()
@@ -29,6 +38,14 @@ api.add('DELETE', '/api/cloud/levels/:id', deleteLevel)
 
 api.add('GET', '/api/progress', listProgress)
 api.add('PUT', '/api/progress', putProgress)
+
+api.add('GET', '/api/admin/stats', adminStats)
+api.add('GET', '/api/admin/users', adminListUsers)
+api.add('PATCH', '/api/admin/users/:id', adminPatchUser)
+api.add('DELETE', '/api/admin/users/:id', adminDeleteUser)
+api.add('GET', '/api/admin/levels', adminListLevels)
+api.add('DELETE', '/api/admin/levels/:id', adminDeleteLevel)
+api.add('GET', '/api/admin/audit', adminListAudit)
 
 export default {
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
