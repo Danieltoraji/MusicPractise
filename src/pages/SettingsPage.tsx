@@ -11,6 +11,7 @@ import { AiClientError, testConnection } from '../ai/client'
 import { PRESET_BY_ID, PROVIDER_PRESETS, isCustomProfileId, newCustomProfileId } from '../ai/providers'
 import { loadAiSettings, saveAiSettings, type AiProviderProfile, type AiSettings } from '../ai/settings'
 import { AccountSection } from '../account/AccountSection'
+import { CloudSection } from '../cloud/CloudSection'
 import { getMasterVolume, playNotes, setMasterVolume } from '../runtime/audio'
 
 interface TestResult {
@@ -108,6 +109,9 @@ export function SettingsPage() {
 
       <h2>账户</h2>
       <AccountSection />
+
+      <h2>云盘</h2>
+      <CloudSection />
 
       <h2>AI 供应商</h2>
       <div className="provider-cards">

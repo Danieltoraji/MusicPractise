@@ -4678,3 +4678,48 @@ a.lib-title:hover {
 .topbar-user:hover {
   color: var(--accent);
 }
+
+/* 云盘（批次 B2，docs/31 §7）：设置页槽位列表 + 资源库上传反馈 */
+.cloud-status {
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.cloud-box {
+  max-width: 720px;
+  margin-bottom: 24px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.cloud-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+.cloud-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cloud-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+  flex-wrap: wrap;
+}
+.cloud-row:first-child {
+  border-top: none;
+}
+.cloud-title {
+  font-weight: 600;
+  min-width: 140px;
+}

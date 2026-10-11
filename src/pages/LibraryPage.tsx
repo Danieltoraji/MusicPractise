@@ -3,12 +3,14 @@
  * 关卡可直接编辑（内置示例保存时自动另存为副本）；支持标题搜索、导入导出、新建。
  */
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useRef, useState, useSyncExternalStore } from 'react'
 import type { LibraryRecord } from '../library/db'
 import { db, deleteResource, putResource } from '../library/db'
 import { downloadBlob, exportResource, importFromFiles, type ImportReport } from '../library/io'
 import { buildLibraryTree, filterTree, type LibraryTreeRow } from '../library/browse'
 import { blankLevelDoc } from '../editor/docState'
+import { getAccountSnapshot, subscribeAccount } from '../account/store'
+import { uploadLibraryLevel } from '../cloud/api'
 
 const KIND_ICON: Record<string, string> = { series: '📚', topic: '📂', level: '🎯', instrument: '🎹' }
 
@@ -20,6 +22,24 @@ export function LibraryPage() {
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const fileInput = useRef<HTMLInputElement>(null)
+  // 云盘上传（批次 B2）：登录态显示行级入口；结果内联反馈
+  const account = useSyncExternalStore(subscribeAccount, getAccountSnapshot)
+  const cloudReady = account.phase === 'available' && account.user !== null
+  const [cloudMsg, setCloudMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [cloudUploadingId, setCloudUploadingId] = useState<string | null>(null)
+
+  async function handleCloudUpload(rec: LibraryRecord): Promise<void> {
+    setCloudMsg(null)
+    setCloudUploadingId(rec.id)
+    try {
+      const { level } = await uploadLibraryLevel(rec)
+      setCloudMsg({ ok: true, text: `「${rec.title}」已上传云盘（${level.bytes >= 1024 ? `${(level.bytes / 1024).toFixed(1)} KB` : `${level.bytes} B`}）` })
+    } catch (e) {
+      setCloudMsg({ ok: false, text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setCloudUploadingId(null)
+    }
+  }
 
   const searching = query.trim() !== ''
 
@@ -176,6 +196,7 @@ export function LibraryPage() {
       )}
 
       {error && <p className="tone-error">{error}</p>}
+      {cloudMsg && <p className={cloudMsg.ok ? 'muted' : 'tone-error'}>{cloudMsg.text}</p>}
       {report && (
         <div className="import-report">
           <b>导入完成</b>：新增 {report.added.length} · 更新 {report.updated.length} · 跳过{' '}
@@ -208,7 +229,7 @@ export function LibraryPage() {
             <>
               <div className="lib-divider">🎵 教程与示例</div>
               {featuredRows.map((row) => (
-                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} />
+                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} onCloudUpload={handleCloudUpload} cloudUploadingId={cloudUploadingId} cloudReady={cloudReady} />
               ))}
             </>
           )}
@@ -216,7 +237,7 @@ export function LibraryPage() {
             <>
               <div className="lib-divider">系列</div>
               {visibleSeries.map((row) => (
-                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} />
+                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} onCloudUpload={handleCloudUpload} cloudUploadingId={cloudUploadingId} cloudReady={cloudReady} />
               ))}
             </>
           )}
@@ -224,7 +245,7 @@ export function LibraryPage() {
             <>
               <div className="lib-divider">未整理</div>
               {restLoose.map((row) => (
-                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} />
+                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} onCloudUpload={handleCloudUpload} cloudUploadingId={cloudUploadingId} cloudReady={cloudReady} />
               ))}
             </>
           )}
@@ -242,6 +263,9 @@ function TreeRow(props: {
   onToggle: (id: string) => void
   onExport: (rec: LibraryRecord) => Promise<void>
   onDelete: (rec: LibraryRecord) => Promise<void>
+  onCloudUpload: (rec: LibraryRecord) => Promise<void>
+  cloudUploadingId: string | null
+  cloudReady: boolean
 }): React.ReactNode {
   const { row, depth, searching, expanded, onToggle } = props
   const rec = row.rec
@@ -294,6 +318,17 @@ function TreeRow(props: {
               <a href={`#/level/${rec.id}`}>试玩</a>
             </>
           )}
+          {rec.kind === 'level' && props.cloudReady && (
+            <button
+              type="button"
+              className="link"
+              title={props.cloudUploadingId === rec.id ? '上传中…' : '上传到云盘（登录后可用）'}
+              disabled={props.cloudUploadingId !== null}
+              onClick={() => void props.onCloudUpload(rec)}
+            >
+              {props.cloudUploadingId === rec.id ? '☁ 上传中…' : '☁ 上传'}
+            </button>
+          )}
           <button type="button" className="link" onClick={() => void props.onExport(rec)}>
             导出
           </button>
@@ -321,6 +356,9 @@ function TreeRow(props: {
               onToggle={onToggle}
               onExport={props.onExport}
               onDelete={props.onDelete}
+              onCloudUpload={props.onCloudUpload}
+              cloudUploadingId={props.cloudUploadingId}
+              cloudReady={props.cloudReady}
             />
           ))}
         </div>
