@@ -1,0 +1,10 @@
+# 静态资产安全响应头（docs/31 §6.6，批次 B5）。
+# Workers Assets 原生支持 _headers；/api 响应由 worker 侧 withSecurityHeaders 注入同一组头。
+# CSP 说明：connect-src 放开 https: —— AI 供应商 BaseURL 用户可配任意域、smplr 音源走 CDN；
+# style-src 'unsafe-inline' 覆盖 React 内联样式属性；img-src data: 覆盖内联 SVG favicon。
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: same-origin
+  Permissions-Policy: microphone=(self)
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https:; media-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'

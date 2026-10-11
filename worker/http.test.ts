@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertSameOrigin, errorJson, HttpError, jsonResponse, readJsonBody } from './http'
+import { assertSameOrigin, errorJson, HttpError, jsonResponse, readJsonBody, withSecurityHeaders } from './http'
 
 describe('http 工具（错误信封 / 请求体 / Origin 校验）', () => {
   it('jsonResponse 输出 application/json；errorJson 输出 {error:{code,message}}', async () => {
@@ -17,6 +17,18 @@ describe('http 工具（错误信封 / 请求体 / Origin 校验）', () => {
     const err = new HttpError(401, 'invalid_credentials', '昵称或密码错误')
     expect(err.status).toBe(401)
     expect(err.code).toBe('invalid_credentials')
+  })
+
+  it('withSecurityHeaders：注入全套安全头（批次 B5）', () => {
+    const res = withSecurityHeaders(jsonResponse({ ok: 1 }))
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    expect(res.headers.get('X-Frame-Options')).toBe('DENY')
+    expect(res.headers.get('Referrer-Policy')).toBe('same-origin')
+    expect(res.headers.get('Permissions-Policy')).toBe('microphone=(self)')
+    const csp = res.headers.get('Content-Security-Policy') ?? ''
+    expect(csp).toContain("script-src 'self'")
+    expect(csp).toContain("connect-src 'self' https:")
+    expect(csp).toContain("frame-ancestors 'none'")
   })
 
   it('readJsonBody：合法对象原样返回', async () => {

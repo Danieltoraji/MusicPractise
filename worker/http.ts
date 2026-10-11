@@ -22,6 +22,28 @@ export function errorJson(status: number, code: string, message: string): Respon
 }
 
 /**
+ * 安全响应头（docs/31 §6.6，批次 B5）：worker 对全部自有响应（/api 与回落资产）注入；
+ * 纯静态资产请求不进 worker，由 public/_headers 注入同一组头。
+ * CSP：connect-src 放开 https:（AI 供应商 BaseURL 用户可配任意域、smplr 音源走 CDN）；
+ * style-src 'unsafe-inline' 覆盖 React 内联样式属性；img-src data: 覆盖内联 SVG favicon。
+ */
+const SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'same-origin',
+  'Permissions-Policy': 'microphone=(self)',
+  'Content-Security-Policy':
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https:; media-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+}
+
+export function withSecurityHeaders(res: Response): Response {
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    res.headers.set(key, value)
+  }
+  return res
+}
+
+/**
  * 读取 JSON 请求体（docs/31 §6.5）：Content-Length 预检 + 实读字节双查上限。
  * 非法 JSON / 非对象 / 空体一律 400，超限 413。
  */
