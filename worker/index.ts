@@ -6,6 +6,7 @@
 import { errorJson, jsonResponse, HttpError } from './http'
 import { Router } from './router'
 import { changePassword, login, logout, me, register, updateNickname } from './handlers/auth'
+import { deleteLevel, getLevel, listLevels, replaceLevel, uploadLevel } from './handlers/cloud'
 import type { Env, ExecutionContext } from './types'
 
 const api = new Router()
@@ -18,6 +19,12 @@ api.add('POST', '/api/auth/logout', logout)
 api.add('GET', '/api/auth/me', me)
 api.add('PATCH', '/api/auth/nickname', updateNickname)
 api.add('POST', '/api/auth/password', changePassword)
+
+api.add('GET', '/api/cloud/levels', listLevels)
+api.add('POST', '/api/cloud/levels', uploadLevel)
+api.add('GET', '/api/cloud/levels/:id', getLevel)
+api.add('PUT', '/api/cloud/levels/:id', replaceLevel)
+api.add('DELETE', '/api/cloud/levels/:id', deleteLevel)
 
 export default {
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {

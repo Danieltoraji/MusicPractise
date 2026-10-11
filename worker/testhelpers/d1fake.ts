@@ -17,6 +17,18 @@ export interface LoginAttemptRow {
   last_at: number
 }
 
+export interface CloudLevelRow {
+  id: string
+  user_id: string
+  level_id: string
+  title: string
+  payload: string
+  bytes: number
+  schema_version: number
+  created_at: number
+  updated_at: number
+}
+
 const norm = (sql: string): string => sql.replace(/\s+/g, ' ').trim()
 
 /**
@@ -31,6 +43,7 @@ export class D1Fake implements D1Database {
   users: Row[] = []
   sessions: SessionRow[] = []
   login_attempts: LoginAttemptRow[] = []
+  cloud_levels: CloudLevelRow[] = []
   /** 已执行的规范化 SQL（断言/排查用） */
   executedSql: string[] = []
 
@@ -181,6 +194,86 @@ export class D1Fake implements D1Database {
       const before = this.login_attempts.length
       this.login_attempts = this.login_attempts.filter((r) => r.window_start >= Number(p[0]))
       return { results: [], changes: before - this.login_attempts.length }
+    }
+
+    // ---- cloud_levels ----
+    m = /^SELECT id, level_id, title, bytes, schema_version, created_at, updated_at FROM cloud_levels WHERE user_id = \? ORDER BY updated_at DESC$/.exec(sql)
+    if (m) {
+      const rows = this.cloud_levels
+        .filter((r) => r.user_id === p[0])
+        .slice()
+        .sort((a, b) => b.updated_at - a.updated_at)
+      return { results: rows as unknown as Row[], changes: 0 }
+    }
+
+    m = /^SELECT id FROM cloud_levels WHERE user_id = \? AND level_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.cloud_levels.find((r) => r.user_id === p[0] && r.level_id === p[1])
+      return { results: row ? [row as unknown as Row] : [], changes: 0 }
+    }
+
+    m = /^SELECT COUNT\(\*\) AS n FROM cloud_levels WHERE user_id = \?$/.exec(sql)
+    if (m) {
+      return { results: [{ n: this.cloud_levels.filter((r) => r.user_id === p[0]).length }], changes: 0 }
+    }
+
+    m = /^INSERT INTO cloud_levels \(.+\) VALUES \((\?, ){8}\?\)$/.exec(sql)
+    if (m) {
+      if (this.cloud_levels.some((r) => r.id === p[0])) {
+        throw new Error('UNIQUE constraint failed: cloud_levels.id')
+      }
+      if (this.cloud_levels.some((r) => r.user_id === p[1] && r.level_id === p[2])) {
+        throw new Error('UNIQUE constraint failed: cloud_levels.user_id, cloud_levels.level_id')
+      }
+      this.cloud_levels.push({
+        id: String(p[0]),
+        user_id: String(p[1]),
+        level_id: String(p[2]),
+        title: String(p[3]),
+        payload: String(p[4]),
+        bytes: Number(p[5]),
+        schema_version: Number(p[6]),
+        created_at: Number(p[7]),
+        updated_at: Number(p[8]),
+      })
+      return { results: [], changes: 1 }
+    }
+
+    m = /^UPDATE cloud_levels SET title = \?, payload = \?, bytes = \?, schema_version = \?, updated_at = \? WHERE user_id = \? AND level_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.cloud_levels.find((r) => r.user_id === p[5] && r.level_id === p[6])
+      if (!row) return { results: [], changes: 0 }
+      row.title = String(p[0])
+      row.payload = String(p[1])
+      row.bytes = Number(p[2])
+      row.schema_version = Number(p[3])
+      row.updated_at = Number(p[4])
+      return { results: [], changes: 1 }
+    }
+
+    m = /^SELECT .+ FROM cloud_levels WHERE id = \? AND user_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.cloud_levels.find((r) => r.id === p[0] && r.user_id === p[1])
+      return { results: row ? [row as unknown as Row] : [], changes: 0 }
+    }
+
+    m = /^UPDATE cloud_levels SET title = \?, payload = \?, bytes = \?, schema_version = \?, updated_at = \? WHERE id = \? AND user_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.cloud_levels.find((r) => r.id === p[5] && r.user_id === p[6])
+      if (!row) return { results: [], changes: 0 }
+      row.title = String(p[0])
+      row.payload = String(p[1])
+      row.bytes = Number(p[2])
+      row.schema_version = Number(p[3])
+      row.updated_at = Number(p[4])
+      return { results: [], changes: 1 }
+    }
+
+    m = /^DELETE FROM cloud_levels WHERE id = \? AND user_id = \?$/.exec(sql)
+    if (m) {
+      const before = this.cloud_levels.length
+      this.cloud_levels = this.cloud_levels.filter((r) => !(r.id === p[0] && r.user_id === p[1]))
+      return { results: [], changes: before - this.cloud_levels.length }
     }
 
     throw new Error(`D1Fake 未支持的语句: ${sql}`)

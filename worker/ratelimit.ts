@@ -12,6 +12,9 @@ export const LOGIN_MAX_FAILS = 5
 export const LOGIN_WINDOW_MS = 15 * 60_000
 export const REGISTER_MAX = 10
 export const REGISTER_WINDOW_MS = 3_600_000
+/** 云盘写操作（上传/覆盖/删除）：30 次/小时/用户（docs/31 §5.2） */
+export const CLOUD_WRITE_MAX = 30
+export const CLOUD_WINDOW_MS = 3_600_000
 
 const encoder = new TextEncoder()
 
@@ -26,6 +29,7 @@ export async function ipHashOf(req: Request, env: Env): Promise<string> {
 
 const loginKey = (ipHash: string, nickname: string): string => `login:${ipHash}:${nickname}`
 const registerKey = (ipHash: string): string => `register:${ipHash}`
+const cloudKey = (userId: string): string => `cloud:${userId}`
 
 interface AttemptRow {
   fail_count: number
@@ -77,19 +81,28 @@ export async function clearLoginFails(db: D1Database, ipHash: string, nickname: 
   await db.prepare('DELETE FROM login_attempts WHERE key = ?').bind(loginKey(ipHash, nickname)).run()
 }
 
-/** 注册计数：返回 0 = 放行，>0 = 剩余锁定秒数 */
-export async function hitRegisterLimit(db: D1Database, ipHash: string, now: number): Promise<number> {
-  const key = registerKey(ipHash)
+/** 按尝试计数的通用滑窗（注册/云盘写共用）：返回 0 = 放行，>0 = 剩余锁定秒数 */
+async function hitAttempt(db: D1Database, key: string, max: number, windowMs: number, now: number): Promise<number> {
   const row = await getAttempt(db, key)
-  if (!row || now - row.window_start >= REGISTER_WINDOW_MS) {
+  if (!row || now - row.window_start >= windowMs) {
     await putAttempt(db, key, 1, now, now)
     return 0
   }
-  if (row.fail_count >= REGISTER_MAX) {
-    return Math.ceil((row.window_start + REGISTER_WINDOW_MS - now) / 1000)
+  if (row.fail_count >= max) {
+    return Math.ceil((row.window_start + windowMs - now) / 1000)
   }
   await putAttempt(db, key, row.fail_count + 1, row.window_start, now)
   return 0
+}
+
+/** 注册计数：返回 0 = 放行，>0 = 剩余锁定秒数 */
+export async function hitRegisterLimit(db: D1Database, ipHash: string, now: number): Promise<number> {
+  return hitAttempt(db, registerKey(ipHash), REGISTER_MAX, REGISTER_WINDOW_MS, now)
+}
+
+/** 云盘写限流（按尝试计数）：返回 0 = 放行，>0 = 剩余锁定秒数 */
+export async function hitCloudWriteLimit(db: D1Database, userId: string, now: number): Promise<number> {
+  return hitAttempt(db, cloudKey(userId), CLOUD_WRITE_MAX, CLOUD_WINDOW_MS, now)
 }
 
 /** 概率性清理过期限流行（挂在登录/注册路径） */
