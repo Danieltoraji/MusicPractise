@@ -35,12 +35,21 @@ npm run build            # tsc strict + Vite 生产构建
 2. D1 数据库 `musicpractise-db` 已创建（面板 Storage & Databases → D1），`database_id` 已填入 `wrangler.jsonc`；
 3. 建表迁移由 CI 在每次部署前自动执行（`d1 migrations apply musicpractise-db --remote`）。
 
-创建管理员（一次性，脚本本地计算哈希、不经网络）：
+创建管理员（一次性，脚本本地计算哈希、不经网络；**昵称建议 ASCII**）：
 
 ```bash
-node scripts/seed-admin.ts   # 按提示输入昵称密码，输出 INSERT 语句
+node scripts/seed-admin.ts --nickname=admin --password=<密码>   # 输出 INSERT 语句
 npx wrangler d1 execute musicpractise-db --remote --command "<输出整句>"
 ```
+
+管理员登录后经设置页「管理后台 →」进入 `#/admin`（用户管理/云盘关卡管理/审计日志）。
+
+## 运维
+
+- **安全响应头**：静态资产经 `public/_headers`、`/api` 经 worker 注入（nosniff/X-Frame-Options: DENY/Referrer-Policy/Permissions-Policy/CSP）。
+- **平台防护**：Cloudflare 面板 Security → Bots 开启 Bot Fight Mode；WAF 自定义规则可选限制 `/api/admin/*`；DDoS 吸收默认开启。
+- **备份**：D1 Time Travel 默认开启（30 天回溯 `wrangler d1 time-travel restore`）；定期冷备 `npx wrangler d1 export musicpractise-db --remote --output=backup.sql`。
+- 详细设计（选型/数据模型/安全设计/批次记录）见 [docs/31](docs/31-后端与账户体系设计.md)。
 
 ## 文档
 
