@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
 import { durToQuarters, playNotes } from '../runtime/audio'
-import { DUR_OPTIONS, type PlayNote } from './graph/NoteChipsEditor'
+import { DUR_OPTIONS, parseNoteTokens, type PlayNote } from './graph/NoteChipsEditor'
 
 // ---------------------------------------------------------------------------
 // 纯函数：diatonic 换算与时序游标
@@ -245,10 +245,14 @@ export function StaffPreview(props: { notes: PlayNote[]; width?: number; height?
 export function StaffEditorModal(props: {
   title: string
   value: PlayNote[]
+  /** 单元格原始值（非标准音符数组时的修复通道：弹窗顶部提示 + 从文本导入，应用后替换） */
+  importRaw?: unknown
   onCommit: (notes: PlayNote[]) => void
   onClose: () => void
 }): React.ReactElement {
   const [draft, setDraft] = useState<PlayNote[]>(props.value)
+  const [importText, setImportText] = useState('')
+  const [importErr, setImportErr] = useState('')
   const [dur, setDur] = useState('4n')
   const [dot, setDot] = useState(false)
   const [restMode, setRestMode] = useState(false)
@@ -385,6 +389,17 @@ export function StaffEditorModal(props: {
     }
   }
 
+  /** 从紧凑文本导入音符串：解析成功替换整个谱面草稿，失败保留原内容并提示 */
+  const doImport = (): void => {
+    const parsed = parseNoteTokens(importText)
+    if (parsed === null) {
+      setImportErr('无法解析——请检查记法（音名或 MIDI 号，可带 :时值；r = 休止符）')
+      return
+    }
+    setImportErr('')
+    commit(parsed, parsed.length, null)
+  }
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
@@ -484,6 +499,36 @@ export function StaffEditorModal(props: {
             应用
           </button>
         </div>
+        {props.importRaw !== undefined && (
+          <div className="staff-import-warn">
+            当前单元格数据不是标准音符数组（应用后将替换为下方谱面内容）。原始值：
+            <code>{JSON.stringify(props.importRaw)}</code>
+          </div>
+        )}
+        <details className="staff-import">
+          <summary>从文本导入（快速录入/粘贴旋律）</summary>
+          <div className="staff-import-row">
+            <input
+              value={importText}
+              placeholder="如：C4 C4 E4 G4:2n. r:4n 62:8n（空格/逗号分隔，音名或 MIDI 号，可带 :时值）"
+              onChange={(e) => {
+                setImportText(e.target.value)
+                setImportErr('')
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  doImport()
+                }
+              }}
+            />
+            <button type="button" onClick={doImport}>
+              导入
+            </button>
+          </div>
+          {importErr && <div className="tone-error">{importErr}</div>}
+          <p className="muted">记法：C4 / C#4 / Db3 / 60 = 音高；后接 :1n–32n（可带附点 .）= 时值，缺省 4n；r / 0 = 休止符。</p>
+        </details>
         <div className="staff-toolbar">
           <label>
             时值

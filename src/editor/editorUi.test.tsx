@@ -116,6 +116,161 @@ describe('TableEditor（jsdom 渲染）', () => {
       container.remove()
     }
   })
+
+  it('list 列单元格：摘要按钮 + 弹窗条目编辑（不再内联 chips/编辑 JSON）', () => {
+    const doc = baseDoc()
+    doc.content.table = {
+      columns: [{ key: 'options', label: '选项', type: 'list' }],
+      rows: [{ options: ['C 大调', 'G 大调'] }],
+    }
+    let current = doc
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    let root!: Root
+    const rerender = (): void => {
+      act(() => root.render(<TableEditor doc={current} onChange={(n) => { current = n }} />))
+    }
+    act(() => {
+      root = createRoot(container)
+      rerender()
+    })
+    try {
+      // 单元格是摘要按钮（内容 + 条数），不再出现内联输入或「编辑 JSON」
+      const cell = container.querySelector('.tcell-list')!
+      expect(cell.querySelector('.tlist-open')).not.toBeNull()
+      expect(cell.querySelector('.tlist-summary')?.textContent).toContain('C 大调、G 大调')
+      expect(cell.querySelector('input')).toBeNull()
+      expect(cell.textContent).toContain('2 项')
+      // 点击 → 弹窗（两条目）；添加一条并输入，应用后受控写回 string[]
+      act(() => {
+        ;(cell.querySelector('.tlist-open') as HTMLElement).click()
+      })
+      const modal = container.querySelector('.tlist-modal')!
+      expect(modal.querySelectorAll('.tlist-row').length).toBe(2)
+      act(() => {
+        ;[...modal.querySelectorAll('button')].find((b) => b.textContent === '+ 添加条目')!.click()
+      })
+      const inputs = modal.querySelectorAll('.tlist-row input')
+      expect(inputs.length).toBe(3)
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      act(() => {
+        setter.call(inputs[2], 'D 大调')
+        inputs[2].dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      act(() => {
+        ;[...modal.querySelectorAll('button')].find((b) => b.textContent === '应用')!.click()
+      })
+      expect(current.content.table.rows[0].options).toEqual(['C 大调', 'G 大调', 'D 大调'])
+      expect(container.querySelector('.tlist-modal')).toBeNull()
+    } finally {
+      act(() => root.unmount())
+      container.remove()
+    }
+  })
+
+  it('list 列旧脏数据（数字数组）也进弹窗：条目文本化可编辑，无 JSON 死角', () => {
+    const doc = baseDoc()
+    doc.content.table = {
+      columns: [{ key: 'options', label: '选项', type: 'list' }],
+      rows: [{ options: [1, 2] }],
+    }
+    let current = doc
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    let root!: Root
+    const rerender = (): void => {
+      act(() => root.render(<TableEditor doc={current} onChange={(n) => { current = n }} />))
+    }
+    act(() => {
+      root = createRoot(container)
+      rerender()
+    })
+    try {
+      const cell = container.querySelector('.tcell-list')!
+      expect(cell.textContent).not.toContain('编辑 JSON')
+      act(() => {
+        ;(cell.querySelector('.tlist-open') as HTMLElement).click()
+      })
+      const modal = container.querySelector('.tlist-modal')!
+      const inputs = modal.querySelectorAll('.tlist-row input')
+      expect(inputs.length).toBe(2)
+      expect((inputs[0] as HTMLInputElement).value).toBe('1')
+      act(() => {
+        ;[...modal.querySelectorAll('button')].find((b) => b.textContent === '应用')!.click()
+      })
+      expect(current.content.table.rows[0].options).toEqual(['1', '2'])
+    } finally {
+      act(() => root.unmount())
+      container.remove()
+    }
+  })
+
+  it('notes 列非标准旧数据：琥珀修复按钮进五线谱弹窗，从文本导入后替换', () => {
+    const doc = baseDoc()
+    doc.content.table = {
+      columns: [{ key: 'notes', label: '示例音符', type: 'notes' }],
+      rows: [{ notes: 'C4:4n E4:4n' }], // 类型切换前遗留的字符串形态
+    }
+    let current = doc
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    let root!: Root
+    const rerender = (): void => {
+      act(() => root.render(<TableEditor doc={current} onChange={(n) => { current = n }} />))
+    }
+    act(() => {
+      root = createRoot(container)
+      rerender()
+    })
+    try {
+      const cell = container.querySelector('.tcell-notes')!
+      // 不再是「编辑 JSON」兜底，而是琥珀修复入口
+      expect(cell.textContent).not.toContain('编辑 JSON')
+      expect(cell.querySelector('.tstaff-fix')).not.toBeNull()
+      // 点击 → 五线谱弹窗（带不合规警示条与导入面板）
+      act(() => {
+        ;(cell.querySelector('.tstaff-fix') as HTMLElement).click()
+      })
+      const modal = container.querySelector('.staff-modal')!
+      expect(modal).not.toBeNull()
+      expect(modal.querySelector('.staff-import-warn')?.textContent).toContain('不是标准音符数组')
+      // 展开导入面板，输入紧凑记法并导入
+      const details = modal.querySelector('details.staff-import') as HTMLDetailsElement
+      act(() => {
+        details.open = true
+      })
+      const importInput = details.querySelector('input') as HTMLInputElement
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      act(() => {
+        setter.call(importInput, 'C4 E4:8n')
+        importInput.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      act(() => {
+        ;[...details.querySelectorAll('button')].find((b) => b.textContent === '导入')!.click()
+      })
+      // 导入成功：谱面出现两个音符；非法记法则报错且不动草稿
+      expect(modal.querySelectorAll('svg > g.vf-stavenote').length).toBe(2)
+      act(() => {
+        setter.call(importInput, 'C4 H9')
+        importInput.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      act(() => {
+        ;[...details.querySelectorAll('button')].find((b) => b.textContent === '导入')!.click()
+      })
+      expect(details.querySelector('.tone-error')?.textContent).toContain('无法解析')
+      // 应用 → 原字符串被标准音符数组替换
+      act(() => {
+        ;[...modal.querySelectorAll('button')].find((b) => b.textContent === '应用')!.click()
+      })
+      expect(current.content.table.rows[0].notes).toEqual([
+        { midi: 60, dur: '4n' },
+        { midi: 64, dur: '8n' },
+      ])
+    } finally {
+      act(() => root.unmount())
+      container.remove()
+    }
+  })
 })
 
 describe('checkExprText（表达式实时校验）', () => {

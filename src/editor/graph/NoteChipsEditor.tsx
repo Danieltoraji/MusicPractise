@@ -165,3 +165,43 @@ export function notesToCell(notes: PlayNote[]): { [k: string]: Json }[] {
     return cell
   })
 }
+
+/** 时值记法白名单（含附点），与 Note.dur 的 schema 红线一致 */
+const DUR_RE = /^(1|2|4|8|16|32)n\.?$/
+
+/**
+ * 紧凑文本 → 音符数组（五线谱弹窗「从文本导入」用）：空白/逗号分隔 token，
+ * 每个 token = `音名[:时值]`（如 C4、C#4:8n.、Db3）或 `MIDI号[:时值]`（如 60、62:2n）；
+ * `r`/`R`/`0` = 休止符。时值缺省 4n，须为 1n–32n（含附点）。
+ * 任一 token 无法解析 → 返回 null（调用方提示，不静默丢音）。
+ */
+export function parseNoteTokens(text: string): PlayNote[] | null {
+  const tokens = text.trim().split(/[\s,，、]+/).filter((t) => t !== '')
+  if (tokens.length === 0) return []
+  const out: PlayNote[] = []
+  for (const token of tokens) {
+    const sep = token.indexOf(':')
+    const pitchPart = sep === -1 ? token : token.slice(0, sep)
+    const durPart = sep === -1 ? '' : token.slice(sep + 1)
+    let dur = '4n'
+    if (durPart !== '') {
+      if (!DUR_RE.test(durPart)) return null
+      dur = durPart
+    }
+    if (/^(r|R|0)$/.test(pitchPart)) {
+      out.push({ rest: true, dur })
+      continue
+    }
+    let midi: number | null = null
+    if (/^\d+$/.test(pitchPart)) {
+      midi = Number(pitchPart)
+      if (midi > 127) return null
+    } else {
+      const m = Note.midi(pitchPart)
+      if (m === null) return null
+      midi = m
+    }
+    out.push({ midi, dur })
+  }
+  return out
+}

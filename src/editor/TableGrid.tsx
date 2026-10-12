@@ -2,14 +2,16 @@
  * 题目数据表（3-7 网格化重做 + docs/27 全可视化）：真表格网格 + 零 JSON 输入。
  * - 列头：列名 / 显示名 / 类型下拉（文本|数字|布尔|音符串|字符串列表|JSON高级）/ 删除；右缘拖拽调列宽
  * - 行头：题号（= v.__row 行号）/ 删除；下缘拖拽调行高
- * - 单元格按列类型渲染专用编辑器：notes → 五线谱迷你预览 + 弹窗谱面编辑（StaffEditor）；
- *   list → 条目 chips；json → 高级弹层兜底（仅历史复合列需要）
+ * - 单元格按列类型渲染专用编辑器：notes → 五线谱迷你预览 + 弹窗谱面编辑（StaffEditor，
+ *   非标准旧数据同样进弹窗修复/从文本导入）；list → 摘要 + 弹窗条目编辑（ListEditor）；
+ *   json → 高级弹层兜底（仅历史复合列需要）
  * - 列宽/行高为编辑器内存态（不进文档 JSON，会话内保持）
  * 约束延续：单元格受控写回（删行/插行后不残留旧文本，评审 P1-2）。
  */
 import { useRef, useState } from 'react'
 import type { ColumnType, LevelDoc } from '../engine/level'
 import { FlowEditor } from './FlowEditor'
+import { ListEditorModal, listEntriesFromCell } from './ListEditor'
 import type { Json } from '../engine/expr'
 import {
   addTableColumn,
@@ -42,18 +44,6 @@ const MIN_ROW_H = 28
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 const clip = (s: string, n = 60): string => (s.length > n ? `${s.slice(0, n)}…` : s)
 
-/** 单元格 Json 值 → 字符串列表；结构不符返回 null */
-function listFromCell(v: unknown): string[] | null {
-  if (v === null || v === undefined) return []
-  if (!Array.isArray(v)) return null
-  const out: string[] = []
-  for (const item of v) {
-    if (typeof item !== 'string') return null
-    out.push(item)
-  }
-  return out
-}
-
 export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
   const table = doc.content.table
   const [colW, setColW] = useState<Record<string, number>>({})
@@ -62,6 +52,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
   const [colErr, setColErr] = useState('')
   const [jsonCell, setJsonCell] = useState<{ row: number; key: string } | null>(null)
   const [staffCell, setStaffCell] = useState<{ row: number; key: string } | null>(null)
+  const [listCell, setListCell] = useState<{ row: number; key: string } | null>(null)
   const colDrag = useRef<{ key: string; startX: number; startW: number } | null>(null)
   const rowDrag = useRef<{ index: number; startY: number; startH: number } | null>(null)
 
@@ -112,6 +103,10 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
   const commitCell = (row: number, key: string, value: Json): void => {
     onChange(updateTableCell(doc, row, { [key]: value }))
   }
+
+  // staffCell 打开期间解析一次：合规 → 直接编辑谱面；不合规 → importRaw 走修复/导入通道
+  const staffRaw = staffCell ? (doc.content.table.rows[staffCell.row]?.[staffCell.key] ?? null) : null
+  const staffNotes = staffCell ? notesFromCell(staffRaw) : null
 
   return (
     <div className="questions-editor table-editor">
@@ -236,6 +231,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
                       onCommit={(v) => commitCell(i, c.key, v)}
                       onOpenJson={() => setJsonCell({ row: i, key: c.key })}
                       onOpenStaff={() => setStaffCell({ row: i, key: c.key })}
+                      onOpenList={() => setListCell({ row: i, key: c.key })}
                     />
                   </td>
                 ))}
@@ -265,12 +261,25 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
       {staffCell && (
         <StaffEditorModal
           title={`编辑音符串 · 第 ${staffCell.row + 1} 行 / ${staffCell.key}`}
-          value={notesFromCell(doc.content.table.rows[staffCell.row]?.[staffCell.key] ?? null) ?? []}
+          value={staffNotes ?? []}
+          importRaw={staffNotes === null ? staffRaw : undefined}
           onCommit={(notes) => {
             onChange(updateTableCell(doc, staffCell.row, { [staffCell.key]: notesToCell(notes) as Json }))
             setStaffCell(null)
           }}
           onClose={() => setStaffCell(null)}
+        />
+      )}
+      {listCell && (
+        <ListEditorModal
+          title={`编辑字符串列表 · 第 ${listCell.row + 1} 行 / ${listCell.key}`}
+          value={listEntriesFromCell(doc.content.table.rows[listCell.row]?.[listCell.key] ?? null)}
+          onCommit={(items) => {
+            // 全部清空 → null（与 text 列「清空 = 无数据」语义一致）
+            onChange(updateTableCell(doc, listCell.row, { [listCell.key]: (items.length > 0 ? items : null) as Json }))
+            setListCell(null)
+          }}
+          onClose={() => setListCell(null)}
         />
       )}
     </div>
@@ -290,6 +299,7 @@ function CellEditor(props: {
   onCommit: (v: Json) => void
   onOpenJson: () => void
   onOpenStaff: () => void
+  onOpenList: () => void
 }): React.ReactElement {
   const { type, value, onCommit } = props
 
@@ -327,7 +337,19 @@ function CellEditor(props: {
 
   if (type === 'notes') {
     const notes = notesFromCell(value)
-    if (notes === null) return <JsonFallbackCell value={value} expect="音符串（{midi, dur} 数组）" onOpenJson={props.onOpenJson} />
+    if (notes === null) {
+      // 非标准旧数据（如类型切换前的文本/字符串形态）：不再落 JSON 死胡同，进弹窗修复/导入
+      return (
+        <button
+          type="button"
+          className="tstaff tstaff-fix"
+          title="该单元格不是标准音符数组——点击打开编辑器修复（可从文本导入，应用后替换）"
+          onClick={props.onOpenStaff}
+        >
+          <span className="tstaff-fix-text">⚠ 非标准音符数据 · 点击修复</span>
+        </button>
+      )
+    }
     // 五线谱可视化（docs/27）：迷你谱预览（只显示一行，后面隐藏），点击打开谱面弹窗编辑
     return (
       <button type="button" className="tstaff" title="点击编辑五线谱" onClick={props.onOpenStaff}>
@@ -337,26 +359,14 @@ function CellEditor(props: {
   }
 
   if (type === 'list') {
-    const items = listFromCell(value)
-    if (items === null) return <JsonFallbackCell value={value} expect="字符串数组" onOpenJson={props.onOpenJson} />
+    // 任意旧值尽力转可编辑条目（listEntriesFromCell 永不失败）：不再有「编辑 JSON」死角
+    const items = listEntriesFromCell(value)
+    const summary = items.length === 0 ? '（空）' : items.join('、')
     return (
-      <span className="tlist">
-        {items.map((it, i) => (
-          <span key={i} className="tlist-item">
-            <input
-              value={it}
-              placeholder="条目…"
-              onChange={(e) => onCommit(items.map((x, j) => (j === i ? e.target.value : x)))}
-            />
-            <button type="button" className="ginsp-argdel" title="删除条目" onClick={() => onCommit(items.filter((_, j) => j !== i))}>
-              ×
-            </button>
-          </span>
-        ))}
-        <button type="button" className="tlist-add" title="添加条目" onClick={() => onCommit([...items, ''])}>
-          + 条目
-        </button>
-      </span>
+      <button type="button" className="tlist-open" title="点击编辑字符串列表" onClick={props.onOpenList}>
+        <span className="tlist-summary">{clip(summary, 90)}</span>
+        <span className="tlist-count">{items.length} 项</span>
+      </button>
     )
   }
 
@@ -388,7 +398,7 @@ function CellEditor(props: {
   )
 }
 
-/** notes/list 列遇到不合规数据：不静默破坏，引导走 JSON 高级弹层修 */
+/** text/number 列遇到非标量旧数据：不静默破坏，引导走 JSON 高级弹层修 */
 function JsonFallbackCell(props: { value: Json; expect: string; onOpenJson: () => void }): React.ReactElement {
   return (
     <span className="tjson tone-error" title={`该单元格不是${props.expect}，请用 JSON 高级编辑修正`}>

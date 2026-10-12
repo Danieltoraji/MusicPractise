@@ -2061,31 +2061,79 @@ path.gedge-false {
   font-size: 11px;
   padding: 1px 3px;
 }
-.tlist {
+/* list 列：单元格摘要按钮 + 弹窗编辑（原窄格内联 chips 已由弹窗取代） */
+.tlist-open {
   display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
+  width: 100%;
   align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
 }
-.tlist-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 0 3px;
-  background: #fff;
+.tlist-open:hover {
+  border-color: var(--accent);
 }
-.tlist-item input {
-  border: none;
-  font-size: 11.5px;
-  width: 64px;
-  padding: 2px 1px;
-  outline: none;
+.tlist-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.tlist-add {
+.tlist-count {
+  flex-shrink: 0;
   font-size: 11px;
-  color: var(--accent);
+  color: var(--muted);
+}
+.tlist-modal {
+  width: min(520px, 92vw);
+}
+.tlist-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.tlist-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tlist-idx {
+  flex-shrink: 0;
+  width: 22px;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tlist-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+.tlist-row button {
+  flex-shrink: 0;
+  padding: 3px 7px;
+}
+.tlist-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+}
+.tlist-foot .muted {
+  font-size: 11.5px;
 }
 .tjson {
   display: flex;
@@ -2197,6 +2245,61 @@ path.gedge-false {
 .staff-editor-hint {
   margin: 0;
   font-size: 11.5px;
+}
+/* 非标准音符数据的单元格：琥珀提示（进弹窗修复而非 JSON 兜底） */
+.tstaff-fix {
+  border-color: #d97706;
+  background: #fffbeb;
+  padding: 6px 8px;
+}
+.tstaff-fix:hover {
+  border-color: #b45309;
+}
+.tstaff-fix-text {
+  color: #92400e;
+  font-size: 12px;
+}
+/* 五线谱弹窗：从文本导入（折叠面板）+ 不合规数据警示条 */
+.staff-import {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.staff-import summary {
+  cursor: pointer;
+  color: var(--accent);
+  user-select: none;
+}
+.staff-import-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.staff-import-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+.staff-import .muted {
+  margin: 4px 0 0;
+  font-size: 11px;
+}
+.staff-import-warn {
+  font-size: 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #d97706;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.staff-import-warn code {
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  word-break: break-all;
 }
 
 /* ---------- 节点图：变量/日志/问题列表/脚本覆盖层（3-2b） ---------- */
