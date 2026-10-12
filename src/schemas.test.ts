@@ -1,9 +1,11 @@
 /**
  * Schema 一致性测试：示例关卡文档必须通过 JSON Schema 校验。
- * 导入管线与编辑器将共用这套 schema（Ajv）—— Ajv 实例来自 src/library/validate.ts 共享模块。
+ * 运行时校验用 @cfworker/json-schema（CSP 禁 eval，见 src/library/validate.ts docs/34）；
+ * 本测试在 Node（无 CSP）中用 Ajv2020 交叉验证同一组 schema——双校验器一致才算过。
  */
 import { describe, expect, it } from 'vitest'
-import { buildAjv, SCHEMA_BASE } from './library/validate'
+import Ajv2020 from 'ajv/dist/2020'
+import { SCHEMA_BASE, SCHEMA_RAW } from './library/validate'
 import noteClickDoc from './sample/note-click.level.json'
 import theoryChoiceDoc from './sample/theory-choice.level.json'
 import melodyDictationDoc from './sample/melody-dictation.level.json'
@@ -18,7 +20,10 @@ import starterTopic2 from './sample/starter-topic2.topic.json'
 
 const BASE = SCHEMA_BASE
 
-const ajv = buildAjv()
+const ajv = new Ajv2020({ strict: false, allErrors: true })
+for (const schema of SCHEMA_RAW) {
+  ajv.addSchema(schema as never)
+}
 
 describe('关卡文档 JSON Schema', () => {
   const validate = ajv.getSchema(`${BASE}level.json`)

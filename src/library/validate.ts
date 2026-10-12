@@ -1,29 +1,22 @@
 /**
- * 文档校验与装载管线：Ajv（schema 注册一次共享）→ schemaVersion 检查 → 逻辑迁移与 lint。
+ * 文档校验与装载管线：JSON Schema 校验（@cfworker/json-schema，注册一次共享）
+ * → schemaVersion 检查 → 逻辑迁移与 lint。
  * 未知组件类型不在此拒绝——运行时 store 会降级为占位组件（docs/02 §7）。
  * 关卡逻辑：v1 ECA 程序在此透明迁移为 GraphProgram v2 后入库（装载/保存出的内容恒为 v2）。
+ *
+ * 校验器选型（docs/34）：不用 Ajv——其编译期 new Function 动态生成校验器，
+ * 部署站点 CSP 为 script-src 'self'（worker/http.ts + public/_headers），
+ * 触发 EvalError 并令所有 AI 工具（经 loadLevelDoc）宿主级失败。
+ * cfworker 版是闭包式校验器、无动态求值，与服务端 worker/schema.ts 同款。
+ * 跨文件 $ref（common/logic 等）以完整 $id 注册解析。
  */
-import Ajv2020 from 'ajv/dist/2020'
+import { Validator, type Schema } from '@cfworker/json-schema'
 import type { LevelDoc } from '../engine/level'
 import { lintGraphProgram } from '../engine/graphProgram'
 import { migrateDocToV3 } from '../engine/migrateDoc'
 import type { ResourceKind } from './db'
 
 export const SCHEMA_BASE = 'https://music-practise.local/schemas/v1/'
-const BASE = SCHEMA_BASE
-export const KNOWN_KINDS: ResourceKind[] = ['series', 'topic', 'level', 'instrument']
-
-let cachedAjv: Ajv2020 | null = null
-
-export function buildAjv(): Ajv2020 {
-  if (cachedAjv) return cachedAjv
-  const ajv = new Ajv2020({ strict: false, allErrors: true })
-  for (const schema of SCHEMA_RAW) {
-    ajv.addSchema(schema)
-  }
-  cachedAjv = ajv
-  return ajv
-}
 
 // 显式静态导入（Vite JSON 模块）；新增 schema 时在此与 KNOWN_KINDS 同步
 import commonRaw from '../../schemas/v1/common.json'
@@ -34,7 +27,35 @@ import seriesRaw from '../../schemas/v1/series.json'
 import topicRaw from '../../schemas/v1/topic.json'
 import instrumentRaw from '../../schemas/v1/instrument.json'
 
-const SCHEMA_RAW = [commonRaw, logicRaw, graphLogicRaw, levelRaw, seriesRaw, topicRaw, instrumentRaw]
+/** 全部原始 schema（按 $id 注册共享）；schemas.test.ts 借此自建测试用 Ajv 实例 */
+export const SCHEMA_RAW = [commonRaw, logicRaw, graphLogicRaw, levelRaw, seriesRaw, topicRaw, instrumentRaw]
+
+export const KNOWN_KINDS: ResourceKind[] = ['series', 'topic', 'level', 'instrument']
+
+const SCHEMA_BY_KIND: Record<ResourceKind, Schema> = {
+  level: levelRaw as Schema,
+  series: seriesRaw as Schema,
+  topic: topicRaw as Schema,
+  instrument: instrumentRaw as Schema,
+}
+
+/** 各 kind 一个校验器（惰性建一次）；其余 schema 以 $id 注册供跨文件 $ref 解析 */
+const validators = new Map<ResourceKind, Validator>()
+
+function validatorFor(kind: ResourceKind): Validator {
+  const cached = validators.get(kind)
+  if (cached) return cached
+  const root = SCHEMA_BY_KIND[kind]
+  const rootId = (root as { $id?: string }).$id
+  const validator = new Validator(root)
+  for (const schema of SCHEMA_RAW) {
+    const id = (schema as { $id?: string }).$id
+    // 根 schema 已随构造器注册，重复 addSchema 同一 $id 会被 cfworker 拒绝
+    if (id && id !== rootId) validator.addSchema(schema as Schema, id)
+  }
+  validators.set(kind, validator)
+  return validator
+}
 
 export function validateEnvelope(
   kind: string,
@@ -43,13 +64,11 @@ export function validateEnvelope(
   if (!KNOWN_KINDS.includes(kind as ResourceKind)) {
     return { ok: false, errors: [`未知的文档 kind: ${String(kind)}`] }
   }
-  const ajv = buildAjv()
-  const validate = ajv.getSchema(`${BASE}${kind}.json`)
-  if (!validate) return { ok: false, errors: [`schema 未注册: ${kind}`] }
-  const ok = validate(doc) as boolean
+  const result = validatorFor(kind as ResourceKind).validate(doc)
+  if (result.valid) return { ok: true, errors: [] }
   return {
-    ok,
-    errors: ok ? [] : (validate.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? '校验失败'}`),
+    ok: false,
+    errors: result.errors.map((e) => `${e.instanceLocation || '/'} ${e.error}`),
   }
 }
 
