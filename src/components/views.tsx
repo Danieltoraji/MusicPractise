@@ -399,12 +399,14 @@ export function FingeringView({ spec, store, emit }: ViewProps) {
 // 节奏训练：节拍网格 + 节拍器 + tap 采集（时钟全部取自 AudioContext）
 // ---------------------------------------------------------------------------
 
-import { getCtx, playClick } from '../runtime/audio'
+import { getCtx, playClick, readyContext } from '../runtime/audio'
 
 export function RhythmView({ spec, store, emit }: ViewProps) {
   const { running, beats, bpm, countIn, runId } = useComponentState<RhythmState>(store, spec.id)
   const [activeBeat, setActiveBeat] = useState(-1)
   const [tapped, setTapped] = useState(false)
+  /** 本轮已锚定到 running 时钟（排程落定）；解锁等待期间打板垫诚实显示「未开始」 */
+  const [live, setLive] = useState(false)
   const timersRef = useRef<{ raf: number; end: number } | null>(null)
   const runningRef = useRef(false)
   const t0Ref = useRef(0)
@@ -413,6 +415,7 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
     // runId 在 deps 中：judged.else 里"同参数重发 start"也会重建本轮排程
     if (!running || runId === 0) {
       runningRef.current = false
+      setLive(false)
       if (timersRef.current) {
         cancelAnimationFrame(timersRef.current.raf)
         clearTimeout(timersRef.current.end)
@@ -421,35 +424,49 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
       setActiveBeat(-1)
       return
     }
-    const ctx = getCtx()
-    const spb = 60 / Math.max(1, bpm)
-    const t0 = ctx.currentTime + countIn * spb + 0.2
-    t0Ref.current = t0
-    const grid = Array.from({ length: beats }, (_, i) => t0 + i * spb)
-    // 预备拍 + 全部节拍一次性精排（AudioContext 时钟，不依赖定时器精度）；
-    // 每个已排程 click 记录停用函数，cleanup 时静停（防换轮残响，且不误杀新一轮）
+    // 与执行器同一不变量：音频排程必须在 running 时钟上进行。挂起的上下文（进关自动
+    // start 而用户尚无手势）currentTime 冻结——在其上预排会让整轮静默悬置且盲拍污染
+    // 判分，因此先等解锁，再取时间基准锚定 t0 并一次性精排整轮。
+    let cancelled = false
     const clickStops: Array<() => void> = []
-    for (let i = 0; i < countIn; i++) clickStops.push(playClick(ctx.currentTime + 0.2 + i * spb, false))
-    grid.forEach((g, i) => clickStops.push(playClick(g, i % 4 === 0)))
-    runningRef.current = true
+    void readyContext()
+      .then((ctx) => {
+        if (cancelled) return
+        const spb = 60 / Math.max(1, bpm)
+        const t0 = ctx.currentTime + countIn * spb + 0.2
+        t0Ref.current = t0
+        const grid = Array.from({ length: beats }, (_, i) => t0 + i * spb)
+        // 预备拍 + 全部节拍一次性精排（AudioContext 时钟，不依赖定时器精度）；
+        // 每个已排程 click 记录停用函数，cleanup 时静停（防换轮残响，且不误杀新一轮）
+        for (let i = 0; i < countIn; i++) clickStops.push(playClick(ctx.currentTime + 0.2 + i * spb, false))
+        grid.forEach((g, i) => clickStops.push(playClick(g, i % 4 === 0)))
+        runningRef.current = true // 排程落定才放行 tap：解锁前的盲拍不再进入判分
+        setLive(true)
 
-    const tick = (): void => {
-      if (!runningRef.current) return
-      const now = ctx.currentTime
-      const beat = Math.floor((now - t0) / spb)
-      setActiveBeat(beat >= 0 && beat < beats ? beat : -1)
-      if (now > t0 + beats * spb + 0.5) {
-        emit('roundDone', { duration: beats * spb })
-        runningRef.current = false
-        setActiveBeat(-1)
-        return
-      }
-      timersRef.current = { raf: requestAnimationFrame(tick), end: 0 }
-    }
-    timersRef.current = { raf: requestAnimationFrame(tick), end: 0 }
+        const tick = (): void => {
+          if (!runningRef.current) return
+          const now = ctx.currentTime
+          const beat = Math.floor((now - t0) / spb)
+          setActiveBeat(beat >= 0 && beat < beats ? beat : -1)
+          if (now > t0 + beats * spb + 0.5) {
+            emit('roundDone', { duration: beats * spb })
+            runningRef.current = false
+            setLive(false)
+            setActiveBeat(-1)
+            return
+          }
+          timersRef.current = { raf: requestAnimationFrame(tick), end: 0 }
+        }
+        timersRef.current = { raf: requestAnimationFrame(tick), end: 0 }
+      })
+      .catch(() => {
+        /* 上下文异常：本轮不出声，等下一次 start 重建 */
+      })
 
     return () => {
+      cancelled = true
       runningRef.current = false
+      setLive(false)
       if (timersRef.current) cancelAnimationFrame(timersRef.current.raf)
       timersRef.current = null
       clickStops.forEach((stop) => stop())
@@ -472,8 +489,8 @@ export function RhythmView({ spec, store, emit }: ViewProps) {
           <span key={i} className={`beat-dot ${i === activeBeat ? 'active' : ''}`} />
         ))}
       </div>
-      <div className={`tap-pad ${running ? 'live' : ''} ${tapped ? 'hit' : ''}`} onPointerDown={tap}>
-        {running ? 'TAP' : '未开始'}
+      <div className={`tap-pad ${live ? 'live' : ''} ${tapped ? 'hit' : ''}`} onPointerDown={tap}>
+        {live ? 'TAP' : '未开始'}
       </div>
     </div>
   )

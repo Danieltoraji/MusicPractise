@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentInstance } from '../engine/level'
 import { ComponentStore } from '../runtime/store'
-import { ButtonView, ChoiceView, FingeringView, SoundView, SynthView } from './views'
+import { ButtonView, ChoiceView, FingeringView, RhythmView, SoundView, SynthView } from './views'
 import { StaffView } from './staffViews'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -317,5 +317,152 @@ describe('SynthView 面板键盘（批次13 交互化）', () => {
     const key = c.querySelector('.synth-keys [data-midi="64"]') as HTMLElement
     act(() => key.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     expect(strikeSpy).toHaveBeenCalledWith('synth1', '__strike', { midi: 64 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// RhythmView 挂起上下文安全排程（docs/33 遗留复核）：与执行器同一不变量——
+// 音频排程必须在 running 时钟上进行；解锁前不预排、盲拍不放行、打板垫显示「未开始」
+// ---------------------------------------------------------------------------
+
+class RhythmFakeNode {
+  gain = { setValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} }
+  frequency = { value: 0 }
+  type = ''
+  startTime: number | null = null
+  connect(n: unknown): unknown {
+    return n
+  }
+  start(t?: number): void {
+    this.startTime = t ?? -1
+  }
+  stop(): void {}
+}
+
+/** 挂起时 currentTime 冻结在 100；unlock() 模拟首次手势，时钟跳 250 继续（同 audioSuspend.test） */
+class RhythmFakeCtx {
+  state: string
+  currentTime = 100
+  destination = new RhythmFakeNode()
+  oscs: RhythmFakeNode[] = []
+  private resolvers: Array<() => void> = []
+  constructor(state = 'suspended') {
+    this.state = state
+  }
+  resume(): Promise<void> {
+    return new Promise((resolve) => {
+      this.resolvers.push(() => {
+        this.state = 'running'
+        this.currentTime = 250
+        resolve()
+      })
+    })
+  }
+  unlock(): void {
+    this.resolvers.forEach((r) => r())
+    this.resolvers = []
+  }
+  addEventListener(): void {}
+  removeEventListener(): void {}
+  createOscillator(): RhythmFakeNode {
+    const o = new RhythmFakeNode()
+    this.oscs.push(o)
+    return o
+  }
+  createGain(): RhythmFakeNode {
+    return new RhythmFakeNode()
+  }
+}
+
+const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+
+describe('RhythmView 挂起上下文安全排程（docs/33 遗留复核）', () => {
+  // audio 模块的 ctx 是单例：两用例共享同一实例（A 结束后处于 running@250，B 直接复用）
+  let ctx: RhythmFakeCtx
+
+  it('挂起时 start：不预排、盲拍不放行、UI 显示未开始；解锁后整轮精排且 tap 相对 t0', async () => {
+    ctx = new RhythmFakeCtx('suspended')
+    // jsdom 无 rAF（tick 循环用）：setTimeout 桩替代，cancel 对齐 clearTimeout
+    vi.stubGlobal('requestAnimationFrame', (cb: (t: number) => void): number => window.setTimeout(() => cb(1000), 0))
+    vi.stubGlobal('cancelAnimationFrame', (h: number) => window.clearTimeout(h))
+    vi.stubGlobal(
+      'AudioContext',
+      function () {
+        return ctx
+      },
+    )
+    try {
+      const store = new ComponentStore()
+      const spec: ComponentInstance = { id: 'r1', type: 'rhythm', layout: { x: 0, y: 0, w: 400, h: 120 } }
+      store.init([spec])
+      const events: Array<{ event: string; payload?: unknown }> = []
+      const c = renderEl(<RhythmView spec={spec} store={store} emit={(event, payload) => events.push({ event, payload })} />)
+      act(() => {
+        store.applyCommand('r1', 'start', { bpm: 60, beats: 4, countInBeats: 2 })
+      })
+      await flush()
+      // 挂起：整轮不预排（旧实现在冻结的 100.2 上排满 6 个 click，解锁瞬间齐爆）
+      expect(ctx.oscs.filter((o) => o.startTime !== null)).toHaveLength(0)
+      // 打板垫诚实显示未开始；解锁前盲拍不放行（旧实现会以恒定负值进入判分）
+      const pad = c.querySelector('.tap-pad') as HTMLElement
+      expect(pad.textContent).toBe('未开始')
+      expect(pad.className).not.toContain('live')
+      act(() => {
+        pad.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+      })
+      expect(events.filter((e) => e.event === 'tap')).toHaveLength(0)
+
+      act(() => {
+        ctx.unlock()
+      })
+      await flush()
+      await flush()
+      // count-in 2 + 节拍 4 = 6 个 click，全部落在解锁后的时钟上：250.2 起、spb=1s 间距
+      const sorted = [...ctx.oscs].sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0))
+      expect(sorted).toHaveLength(6)
+      expect(sorted[0].startTime).toBeCloseTo(250.2, 5)
+      expect(sorted[1].startTime).toBeCloseTo(251.2, 5)
+      expect(sorted[2].startTime).toBeCloseTo(252.2, 5) // t0 = 250 + 2×1 + 0.2
+      expect(sorted[5].startTime).toBeCloseTo(255.2, 5)
+      // 锚定后 UI 进入 TAP 态；tap 放行且相对 t0（时钟停在 250 → 预备拍负值 -2.2）
+      expect((c.querySelector('.tap-pad') as HTMLElement).textContent).toBe('TAP')
+      act(() => {
+        ;(c.querySelector('.tap-pad') as HTMLElement).dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+      })
+      const taps = events.filter((e) => e.event === 'tap')
+      expect(taps).toHaveLength(1)
+      expect((taps[0]!.payload as { t: number }).t).toBeCloseTo(-2.2, 5)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('running 上下文 start：立即整轮排程（既有语义回归），UI 直接 TAP', async () => {
+    // ctx 复用上一用例解锁后的单例（state=running、currentTime=250）
+    const before = ctx.oscs.length
+    vi.stubGlobal('requestAnimationFrame', (cb: (t: number) => void): number => window.setTimeout(() => cb(1000), 0))
+    vi.stubGlobal('cancelAnimationFrame', (h: number) => window.clearTimeout(h))
+    vi.stubGlobal(
+      'AudioContext',
+      function () {
+        return ctx
+      },
+    )
+    try {
+      const store = new ComponentStore()
+      const spec: ComponentInstance = { id: 'r2', type: 'rhythm', layout: { x: 0, y: 0, w: 400, h: 120 } }
+      store.init([spec])
+      const c = renderEl(<RhythmView spec={spec} store={store} emit={() => {}} />)
+      act(() => {
+        store.applyCommand('r2', 'start', { bpm: 120, beats: 2, countInBeats: 1 })
+      })
+      await flush()
+      const starts = ctx.oscs.slice(before).map((o) => o.startTime).filter((t): t is number => t !== null)
+      expect(starts).toHaveLength(3) // 1 预备 + 2 节拍，无解锁等待
+      expect(Math.min(...starts)).toBeCloseTo(250.2, 5)
+      expect((c.querySelector('.tap-pad') as HTMLElement).textContent).toBe('TAP')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

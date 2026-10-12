@@ -63,6 +63,7 @@ export function unlockAudio(): void {
  * 挂起时 currentTime 冻结——若直接在其上排程，多次 play 的音符会堆叠在同一冻结时刻，
  * 首次用户手势解锁后全部同时炸响（听音关卡进关自动播放 + 首击的「时序错乱」根因）。
  * state 不可读的伪造/异常上下文按 running 处理（测试替身直通）。
+ * 执行器三通道（playNotes/playSynth/playClick 调用方）与视图层排程（RhythmView）共用。
  */
 async function ensureRunning(): Promise<AudioContext> {
   const c = getCtx()
@@ -81,6 +82,11 @@ async function ensureRunning(): Promise<AudioContext> {
     c.addEventListener('statechange', onStateChange)
   })
   return c
+}
+
+/** 视图层排程入口：与执行器同一「running 时钟」语义（RhythmView 整轮预排前等待解锁） */
+export function readyContext(): Promise<AudioContext> {
+  return ensureRunning()
 }
 
 /**
