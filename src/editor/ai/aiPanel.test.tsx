@@ -672,3 +672,58 @@ describe('会话治理（批次8c）', () => {
     expect(getSession(DOC.id).usage).toEqual({ promptTokens: 12000, completionTokens: 800 })
   })
 })
+
+describe('撞限续跑（轮数预算）', () => {
+  function setKey(): void {
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
+    const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
+    stored.profiles.deepseek.apiKey = 'sk-t'
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
+  }
+
+  it('撞限后恢复条出现，「▶ 继续」以现有历史续跑（不插新 user 消息，turnCapHit 复位）', async () => {
+    setKey()
+    clearSession(DOC.id)
+    let call = 0
+    const fetchMock = vi.fn(async () => {
+      call += 1
+      if (call <= 32) {
+        // agent 模式轮数上限 32：前 32 次请求全部回 tool_calls，直至循环撞限
+        return bodyResponse({
+          choices: [
+            {
+              message: {
+                content: '',
+                tool_calls: [{ index: 0, id: `c${call}`, type: 'function', function: { name: 'read_doc', arguments: '{}' } }],
+              },
+            },
+          ],
+        })
+      }
+      return bodyResponse({ choices: [{ message: { content: '接着跑完了。' } }] })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await act(async () => {
+      ;[...c.querySelectorAll<HTMLButtonElement>('.ai-mode-tab')].find((b) => b.textContent === 'agent')!.click()
+    })
+    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '改点什么')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.querySelector('.ai-panel-capbar') !== null)
+    expect(c.querySelector('.ai-panel-capbar')?.textContent).toContain('轮数上限')
+    expect(getSession(DOC.id).turnCapHit).toBe(true)
+
+    await act(async () => {
+      ;(c.querySelector('.ai-panel-cap-run') as HTMLButtonElement).click()
+    })
+    await flushUntil(() => c.textContent!.includes('接着跑完了。'))
+    expect(getSession(DOC.id).turnCapHit).toBe(false)
+    // user 消息没有因续跑翻倍；恢复条已消失
+    expect(getSession(DOC.id).messages.filter((m) => m.role === 'user')).toHaveLength(1)
+    expect(c.querySelector('.ai-panel-capbar')).toBeNull()
+    // 首轮 32 次请求（撞限）+ 续跑 1 次（文本收尾）
+    expect(fetchMock).toHaveBeenCalledTimes(33)
+  })
+})

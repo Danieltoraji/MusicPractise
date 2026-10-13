@@ -75,7 +75,8 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
   }
 
   try {
-    const maxTurns = opts.maxTurns ?? 6
+    const maxTurns = opts.maxTurns ?? 8
+    patchSession(opts.docId, { turnCount: 0, turnCapHit: false })
     // 本轮对话的本地副本（会话真源由 session store 维护）；每次请求前按预算重新组装下发消息
     const history: ChatMessage[] = [...getSession(opts.docId).messages]
     const specs = toSpecs(opts.tools)
@@ -96,6 +97,7 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
         onDelta: opts.stream ? (d) => streamAppendToLast(opts.docId, d) : undefined,
       })
       addSessionUsage(opts.docId, res.usage)
+      patchSession(opts.docId, { turnCount: turn + 1 })
       const finalMsg: ChatMessage = { role: 'assistant', content: res.content, toolCalls: res.toolCalls }
       history.push(finalMsg)
       if (opts.stream) replaceLastMessage(opts.docId, finalMsg)
@@ -134,8 +136,9 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     }
     appendMessage(opts.docId, {
       role: 'assistant',
-      content: `（已连续调用工具 ${maxTurns} 轮，本轮停止。你可以继续提问让它接着分析。）`,
+      content: `（已达单次任务轮数上限（${maxTurns} 轮），自动停止。任务未完可点「▶ 继续」接着当前进度跑，或直接补充新要求。）`,
     })
+    patchSession(opts.docId, { turnCapHit: true })
   } catch (err) {
     let message: string
     if (ctrl.signal.aborted) message = '已停止。'

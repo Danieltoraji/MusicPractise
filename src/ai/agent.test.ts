@@ -76,12 +76,14 @@ describe('runAgentTurn', () => {
     expect(msgs[4]).toMatchObject({ role: 'tool', content: expect.stringContaining('boom') })
   })
 
-  it('maxTurns 用尽：追加停止说明且不再请求', async () => {
+  it('maxTurns 用尽：追加停止说明、置位 turnCapHit 且不再请求', async () => {
     const fn = scriptFetch([toolCall('c1', 'fake_read')])
     await runAgentTurn({ docId: 'res_agent_max', profile, systemPrompt: 'S', userText: 'go', tools: [fakeTool], ctx, maxTurns: 1 })
     const s = getSession('res_agent_max')
     expect(fn).toHaveBeenCalledTimes(1)
-    expect(s.messages.at(-1)).toMatchObject({ role: 'assistant', content: expect.stringContaining('停止') })
+    expect(s.messages.at(-1)).toMatchObject({ role: 'assistant', content: expect.stringContaining('上限') })
+    expect(s.turnCapHit).toBe(true)
+    expect(s.turnCount).toBe(1)
   })
 
   it('供应商错误进 session.error 且 busy 复位', async () => {
@@ -130,6 +132,36 @@ describe('runAgentTurn', () => {
     expect(fn).toHaveBeenCalledTimes(1)
     stopAgent('res_agent')
     await first
+  })
+})
+
+describe('轮数预算与撞限续跑', () => {
+  it('turnCount 随请求轮次记录，正常结束保留；新 run 开始归零', async () => {
+    clearSession('res_agent_turns')
+    scriptFetch([toolCall('c1', 'fake_read'), { choices: [{ message: { content: '完成' } }] }])
+    await runAgentTurn({ docId: 'res_agent_turns', profile, systemPrompt: 'S', userText: 'go', tools: [fakeTool], ctx })
+    expect(getSession('res_agent_turns').turnCount).toBe(2)
+    expect(getSession('res_agent_turns').turnCapHit).toBe(false)
+    scriptFetch([{ choices: [{ message: { content: '又完成' } }] }])
+    await runAgentTurn({ docId: 'res_agent_turns', profile, systemPrompt: 'S', userText: '再来', tools: [fakeTool], ctx })
+    expect(getSession('res_agent_turns').turnCount).toBe(1)
+    clearSession('res_agent_turns')
+  })
+
+  it('撞限后续跑（不传 userText）：复位 turnCapHit，不重复插入 user 消息', async () => {
+    clearSession('res_agent_cap')
+    scriptFetch([toolCall('c1', 'fake_read')])
+    await runAgentTurn({ docId: 'res_agent_cap', profile, systemPrompt: 'S', userText: 'go', tools: [fakeTool], ctx, maxTurns: 1 })
+    expect(getSession('res_agent_cap').turnCapHit).toBe(true)
+    const fn = scriptFetch([{ choices: [{ message: { content: '接着跑完了' } }] }])
+    await runAgentTurn({ docId: 'res_agent_cap', profile, systemPrompt: 'S', tools: [fakeTool], ctx, maxTurns: 1 })
+    const s = getSession('res_agent_cap')
+    expect(s.turnCapHit).toBe(false)
+    expect(fn).toHaveBeenCalledTimes(1)
+    // 历史只有最初那条 user 消息（续跑不重复发送）
+    expect(s.messages.filter((m) => m.role === 'user')).toHaveLength(1)
+    expect(s.messages.at(-1)).toMatchObject({ role: 'assistant', content: '接着跑完了' })
+    clearSession('res_agent_cap')
   })
 })
 

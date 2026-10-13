@@ -28,6 +28,10 @@ export interface AiSession {
   plan: PlanState | null
   /** 本会话累计 token 用量（供应商返回才计入；批次8c） */
   usage?: ChatUsage
+  /** 当前运行已完成的请求轮数（运行时态不持久；每次 runAgentTurn 开始归零） */
+  turnCount?: number
+  /** 上次运行撞到轮数上限未跑完（运行时态不持久；面板据此显示「▶ 继续」续跑条） */
+  turnCapHit?: boolean
 }
 
 const sessions = new Map<string, AiSession>()
@@ -125,7 +129,17 @@ export function replaceLastMessage(docId: string, msg: ChatMessage): void {
 }
 
 export function clearSession(docId: string): void {
-  setSession(docId, { messages: [], busy: false, error: null, mode: 'ask', checkpointAt: null, plan: null, usage: undefined })
+  setSession(docId, {
+    messages: [],
+    busy: false,
+    error: null,
+    mode: 'ask',
+    checkpointAt: null,
+    plan: null,
+    usage: undefined,
+    turnCount: undefined,
+    turnCapHit: false,
+  })
 }
 
 // ---------------------------------------------------------------------------

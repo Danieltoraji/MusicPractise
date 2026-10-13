@@ -170,7 +170,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         }
       },
     },
-    maxTurns: mode === 'agent' ? 8 : 6,
+    maxTurns: mode === 'agent' ? 32 : 8,
     stream: true,
   })
 
@@ -205,6 +205,15 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       patchSession(doc.id, { checkpointAt: at })
     }
     await runAgentTurn(turnOptions(mode, prof))
+  }
+
+  /** 撞限续跑：上次运行到轮数上限未完，以现有历史接着跑（预算重置；不重存检查点——保留任务前基线供 ↩ 回滚） */
+  const continueAfterCap = async (): Promise<void> => {
+    if (session.busy || !session.turnCapHit) return
+    const prof = profile ?? activeProfile()
+    if (!prof) return
+    patchSession(doc.id, { turnCapHit: false })
+    await runAgentTurn(turnOptions(getSession(doc.id).mode, prof))
   }
 
   /** plan 模式确认流：解析最近回复为计划清单（不可解析回退纯文本执行条） */
@@ -289,7 +298,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
               className={`ai-mode-tab${session.mode === m ? ' active' : ''}`}
               title={MODE_META[m].tip}
               disabled={session.busy || session.mode === m}
-              onClick={() => patchSession(doc.id, { mode: m, checkpointAt: m === 'ask' ? null : session.checkpointAt })}
+              onClick={() => patchSession(doc.id, { mode: m, checkpointAt: m === 'ask' ? null : session.checkpointAt, turnCapHit: false })}
             >
               {MODE_META[m].label}
             </button>
@@ -411,6 +420,24 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
           <span>上方回复包含执行计划</span>
           <button type="button" className="ai-plan-run" onClick={() => void executePlan()}>
             ▶ 执行计划
+          </button>
+        </div>
+      )}
+
+      {session.turnCapHit && !session.busy && (
+        <div className="ai-panel-capbar">
+          <span>已达单次任务轮数上限，任务还没跑完？</span>
+          <button
+            type="button"
+            className="ai-panel-cap-run"
+            title="以现有进度接着跑（轮数预算重置，不重复发消息）"
+            disabled={!profile}
+            onClick={() => void continueAfterCap()}
+          >
+            ▶ 继续
+          </button>
+          <button type="button" className="ai-panel-error-close" title="关闭" onClick={() => patchSession(doc.id, { turnCapHit: false })}>
+            ×
           </button>
         </div>
       )}
@@ -544,9 +571,18 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
         )}
       </div>
 
-      {session.usage && (
-        <div className="ai-panel-usage" title="本会话累计 token 用量（供应商返回时统计；流式部分供应商不带则不增长）">
-          ↑{fmtTokens(session.usage.promptTokens)} ↓{fmtTokens(session.usage.completionTokens)} tokens
+      {(session.usage || (session.turnCount ?? 0) > 0) && (
+        <div
+          className="ai-panel-usage"
+          title="本会话累计 token 用量与本轮请求轮数（轮数在每次运行开始归零）"
+        >
+          {session.usage && (
+            <>
+              ↑{fmtTokens(session.usage.promptTokens)} ↓{fmtTokens(session.usage.completionTokens)} tokens
+            </>
+          )}
+          {session.usage && (session.turnCount ?? 0) > 0 && ' · '}
+          {(session.turnCount ?? 0) > 0 && <>本轮 {session.turnCount} 轮</>}
         </div>
       )}
     </aside>
