@@ -77,6 +77,8 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'a
         '（write_script / edit_table / edit_components / edit_meta / edit_views / edit_flow / set_variable），每次修改都会先过校验再应用。',
       '修改守则：保持最小必要修改；先 read_script / read_doc 了解现状再动手；数据表行的 key 必须与现有列完全一致；' +
         '逻辑修改用 write_script 全文交付（不是增量补丁）；新增组件后用返回的新 id 在逻辑中引用；每次写入后以返回的校验结果为准，被拒绝就修正重试。',
+      '效率守则：多个独立的小修改尽量合并——优先用批量参数（set_variable 的 vars、edit_components 的 items/updates/ids、edit_views 的 ops、debug_dispatch 的 events 剧本），' +
+        '或同一轮里发起多个工具调用；不要把每个小步骤都拆成单独一来回，也不必反复重读刚读过的内容。',
       '验证守则：修改后用 run_level 无头试运行验证（events 注入用户操作，如点按钮/按键），依据运行错误与变量终态继续修正，直到结算符合预期。',
       '调试守则：需要逐步排查或向创作者演示时用调试工具组——debug_control(start) 启动的是**可见调试会话**（游玩画面出现在工作台左侧，创作者实时看到你触发的每个事件与画面反应；调试中画面点击与 debug_dispatch 同路径）。' +
         '配合 debug_breakpoints 设断点、debug_read 看变量与日志、debug_set_var 强设状态、debug_screenshot 截调试画面（无会话时回落节点图）。讨论具体节点时用 highlight_nodes 高亮给创作者看。',
@@ -177,7 +179,8 @@ export function buildPlanExecutionPrompt(items: { text: string }[]): string {
     '请严格逐项执行以下已确认的计划：',
     ...lines,
     '',
-    '要求：开工某项前把该项标为 in_progress、完成后标为 done（用 update_plan 工具，按 index 对应）；',
+    '要求：用 update_plan 工具标记进度（marks 数组支持批量）——开始某项时把该项标 in_progress，完成时标 done；',
+    '尽量合并标记以减少来回：开始下一项时，可在同一次 update_plan 调用里把上一项标 done、当前项标 in_progress；',
     '无法完成的项标为 skipped 并说明原因；全部项处理完后简短汇报结果。',
   ].join('\n')
 }

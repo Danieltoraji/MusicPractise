@@ -380,14 +380,14 @@ describe('历史预算 buildModelMessages（批次8c）', () => {
   })
 
   it('超限：只下发最近窗口，窗口起点前进到第一条 user 消息（不拆 tool 对），附省略说明', () => {
-    // 100 条：u/a 交替；最后 60 条窗口起点在第 40 条（a39），前进到它后面的 user
+    // 140 条：u/a 交替；窗口起点在第 20 条（恰好 user，无需前进）
     const history: ChatMessage[] = []
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 70; i++) {
       history.push(u(i))
       history.push(a(i))
     }
     const out = buildModelMessages(sys, history)
-    expect(out.length).toBeLessThanOrEqual(2 + 60)
+    expect(out.length).toBeLessThanOrEqual(2 + 120)
     expect(out[0]).toMatchObject({ role: 'system', content: 'SYS' })
     expect(out[1].role).toBe('system')
     expect(out[1].content).toContain('已省略')
@@ -396,7 +396,27 @@ describe('历史预算 buildModelMessages（批次8c）', () => {
     // 末尾完整保留
     expect(out.at(-1)).toEqual(history.at(-1))
     // 会话真源未被裁剪
-    expect(history).toHaveLength(100)
+    expect(history).toHaveLength(140)
+  })
+
+  it('两级窗口：近期 48 条 tool 结果保全量，更早的 tool 结果压缩截断且配对结构不动', () => {
+    const longTool = (i: number): ChatMessage => ({ role: 'tool', toolCallId: `c${i}`, name: 'x', content: 'R'.repeat(1000) })
+    const history: ChatMessage[] = [u(0)]
+    for (let i = 0; i < 99; i++) history.push(i % 2 === 0 ? a(i) : longTool(i))
+    const out = buildModelMessages(sys, history)
+    expect(out).toHaveLength(1 + history.length) // 100 条未超 120 窗口：仅加 system 前缀
+    const sent = out.slice(1)
+    // 远期 tool（前 52 条内）：截断到 200 字符 + 标记，tool_call_id 原样
+    const oldTool = sent.slice(0, sent.length - 48).find((m) => m.role === 'tool')!
+    expect(oldTool.content.length).toBeLessThan(300)
+    expect(oldTool.content).toContain('已截断')
+    expect(oldTool.toolCallId).toBe('c1')
+    // 近期 tool（最后 48 条内）：保全量
+    const tailTool = sent[sent.length - 2]
+    expect(tailTool.role).toBe('tool')
+    expect(tailTool.content).toHaveLength(1000)
+    // 原 history 未被改动
+    expect(history[2].content).toHaveLength(1000)
   })
 
   it('窗口内没有 user 消息（tool 链尾过长）的极端情况：保完整历史不断对', () => {

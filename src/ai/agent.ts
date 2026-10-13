@@ -11,7 +11,19 @@ import type { AiTool, ToolContext } from './tools'
 const controllers = new Map<string, AbortController>()
 
 /** 单次请求下发的消息条数上限（不含 system；超出只下发最近窗口——面板仍显示完整历史，批次8c） */
-const MODEL_MSG_LIMIT = 60
+const MODEL_MSG_LIMIT = 120
+/** 窗口内最近多少条消息保全量；更早的 tool 结果压缩截断（轮数预算提升后防长任务上下文爆炸/失忆） */
+const FULL_TAIL = 48
+/** 远期 tool 结果保留的字符数 */
+const OLD_TOOL_KEEP = 200
+
+/** 远期（非最近 FULL_TAIL 条）tool 结果压缩为前 OLD_TOOL_KEEP 字符；结构与 tool_call_id 配对原样保留 */
+function compressOld(msg: ChatMessage, index: number, arr: ChatMessage[]): ChatMessage {
+  if (index < arr.length - FULL_TAIL && msg.role === 'tool' && msg.content.length > OLD_TOOL_KEEP) {
+    return { ...msg, content: `${msg.content.slice(0, OLD_TOOL_KEEP)}\n…（早期工具结果已截断，如需完整内容请重新读取）` }
+  }
+  return msg
+}
 
 /**
  * 组装发给模型的请求消息：system + 最近窗口。
@@ -19,17 +31,17 @@ const MODEL_MSG_LIMIT = 60
  * 否则 tool 消息失去前置 tool_calls，严格供应商会 4xx。只影响下发副本，不动会话。
  */
 export function buildModelMessages(systemPrompt: string, history: ChatMessage[]): ChatMessage[] {
-  if (history.length <= MODEL_MSG_LIMIT) return [{ role: 'system', content: systemPrompt }, ...history]
+  if (history.length <= MODEL_MSG_LIMIT) return [{ role: 'system', content: systemPrompt }, ...history.map(compressOld)]
   let start = history.length - MODEL_MSG_LIMIT
   while (start < history.length && history[start].role !== 'user') start++
   if (start >= history.length) {
     // 窗口内没有 user 消息（极端情况）：保完整历史，宁可偏长不可断对
-    return [{ role: 'system', content: systemPrompt }, ...history]
+    return [{ role: 'system', content: systemPrompt }, ...history.map(compressOld)]
   }
   return [
     { role: 'system', content: systemPrompt },
     { role: 'system', content: `（更早的 ${start} 条消息已省略以控制上下文长度；如需更早的细节请让用户重新提供。）` },
-    ...history.slice(start),
+    ...history.slice(start).map(compressOld),
   ]
 }
 

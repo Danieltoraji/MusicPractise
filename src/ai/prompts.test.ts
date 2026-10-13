@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { addComponent, blankLevelDoc, setMeta, setVariable } from '../editor/docState'
 import type { GNode } from '../engine/graphProgram'
 import type { LevelDoc } from '../engine/level'
-import { buildEditorSystemPrompt, describeGNode, formatSelectionContext } from './prompts'
+import { buildEditorSystemPrompt, buildPlanExecutionPrompt, describeGNode, formatSelectionContext } from './prompts'
 
 function makeDoc(): LevelDoc {
   let doc = setMeta(blankLevelDoc(), { title: '测试关' })
@@ -68,5 +68,27 @@ describe('formatSelectionContext', () => {
     expect(script).toContain('当前页面：脚本')
     expect(script).toContain('选中脚本 第 2–3 行')
     expect(script).toContain('sound1.play()')
+  })
+})
+
+describe('提示词节流与 plan 标记合并（工具粒度治理）', () => {
+  it('agent 守则包含效率守则：批量参数与同轮多调用', () => {
+    const text = buildEditorSystemPrompt(makeDoc(), 'agent')
+    expect(text).toContain('效率守则')
+    expect(text).toContain('items/updates/ids')
+    expect(text).toContain('events 剧本')
+  })
+
+  it('ask/plan 守则不含效率守则（只读模式无写入批量形态）', () => {
+    expect(buildEditorSystemPrompt(makeDoc(), 'ask')).not.toContain('效率守则')
+    expect(buildEditorSystemPrompt(makeDoc(), 'plan')).not.toContain('效率守则')
+  })
+
+  it('plan 执行提示：编号清单 + 要求合并标记（marks 批量）', () => {
+    const text = buildPlanExecutionPrompt([{ text: '[set_variable] 声明 score' }, { text: '[run_level] 验证结算' }])
+    expect(text).toContain('1. [set_variable] 声明 score')
+    expect(text).toContain('2. [run_level] 验证结算')
+    expect(text).toContain('marks')
+    expect(text).toContain('合并标记')
   })
 })
