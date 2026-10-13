@@ -89,6 +89,44 @@ describe('AI 调试工具组（批次5）', () => {
   })
 })
 
+describe('AI 调试工具批量参数（工具粒度治理）', () => {
+  it('debug_dispatch.events：一次顺序触发多步剧本；空事件与未知事件报错', async () => {
+    const doc = loaded()
+    await tool('debug_control').exec({ action: 'start' }, harness(doc))
+    const res = (await tool('debug_dispatch').exec(
+      { events: [{ event: 'start_btn.clicked', waitMs: 200 }, { event: 'try_btn.clicked', waitMs: 200 }] },
+      harness(doc),
+    )) as string
+    expect(res).toContain('已按剧本触发 2 个事件')
+    expect(res).toContain('start_btn.clicked → try_btn.clicked')
+    expect(getDebugSnapshot().view).toBe('step1')
+
+    const empty = (await tool('debug_dispatch').exec({ events: [] }, harness(doc))) as string
+    expect(empty).toContain('不能为空')
+    // 会话停止后剧本触发走到 dispatchDebugEvent 的失败分支（剧本第 1 个事件即失败）
+    stopDebugRun()
+    const idle = (await tool('debug_dispatch').exec({ events: [{ event: 'start_btn.clicked' }] }, harness(doc))) as string
+    expect(idle).toContain('触发失败')
+    expect(idle).toContain('未运行')
+  })
+
+  it('debug_set_var.vars：一次设置多个运行时变量', async () => {
+    const doc = loaded()
+    await tool('debug_control').exec({ action: 'start' }, harness(doc))
+    const res = (await tool('debug_set_var').exec({ vars: { score: 88, answered: 2 } }, harness(doc))) as string
+    expect(res).toContain('✓')
+    expect(res).toContain('2 个变量')
+    expect(getDebugSnapshot().vars.score).toBe(88)
+    expect(getDebugSnapshot().vars.answered).toBe(2)
+
+    // 系统变量仍被拒（批量中报错并说明已设置保留）
+    const bad = (await tool('debug_set_var').exec({ vars: { score: 1, __row: 0 } }, harness(doc))) as string
+    expect(bad).toContain('赋值失败')
+    expect(bad).toContain('__row')
+    stopDebugRun()
+  })
+})
+
 describe('update_plan（plan-act 进度工具）', () => {
   it('标记进度/非法标记拒绝/全部完成自动置 done/无计划报错', async () => {
     const { getSession, patchSession } = await import('./session')

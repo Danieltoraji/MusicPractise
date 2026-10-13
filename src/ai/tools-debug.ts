@@ -20,6 +20,7 @@ import {
 } from '../editor/graph/debugRun'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {})
 
 function stateSummary(): string {
   const s = getDebugSnapshot()
@@ -106,19 +107,48 @@ const debugReadTool: AiTool = {
 
 const debugDispatchTool: AiTool = {
   name: 'debug_dispatch',
-  description: '在调试会话中手动触发组件事件（与玩家操作同路径），如 {event:"button1.clicked"} 或 {event:"keys1.keyClicked", payload:{midi:60}}；waitMs 为触发后等待毫秒数（默认 300，让级联走完）',
+  description:
+    '在调试会话中手动触发组件事件（与玩家操作同路径），如 {event:"button1.clicked"} 或 {event:"keys1.keyClicked", payload:{midi:60}}；' +
+    'waitMs 为触发后等待毫秒数（默认 300，让级联走完，上限 2000）。多步操作（如按键序列）用 events 剧本一次顺序触发多个',
   parameters: {
     type: 'object',
     properties: {
       event: { type: 'string', description: '组件事件全名（实例id.事件名）' },
       payload: { type: 'object', description: '事件负载' },
       waitMs: { type: 'number' },
+      events: {
+        type: 'array',
+        description: '批量剧本：一次顺序触发多个事件 [{event, payload?, waitMs?}]（与单事件参数二选一，多步操作时优先用它）',
+        items: {
+          type: 'object',
+          properties: { event: { type: 'string' }, payload: { type: 'object' }, waitMs: { type: 'number' } },
+          required: ['event'],
+        },
+      },
     },
-    required: ['event'],
   },
   exec: async (args) => {
+    // 批量剧本形态：顺序触发多个事件（前面的已触发即生效，中断时在错误里说明位置）
+    if (Array.isArray(args.events)) {
+      const events = (args.events as unknown[]).map(obj)
+      if (events.length === 0) return '触发失败：events 不能为空'
+      if (events.some((e) => !str(e.event))) return '触发失败：events 中存在空 event'
+      const done: string[] = []
+      for (const e of events) {
+        const err = await dispatchDebugEvent(str(e.event), (e.payload ?? {}) as Json)
+        if (err) return `剧本第 ${done.length + 1} 个事件（${str(e.event)}）触发失败：${err}（前面 ${done.length} 个已触发）`
+        done.push(str(e.event))
+        await new Promise((r) => setTimeout(r, Math.min(Number(e.waitMs) || 300, 2000)))
+      }
+      const s = getDebugSnapshot()
+      return `✓ 已按剧本触发 ${done.length} 个事件：${done.join(' → ')}。\n${s.pausedAt ? `⚠ 暂停于节点 ${s.pausedAt}（断点/单步）` : '未暂停'}\n变量：${
+        Object.entries(s.vars)
+          .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+          .join(', ') || '无'
+      }`
+    }
     const event = str(args.event)
-    if (!event) return '触发失败：event 不能为空'
+    if (!event) return '触发失败：event 不能为空（或改用 events 剧本批量触发）'
     const err = await dispatchDebugEvent(event, (args.payload ?? {}) as Json)
     if (err) return `触发失败：${err}`
     await new Promise((r) => setTimeout(r, Math.min(Number(args.waitMs) || 300, 2000)))
@@ -133,16 +163,30 @@ const debugDispatchTool: AiTool = {
 
 const debugSetVarTool: AiTool = {
   name: 'debug_set_var',
-  description: '修改调试会话中运行时变量的值（直写引擎变量，立即生效但不触发逻辑——用于强设状态后继续跑）',
+  description:
+    '修改调试会话中运行时变量的值（直写引擎变量，立即生效但不触发逻辑——用于强设状态后继续跑）。多个变量用 vars 一次设置（如 {"vars":{"score":100,"combo":3}}）',
   parameters: {
     type: 'object',
     properties: {
       name: { type: 'string' },
       value: { description: '新值（JSON）' },
+      vars: { type: 'object', description: '批量形态：{变量名: 新值}，一次设置多个（与 name/value 二选一，多变量时优先用它）' },
     },
-    required: ['name', 'value'],
   },
   exec: (args) => {
+    // 批量形态：vars 一次设置多个（某个失败时已设置的保留，错误中说明位置）
+    if (args.vars !== undefined) {
+      const batch = obj(args.vars)
+      const names = Object.keys(batch)
+      if (names.length === 0) return '赋值失败：vars 不能为空'
+      const done: string[] = []
+      for (const n of names) {
+        const err = setDebugVar(n, (batch[n] ?? 0) as Json)
+        if (err) return `赋值失败（${n}）：${err}（已设置保留：${done.join('、') || '无'}）`
+        done.push(`${n}=${JSON.stringify(batch[n] ?? 0)}`)
+      }
+      return `✓ 已设置 ${done.length} 个变量：${done.join('、')}`
+    }
     const err = setDebugVar(str(args.name), (args.value ?? 0) as Json)
     if (err) return `赋值失败：${err}`
     return `✓ 变量 ${str(args.name)} 已设为 ${JSON.stringify(args.value ?? 0)}`

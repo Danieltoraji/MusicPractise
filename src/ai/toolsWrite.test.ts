@@ -186,3 +186,97 @@ describe('AI 写入工具（批次2a）', () => {
     expect(del.result).toContain('校验警告')
   })
 })
+
+describe('AI 写入工具批量参数（工具粒度治理：一次调用做多件事）', () => {
+  let doc: LevelDoc
+  beforeEach(() => {
+    doc = setTable(blankLevelDoc(), {
+      columns: [
+        { key: 'title', label: '题面', type: 'text' },
+        { key: 'scoring', label: '分值', type: 'number' },
+      ],
+      rows: [{ title: '第1题', scoring: 10 }],
+    })
+    doc.content.components.push({ id: 'b1', type: 'button', view: 'main' } as never)
+  })
+
+  it('set_variable.vars：一次声明多个变量（单次管线应用）；非法名整批拒绝', async () => {
+    const ok = await run('set_variable', { op: 'set', vars: { score: 0, lives: 3, label: 'hi' } }, doc)
+    expect(ok.result).toContain('✓')
+    expect(ok.h.current().content.logic.variables).toMatchObject({ score: 0, lives: 3, label: 'hi' })
+    expect(ok.h.applied).toHaveLength(1)
+
+    const bad = await run('set_variable', { op: 'set', vars: { good: 1, __row: 0 } }, doc)
+    expect(bad.result).toContain('系统保留字')
+    expect(bad.h.applied).toHaveLength(0)
+    expect(bad.h.current().content.logic.variables?.good).toBeUndefined()
+  })
+
+  it('edit_components.items：一次批量添加多个组件并回传全部新 id；坏类型整批不应用', async () => {
+    const ok = await run(
+      'edit_components',
+      { op: 'add', items: [{ type: 'button', name: 'A' }, { type: 'label', name: 'B' }] },
+      doc,
+    )
+    expect(ok.result).toContain('✓')
+    expect(ok.result).toMatch(/已添加 2 个组件/)
+    expect(ok.h.current().content.components).toHaveLength(3)
+    expect(ok.h.current().content.components.map((c) => c.name)).toEqual(expect.arrayContaining(['A', 'B']))
+
+    const bad = await run('edit_components', { op: 'add', items: [{ type: 'button' }, { type: 'robot' }] }, doc)
+    expect(bad.result).toContain('未知组件类型')
+    expect(bad.h.applied).toHaveLength(0)
+    expect(bad.h.current().content.components).toHaveLength(1)
+  })
+
+  it('edit_components.updates/ids：批量改与批量删；坏项整批不应用', async () => {
+    doc.content.components.push({ id: 'l1', type: 'label', view: 'main' } as never)
+    const ok = await run(
+      'edit_components',
+      {
+        op: 'update',
+        updates: [
+          { id: 'b1', patch: { visible: false } },
+          { id: 'l1', patch: { name: '标签' } },
+        ],
+      },
+      doc,
+    )
+    expect(ok.result).toContain('✓')
+    expect(ok.h.current().content.components.find((c) => c.id === 'b1')?.visible).toBe(false)
+    expect(ok.h.current().content.components.find((c) => c.id === 'l1')?.name).toBe('标签')
+
+    const bad = await run(
+      'edit_components',
+      { op: 'update', updates: [{ id: 'b1', patch: { visible: true } }, { id: 'ghost', patch: { name: 'x' } }] },
+      ok.h.current(),
+    )
+    expect(bad.result).toContain('不存在')
+    expect(bad.h.applied).toHaveLength(0)
+    expect(bad.h.current().content.components.find((c) => c.id === 'b1')?.visible).toBe(false)
+
+    const del = await run('edit_components', { op: 'remove', ids: ['b1', 'l1'] }, bad.h.current())
+    expect(del.result).toContain('✓')
+    expect(del.h.current().content.components).toHaveLength(0)
+  })
+
+  it('edit_views.ops：一次建多视图+改名；保底与越界校验整批拒绝', async () => {
+    const ok = await run(
+      'edit_views',
+      { ops: [{ op: 'add', name: 'A' }, { op: 'add', name: 'B' }, { op: 'rename', id: 'main', name: '主页' }] },
+      doc,
+    )
+    expect(ok.result).toContain('✓')
+    expect(ok.h.current().content.views).toHaveLength(3)
+    expect(ok.h.current().content.views.find((v) => v.id === 'main')?.name).toBe('主页')
+
+    const guard = await run('edit_views', { ops: [{ op: 'remove', id: 'main' }] }, doc)
+    expect(guard.result).toContain('至少保留一个视图')
+    expect(guard.h.applied).toHaveLength(0)
+
+    doc.content.views.push({ id: 'v9', name: 'x' } as never)
+    const bad = await run('edit_views', { ops: [{ op: 'remove', id: 'v9' }, { op: 'remove', id: 'ghost' }] }, doc)
+    expect(bad.result).toContain('不存在')
+    expect(bad.h.applied).toHaveLength(0)
+  })
+})

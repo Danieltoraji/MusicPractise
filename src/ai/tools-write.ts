@@ -185,8 +185,9 @@ const editTableTool: AiTool = {
 const editComponentsTool: AiTool = {
   name: 'edit_components',
   description:
-    '管理画布组件实例。op=add 新增（type 必须是可用组件类型；可带 name/props/view/layout）；' +
-    'op=update 按 id 改属性；op=remove 删除。添加后用返回的新 id 在 write_script 里引用它',
+    '管理画布组件实例。op=add 新增（type 必须是可用组件类型；可带 name/props/view/layout）——多个组件用 items 一次批量添加（推荐）；' +
+    'op=update 按 id 改属性（批量用 updates: [{id,patch}]）；op=remove 删除（批量用 ids 数组）。' +
+    '添加后用返回的新 id 在 write_script 里引用它',
   parameters: {
     type: 'object',
     properties: {
@@ -196,18 +197,85 @@ const editComponentsTool: AiTool = {
       name: { type: 'string', description: 'add/update：显示名' },
       props: { type: 'object', description: 'add/update：组件 props' },
       layout: { type: 'object', description: 'add/update：{x,y,w,h}' },
+      items: {
+        type: 'array',
+        description: 'add 批量：一次添加多个组件（与单件参数二选一，多组件时优先用它）',
+        items: {
+          type: 'object',
+          properties: { type: { type: 'string' }, view: { type: 'string' }, name: { type: 'string' }, props: { type: 'object' }, layout: { type: 'object' } },
+          required: ['type'],
+        },
+      },
       id: { type: 'string', description: 'update/remove：组件实例 id' },
       patch: { type: 'object', description: 'update：要改的字段（name/visible/view/layout/props）' },
+      updates: {
+        type: 'array',
+        description: 'update 批量：一次改多个组件（与 id/patch 二选一）',
+        items: {
+          type: 'object',
+          properties: { id: { type: 'string' }, patch: { type: 'object' } },
+          required: ['id', 'patch'],
+        },
+      },
+      ids: { type: 'array', items: { type: 'string' }, description: 'remove 批量：一次删除多个组件 id（与 id 二选一）' },
     },
     required: ['op'],
   },
   exec: (args, ctx) => {
     const op = str(args.op)
     const doc = ctx.getDoc()
+    /** 只放行可改字段（单件与批量 update 共用） */
+    const pickPatch = (patch: unknown): Record<string, unknown> => {
+      const p = obj(patch)
+      const allowed: Record<string, unknown> = {}
+      for (const k of ['name', 'visible', 'view', 'layout', 'props']) if (k in p) allowed[k] = p[k]
+      return allowed
+    }
 
     if (op === 'add') {
-      const type = str(args.type)
       const known = new Set(allContracts().map((c) => c.type))
+      const defView = doc.content.views[0]?.id
+      // 批量形态：items 一次添加多个组件（任一类型/视图非法则整批不应用）
+      if (Array.isArray(args.items)) {
+        const items = (args.items as unknown[]).map(obj)
+        if (items.length === 0) return '修改失败（未应用）：items 不能为空'
+        const badTypes = [...new Set(items.map((it) => str(it.type)).filter((t) => !known.has(t)))]
+        if (badTypes.length > 0) {
+          return `修改失败（未应用）：未知组件类型「${badTypes.join('、')}」。可用：${[...known].sort().join('、')}`
+        }
+        const badViews = [
+          ...new Set(items.map((it) => str(it.view) || (defView ?? '')).filter((v) => v && !doc.content.views.some((x) => x.id === v))),
+        ]
+        if (badViews.length > 0) {
+          return `修改失败（未应用）：视图 ${badViews.join('、')} 不存在。现有：${doc.content.views.map((v) => v.id).join('、')}`
+        }
+        const labels: string[] = []
+        return applyAndCheck(
+          ctx,
+          () => `已添加 ${labels.length} 个组件：${labels.join('、')}——write_script 中即以这些 id 引用`,
+          (d) => {
+            let out = d
+            for (const it of items) {
+              const before = new Set(out.content.components.map((c) => c.id))
+              out = addComponent(out, str(it.type), str(it.view) || defView || undefined)
+              const newId = out.content.components.find((c) => !before.has(c.id))?.id ?? ''
+              const name = str(it.name)
+              const props = obj(it.props)
+              const layout = obj(it.layout)
+              if (name || Object.keys(props).length > 0 || Object.keys(layout).length === 4) {
+                out = updateComponent(out, newId, {
+                  ...(name ? { name } : {}),
+                  ...(Object.keys(props).length > 0 ? { props: props as Record<string, Json> } : {}),
+                  ...(Object.keys(layout).length === 4 ? { layout: layout as unknown as { x: number; y: number; w: number; h: number } } : {}),
+                })
+              }
+              labels.push(`${newId}（${str(it.type)}${name ? `·${name}` : ''}）`)
+            }
+            return out
+          },
+        )
+      }
+      const type = str(args.type)
       if (!known.has(type)) {
         return `修改失败（未应用）：未知组件类型「${type}」。可用：${[...known].sort().join('、')}`
       }
@@ -238,19 +306,60 @@ const editComponentsTool: AiTool = {
       )
     }
     if (op === 'update') {
+      // 批量形态：updates 一次改多个组件（任一 id 不存在或 patch 为空则整批不应用）
+      if (Array.isArray(args.updates)) {
+        const updates = (args.updates as unknown[]).map(obj)
+        if (updates.length === 0) return '修改失败（未应用）：updates 不能为空'
+        const problems: string[] = []
+        const planned: { id: string; allowed: Record<string, unknown> }[] = []
+        for (const [i, u] of updates.entries()) {
+          const id = str(u.id)
+          if (!doc.content.components.some((c) => c.id === id)) {
+            problems.push(`第 ${i + 1} 项：组件 ${id} 不存在`)
+            continue
+          }
+          const allowed = pickPatch(u.patch)
+          if (Object.keys(allowed).length === 0) problems.push(`第 ${i + 1} 项：组件 ${id} 的 patch 为空（可改 name/visible/view/layout/props）`)
+          planned.push({ id, allowed })
+        }
+        if (problems.length > 0) {
+          return `修改失败（未应用）：${problems.join('；')}。现有组件：${doc.content.components.map((c) => c.id).join('、')}`
+        }
+        return applyAndCheck(ctx, `已更新 ${planned.length} 个组件（${planned.map((p) => p.id).join('、')}）`, (d) => {
+          let out = d
+          for (const p of planned) out = updateComponent(out, p.id, p.allowed as never)
+          return out
+        })
+      }
       const id = str(args.id)
       if (!doc.content.components.some((c) => c.id === id)) {
         return `修改失败（未应用）：组件 ${id} 不存在。现有：${doc.content.components.map((c) => c.id).join('、')}`
       }
-      const patch = obj(args.patch)
-      const allowed: Record<string, unknown> = {}
-      for (const k of ['name', 'visible', 'view', 'layout', 'props']) if (k in patch) allowed[k] = patch[k]
+      const allowed = pickPatch(args.patch)
       if (Object.keys(allowed).length === 0) return '修改失败（未应用）：patch 为空（可改 name/visible/view/layout/props）'
       return applyAndCheck(ctx, `组件 ${id} 已更新（${Object.keys(allowed).join('、')}）`, (d) =>
         updateComponent(d, id, allowed as never),
       )
     }
     if (op === 'remove') {
+      // 批量形态：ids 一次删除多个组件
+      if (Array.isArray(args.ids)) {
+        const ids = (args.ids as unknown[]).map(str).filter((x) => x !== '')
+        if (ids.length === 0) return '修改失败（未应用）：ids 不能为空'
+        const missing = ids.filter((id) => !doc.content.components.some((c) => c.id === id))
+        if (missing.length > 0) {
+          return `修改失败（未应用）：组件 ${missing.join('、')} 不存在。现有：${doc.content.components.map((c) => c.id).join('、')}`
+        }
+        return applyAndCheck(
+          ctx,
+          () => `已删除 ${ids.length} 个组件（${ids.join('、')}）——引用它们的节点会由 lint 标红，记得同步改逻辑`,
+          (d) => {
+            let out = d
+            for (const id of ids) out = removeComponent(out, id)
+            return out
+          },
+        )
+      }
       const id = str(args.id)
       if (!doc.content.components.some((c) => c.id === id)) {
         return `修改失败（未应用）：组件 ${id} 不存在。现有：${doc.content.components.map((c) => c.id).join('、')}`
@@ -292,19 +401,90 @@ function clampDifficulty(v: unknown): unknown {
 
 const editViewsTool: AiTool = {
   name: 'edit_views',
-  description: '管理互斥视图。op=add 新增（可带 name）；op=rename 改显示名；op=remove 删除（其组件级联删除，关卡至少保留一个视图）',
+  description:
+    '管理互斥视图。op=add 新增（可带 name）；op=rename 改显示名；op=remove 删除（其组件级联删除，关卡至少保留一个视图）。' +
+    '多个操作可用 ops 数组一次批量执行（如同时建 3 个视图）',
   parameters: {
     type: 'object',
     properties: {
-      op: { type: 'string', enum: ['add', 'rename', 'remove'] },
+      op: { type: 'string', enum: ['add', 'rename', 'remove'], description: '单件形态的 op（用 ops 批量时可省略）' },
       id: { type: 'string', description: 'rename/remove：视图 id' },
       name: { type: 'string', description: 'add/rename：视图显示名' },
+      ops: {
+        type: 'array',
+        description: '批量形态：一次执行多个视图操作（与单件 op 二选一，多视图时优先用它）',
+        items: {
+          type: 'object',
+          properties: { op: { type: 'string', enum: ['add', 'rename', 'remove'] }, id: { type: 'string' }, name: { type: 'string' } },
+          required: ['op'],
+        },
+      },
     },
-    required: ['op'],
   },
   exec: (args, ctx) => {
-    const op = str(args.op)
     const doc = ctx.getDoc()
+
+    // 批量形态：ops 一次执行多个视图操作（预检全部通过才应用）
+    if (Array.isArray(args.ops)) {
+      const ops = (args.ops as unknown[]).map(obj)
+      if (ops.length === 0) return '修改失败（未应用）：ops 不能为空'
+      const problems: string[] = []
+      let removeCount = 0
+      for (const [i, o] of ops.entries()) {
+        const oop = str(o.op)
+        const id = str(o.id)
+        if (oop === 'add') continue
+        if (oop !== 'rename' && oop !== 'remove') {
+          problems.push(`第 ${i + 1} 项：未知 op「${oop}」`)
+          continue
+        }
+        if (!doc.content.views.some((v) => v.id === id)) {
+          problems.push(`第 ${i + 1} 项：视图 ${id} 不存在。现有：${doc.content.views.map((v) => v.id).join('、')}`)
+          continue
+        }
+        if (oop === 'remove') removeCount += 1
+      }
+      if (problems.length === 0 && doc.content.views.length - removeCount < 1) {
+        problems.push('至少保留一个视图（remove 项过多）')
+      }
+      if (problems.length > 0) return `修改失败（未应用）：${problems.join('；')}`
+      let added = 0
+      let renamed = 0
+      let removed = 0
+      const newIds: string[] = []
+      return applyAndCheck(
+        ctx,
+        () => {
+          const parts = [
+            added > 0 ? `新增 ${added} 个（${newIds.join('、')}）` : '',
+            renamed > 0 ? `改名 ${renamed} 个` : '',
+            removed > 0 ? `删除 ${removed} 个` : '',
+          ].filter(Boolean)
+          return `视图批量操作完成：${parts.join('、')}`
+        },
+        (d) => {
+          let out = d
+          for (const o of ops) {
+            const oop = str(o.op)
+            if (oop === 'add') {
+              const r = addView(out, str(o.name) || undefined)
+              newIds.push(r.id)
+              added += 1
+              out = r.doc
+            } else if (oop === 'rename') {
+              out = updateView(out, str(o.id), { name: str(o.name) })
+              renamed += 1
+            } else {
+              out = removeView(out, str(o.id))
+              removed += 1
+            }
+          }
+          return out
+        },
+      )
+    }
+
+    const op = str(args.op)
     if (op === 'add') {
       let newId = ''
       const name = str(args.name)
@@ -353,16 +533,19 @@ const editFlowTool: AiTool = {
 
 const setVariableTool: AiTool = {
   name: 'set_variable',
-  description: '管理逻辑变量。op=set 声明/改初值（value 为 JSON 值：数字/布尔/字符串/数组/对象）；op=rename 改名；op=remove 删除（双下划线开头为系统变量不可改）',
+  description:
+    '管理逻辑变量。op=set 声明/改初值（value 为 JSON 值：数字/布尔/字符串/数组/对象）——可用 vars 一次声明多个变量（如 {"vars":{"score":0,"level":1}}，推荐）；' +
+    'op=rename 改名；op=remove 删除（双下划线开头为系统变量不可改）',
   parameters: {
     type: 'object',
     properties: {
       op: { type: 'string', enum: ['set', 'rename', 'remove'] },
-      name: { type: 'string', description: '变量名' },
+      name: { type: 'string', description: '变量名（op=set 用 vars 批量时可省略）' },
       value: { description: 'op=set：初值（JSON）' },
+      vars: { type: 'object', description: 'op=set 批量形态：{变量名: 初值}，一次声明多个（与 name/value 二选一，多变量时优先用它）' },
       newName: { type: 'string', description: 'op=rename：新名' },
     },
-    required: ['op', 'name'],
+    required: ['op'],
   },
   exec: (args, ctx) => {
     const op = str(args.op)
@@ -373,6 +556,25 @@ const setVariableTool: AiTool = {
     const vars = doc.content.logic.variables ?? {}
 
     if (op === 'set') {
+      // 批量形态：vars 对象一次声明多个；任一名字非法则整批不应用
+      if (args.vars !== undefined) {
+        const batch = obj(args.vars)
+        const names = Object.keys(batch)
+        if (names.length === 0) return '修改失败（未应用）：vars 不能为空'
+        const bad = names.filter((n) => guard(n) !== null || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))
+        if (bad.length > 0) {
+          return `修改失败（未应用）：以下变量名非法或是系统保留字：${bad.join('、')}（字母/下划线开头，仅字母数字下划线；双下划线开头为系统保留）`
+        }
+        return applyAndCheck(
+          ctx,
+          `已声明 ${names.length} 个变量（${names.map((n) => `${n}=${JSON.stringify(batch[n] ?? 0)}`).join('、')}）——write_script 中以 v.名字 引用`,
+          (d) => {
+            const next = structuredClone(d)
+            next.content.logic.variables = { ...(next.content.logic.variables ?? {}), ...(batch as Record<string, Json>) }
+            return next
+          },
+        )
+      }
       const bad = guard(name)
       if (bad) return bad
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return `修改失败（未应用）：变量名 ${name} 非法（字母/下划线开头，仅字母数字下划线）`
