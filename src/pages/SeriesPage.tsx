@@ -49,13 +49,29 @@ export function SeriesPage({ id }: { id: string }) {
   }
   const levelById = new Map(allLevels.map((l) => [l.id, l]))
 
+  // 系列级进度汇总（显示层推导：只统计实际在库的关卡）
+  const seriesLevelIds = topics.flatMap((t) => (t ? childIds(t.doc, 'levelIds') : []))
+  const existingLevelIds = seriesLevelIds.filter((lid) => levelById.has(lid))
+  const passedCount = existingLevelIds.filter((lid) => progress.find((x) => x.levelId === lid)?.passed === 1).length
+  const pct = existingLevelIds.length === 0 ? 0 : Math.round((passedCount / existingLevelIds.length) * 100)
+
   return (
     <ErrorBoundary>
       <div className="page">
         <div className="breadcrumb"><a href="#/">← 返回首页</a></div>
-        <section className="hero">
+        <section className="hero series-hero">
           <h1>📚 {sdoc.meta.title}</h1>
           <p>{sdoc.meta.description ?? ''}</p>
+          {existingLevelIds.length > 0 && (
+            <div className="series-progress">
+              <span className="series-progress-label">
+                完成 {passedCount}/{existingLevelIds.length}
+              </span>
+              <span className="series-progress-bar" role="img" aria-label={`系列完成度 ${pct}%`}>
+                <span style={{ width: `${pct}%` }} />
+              </span>
+            </div>
+          )}
         </section>
 
         {topics.map((topic, ti) => {

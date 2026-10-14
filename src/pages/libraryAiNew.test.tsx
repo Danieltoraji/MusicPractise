@@ -50,7 +50,7 @@ afterEach(async () => {
 describe('LibraryPage AI 新建关卡（批次4）', () => {
   it('表单展开 → 填描述 → 创建空白关卡 + 写入 kickoff + 跳编辑器', async () => {
     const c = renderEl(<LibraryPage />)
-    await flushUntil(() => c.querySelector('.library-actions') !== null)
+    await flushUntil(() => c.querySelector('.page-actions') !== null)
     // 空库：先等 ensureSeeded 把内置关卡入库（App 层逻辑；这里直接验证表单流转，不强依赖种子）
     const aiBtn = [...c.querySelectorAll('button')].find((b) => b.textContent?.includes('AI 新建关卡'))!
     act(() => aiBtn.click())
@@ -77,7 +77,7 @@ describe('LibraryPage AI 新建关卡（批次4）', () => {
 
   it('空描述：报错不跳转', async () => {
     const c = renderEl(<LibraryPage />)
-    await flushUntil(() => c.querySelector('.library-actions') !== null)
+    await flushUntil(() => c.querySelector('.page-actions') !== null)
     act(() => [...c.querySelectorAll('button')].find((b) => b.textContent?.includes('AI 新建关卡'))!.click())
     const form = c.querySelector('.ai-new-form') as HTMLElement
     await act(async () => {

@@ -19,6 +19,10 @@ function ProgressBadge({ levelId, progress }: { levelId: string; progress: Progr
   )
 }
 
+function CountChip({ n }: { n: number }) {
+  return n > 0 ? <span className="count-chip">{n}</span> : null
+}
+
 export function HomePage() {
   const series = useLiveQuery(() => db.resources.where('kind').equals('series').toArray(), [], undefined)
   const topics = useLiveQuery(() => db.resources.where('kind').equals('topic').toArray(), [], undefined)
@@ -38,16 +42,26 @@ export function HomePage() {
 
   return (
     <div className="page">
+      {/* 品牌横幅（docs/36 §2.4）：玩家视角一句话 + 快捷入口 */}
       <section className="hero">
-        <h1>音乐练习 · UGC 平台原型</h1>
+        <h1>音乐练习</h1>
         <p>
-          关卡 = 组件 + 逻辑规则 + 题目数据，全部由 JSON 定义。判定、计分、反馈都写在关卡文档的{' '}
-          <code>logic</code> 图程序里（事件→节点→动作，可编辑节点图与伪代码）。内容存放在浏览器本地资源库，可在
-          <a href="#/library"> 资源库 </a>中导入导出。
+          听音记谱、节奏训练、校音与乐理关卡——由社区创作，打开即玩。全部内容存放在你的浏览器本地资源库，
+          也可在<a href="#/library">资源库</a>导入分享的关卡包。
         </p>
+        <div className="hero-actions">
+          <a className="hero-btn" href="#/library">
+            📚 浏览资源库
+          </a>
+          <a className="hero-btn hero-btn-ghost" href="#/docs">
+            📖 新手指南
+          </a>
+        </div>
       </section>
 
-      <h2>系列</h2>
+      <h2>
+        系列 <CountChip n={series.length} />
+      </h2>
       {series.length === 0 ? (
         <p className="muted">还没有系列。可在<a href="#/library">资源库</a>导入系列包（zip）。</p>
       ) : (
@@ -56,17 +70,28 @@ export function HomePage() {
             const doc = rec.doc as { meta?: { title?: unknown; description?: unknown } }
             const topicCount = ((doc as { content?: { topicIds?: unknown[] } }).content?.topicIds ?? []).length
             return (
-              <a key={rec.id} className="card" href={`#/series/${rec.id}`}>
-                <div className="card-kind">📚 系列 · {topicCount} 个专题</div>
+              <a key={rec.id} className="card series-card" href={`#/series/${rec.id}`}>
+                <span className="series-glyph" aria-hidden>
+                  📚
+                </span>
+                <div className="card-kind">系列 · {topicCount} 个专题</div>
                 <h3>{String(doc.meta?.title ?? rec.title)}</h3>
                 <p>{String(doc.meta?.description ?? '')}</p>
+                <div className="card-meta">
+                  <span>进入系列</span>
+                  <span className="card-more" aria-hidden>
+                    →
+                  </span>
+                </div>
               </a>
             )
           })}
         </div>
       )}
 
-      <h2>独立关卡</h2>
+      <h2>
+        独立关卡 <CountChip n={independent.length} />
+      </h2>
       <ErrorBoundary>
         {independent.length === 0 ? (
           <p className="muted">没有独立关卡——所有关卡都已归入系列。</p>
@@ -77,18 +102,22 @@ export function HomePage() {
               const doc = readLevelDoc(rec)
               const meta = doc?.meta as { title?: unknown; description?: unknown } | undefined
               return (
-                <a key={rec.id} className="card" href={`#/level/${rec.id}`}>
+                <a key={rec.id} className="card level-card" href={`#/level/${rec.id}`}>
                   <div className="card-kind">
-                    关卡 · {diffStars(doc)} {rec.builtIn ? '' : '· 导入'}
+                    <span className="level-stars" title={`难度 ${diffStars(doc)}`}>
+                      {diffStars(doc)}
+                    </span>
+                    {rec.builtIn ? <span className="badge">内置</span> : <span className="badge">导入</span>}
                   </div>
-                  <h3>
-                    {String(meta?.title ?? rec.title)} <ProgressBadge levelId={rec.id} progress={progress} />
-                  </h3>
+                  <h3>{String(meta?.title ?? rec.title)}</h3>
                   <p>{String(meta?.description ?? '')}</p>
                   <div className="card-meta">
-                    {doc
-                      ? `${doc.content.components.length} 个组件 · ${doc.content.table.rows.length} 道题`
-                      : '文档格式无法解析——可在资源库导出排查，或删除后重新导入'}
+                    <span>
+                      {doc
+                        ? `${doc.content.components.length} 个组件 · ${doc.content.table.rows.length} 道题`
+                        : '文档格式无法解析——可在资源库导出排查'}
+                    </span>
+                    <ProgressBadge levelId={rec.id} progress={progress} />
                   </div>
                 </a>
               )
@@ -97,26 +126,22 @@ export function HomePage() {
         )}
       </ErrorBoundary>
 
-      <h2>风险验证 Demo</h2>
+      <h2>工具</h2>
       <div className="cards">
         <a className="card" href="#/tuner">
           <div className="card-kind">技术验证</div>
-          <h3>校音器（频率计）</h3>
-          <p>麦克风输入 → McLeod 音高检测 → 音名与音分偏差实时显示（pitchy）。</p>
+          <h3>🎯 校音器</h3>
+          <p>麦克风输入 → 音名与音分偏差实时显示。</p>
         </a>
         <a className="card" href="#/rhythm">
           <div className="card-kind">技术验证</div>
-          <h3>节奏判定</h3>
-          <p>WebAudio 时钟调度节拍器 + tap 采集 + 容差判定（rhythmMatch 纯函数）。</p>
+          <h3>🥁 节奏判定</h3>
+          <p>跟随节拍敲击，按相对起拍的偏差打分。</p>
         </a>
-      </div>
-
-      <h2>设置</h2>
-      <div className="cards">
         <a className="card" href="#/settings">
-          <div className="card-kind">⚙ 设置</div>
-          <h3>AI 接入设置</h3>
-          <p>配置 DeepSeek / GLM / ChatGPT 等任意供应商的 API Key，为编辑器的 AI 辅助功能接入模型。Key 仅存本机。</p>
+          <div className="card-kind">设置</div>
+          <h3>⚙️ AI 接入</h3>
+          <p>为编辑器的 AI 辅助功能配置任意供应商的 API Key（仅存本机）。</p>
         </a>
       </div>
     </div>

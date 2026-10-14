@@ -101,11 +101,15 @@ export function SettingsPage() {
 
   return (
     <div className="page settings-page">
-      <h1>设置</h1>
-      <p className="muted">
-        配置 AI 接入，供编辑器的 AI 辅助功能（伪代码生成、节点图解释、题目与关卡生成）使用。
-        API Key 仅保存在本机浏览器的 localStorage 中，不会上传到任何服务器；请勿在共享电脑上保存 Key。
-      </p>
+      <header className="page-head">
+        <div>
+          <h1>设置</h1>
+          <p className="page-sub">
+            配置 AI 接入，供编辑器的 AI 辅助功能（伪代码生成、节点图解释、题目与关卡生成）使用。
+            API Key 仅保存在本机浏览器的 localStorage 中，不会上传到任何服务器；请勿在共享电脑上保存 Key。
+          </p>
+        </div>
+      </header>
 
       <h2>账户</h2>
       <AccountSection />

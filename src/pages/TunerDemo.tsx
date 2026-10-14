@@ -102,9 +102,13 @@ export function TunerDemo() {
   const inTune = Math.abs(cents) <= 5
 
   return (
-    <div className="page">
-      <h1>校音器（频率计）Demo</h1>
-      <p className="muted">对麦克风哼一个音或弹一根弦；绿色 = 音分偏差 ≤ 5。逻辑规则可用「持续稳定 N 毫秒」判定通过。</p>
+    <div className="page tool-page">
+      <header className="page-head">
+        <div>
+          <h1>校音器</h1>
+          <p className="page-sub">对麦克风哼一个音或弹一根弦；绿色 = 音分偏差 ≤ 5。逻辑规则可用「持续稳定 N 毫秒」判定通过。</p>
+        </div>
+      </header>
 
       {!running ? (
         <button type="button" className="primary" onClick={() => void start()}>

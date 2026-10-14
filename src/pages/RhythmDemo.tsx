@@ -107,11 +107,15 @@ export function RhythmDemo() {
   }, [registerTap])
 
   return (
-    <div className="page">
-      <h1>节奏判定 Demo</h1>
-      <p className="muted">
-        {BPM} BPM · {BEATS} 拍。空格键或点击大圆盘打拍子；预备拍后跟随节拍。判定容差与延迟校准均可调。
-      </p>
+    <div className="page tool-page">
+      <header className="page-head">
+        <div>
+          <h1>节奏判定</h1>
+          <p className="page-sub">
+            {BPM} BPM · {BEATS} 拍。空格键或点击大圆盘打拍子；预备拍后跟随节拍。判定容差与延迟校准均可调。
+          </p>
+        </div>
+      </header>
 
       <div className="rhythm-controls">
         <label>

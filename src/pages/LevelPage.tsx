@@ -66,27 +66,31 @@ export function LevelPage({ id }: { id: string }) {
   const doc = load.doc as unknown as LevelDoc
 
   return (
-    <div className="page">
-      <div className="breadcrumb">
-        <a href="#/">← 返回首页</a> · <a href={`#/graph/${id}`}>🧭 逻辑图谱</a>
-      </div>
-      {load.lintWarnings.length > 0 && (
-        <details className="json-view">
-          <summary className="tone-error">⚠ 逻辑 lint 告警（{load.lintWarnings.length}）</summary>
-          <ul className="muted">
-            {load.lintWarnings.map((w, i) => (
-              <li key={i}>{w}</li>
-            ))}
-          </ul>
+    <div className="page level-page">
+      <div className="theater">
+        <div className="theater-top">
+          <a href="#/">← 返回首页</a>
+          <b className="theater-title">{String((doc.meta as { title?: unknown })?.title ?? '关卡')}</b>
+          <a href={`#/graph/${id}`}>🧭 逻辑图谱</a>
+        </div>
+        {load.lintWarnings.length > 0 && (
+          <details className="json-view theater-note">
+            <summary className="tone-error">⚠ 逻辑 lint 告警（{load.lintWarnings.length}）</summary>
+            <ul className="muted">
+              {load.lintWarnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+        <ErrorBoundary>
+          <LevelRunner doc={doc} levelId={id} onFinished={handleFinished} />
+        </ErrorBoundary>
+        <details className="json-view theater-note">
+          <summary>查看本关卡的 JSON 定义（内容即关卡）</summary>
+          <pre>{JSON.stringify(doc, null, 2)}</pre>
         </details>
-      )}
-      <ErrorBoundary>
-        <LevelRunner doc={doc} levelId={id} onFinished={handleFinished} />
-      </ErrorBoundary>
-      <details className="json-view">
-        <summary>查看本关卡的 JSON 定义（内容即关卡）</summary>
-        <pre>{JSON.stringify(doc, null, 2)}</pre>
-      </details>
+      </div>
     </div>
   )
 }

@@ -134,45 +134,45 @@ export function LibraryPage() {
 
   return (
     <div className="page">
-      <h1>资源库</h1>
-      <p className="muted">
-        系列 = 文件夹：点开即可浏览其中的专题与关卡。关卡可直接编辑（内置示例的修改会自动另存为你的副本）。
-        支持 <code>.json</code> 单文档与 <code>.zip</code> 系列包导入。
-      </p>
-
-      <div className="library-actions">
-        <button type="button" className="primary" onClick={() => void handleNew()}>
-          ✏ 新建关卡
-        </button>
-        <button
-          type="button"
-          className={`primary${aiFormOpen ? ' active' : ''}`}
-          onClick={() => setAiFormOpen((v) => !v)}
-          title="描述需求，AI 在编辑器里以 agent 模式从零搭建关卡"
-        >
-          🤖 AI 新建关卡
-        </button>
-        <button type="button" className="primary" disabled={importing} onClick={() => fileInput.current?.click()}>
-          {importing ? '导入中…' : '⬆ 导入（.json / .zip）'}
-        </button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".json,.zip"
-          multiple
-          hidden
-          onChange={(e) => void handleImport(e.target.files)}
-        />
-        <input
-          className="library-search"
-          value={query}
-          placeholder="🔍 按标题搜索…"
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <a className="button-like" href="#/">
-          ← 返回首页
-        </a>
-      </div>
+      <header className="page-head">
+        <div>
+          <h1>资源库</h1>
+          <p className="page-sub">
+            系列 = 文件夹：点开即可浏览其中的专题与关卡。关卡可直接编辑（内置示例的修改会自动另存为你的副本）。
+            支持 <code>.json</code> 单文档与 <code>.zip</code> 系列包导入。
+          </p>
+        </div>
+        <div className="page-actions">
+          <input
+            className="library-search"
+            value={query}
+            placeholder="🔍 按标题搜索…"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <button type="button" className="primary" onClick={() => void handleNew()}>
+            ✏ 新建关卡
+          </button>
+          <button
+            type="button"
+            className={aiFormOpen ? 'primary' : ''}
+            onClick={() => setAiFormOpen((v) => !v)}
+            title="描述需求，AI 在编辑器里以 agent 模式从零搭建关卡"
+          >
+            🤖 AI 新建关卡
+          </button>
+          <button type="button" disabled={importing} onClick={() => fileInput.current?.click()}>
+            {importing ? '导入中…' : '⬆ 导入'}
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".json,.zip"
+            multiple
+            hidden
+            onChange={(e) => void handleImport(e.target.files)}
+          />
+        </div>
+      </header>
 
       {aiFormOpen && (
         <div className="ai-new-form">
