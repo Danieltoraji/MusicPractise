@@ -5486,3 +5486,141 @@ a.lib-title:hover {
     gap: 10px;
   }
 }
+
+/* ---------- 预设皮肤（docs/35 §5）：:root[data-skin=…] 整组覆盖 token ---------- */
+
+/* 皮肤一 · 音乐梦旅（dream，默认）：现有靛蓝浅色系优化——细腻冷灰渐变底、
+   软底/阴影微调。字体不变。 */
+:root[data-skin='dream'] {
+  color-scheme: light;
+  --app-bg: linear-gradient(180deg, #f7f8fd 0%, #f1f3fa 100%);
+  --panel: #ffffff;
+  --panel-2: #f8f9fd;
+  --soft: #eef0f7;
+  --line: #e3e7ef;
+  --ink: #1d2330;
+  --muted: #667085;
+  --accent: #4f46e5;
+  --accent-ink: #ffffff;
+  --accent-soft: #eef1ff;
+  --accent-soft-strong: #dfe3ff;
+  --accent-soft-2: #fdf3ff;
+  --ok: #16a34a;
+  --ok-soft: #f0fdf4;
+  --ok-soft-strong: #dcfce7;
+  --bad: #dc2626;
+  --bad-soft: #fef2f2;
+  --bad-soft-strong: #fde3e3;
+  --warn: #d97706;
+  --warn-soft: #fffbeb;
+  --warn-soft-strong: #fef3c7;
+  --warn-ink: #92400e;
+  --warn-ink-2: #b45309;
+  --shadow-rgb: 30, 36, 48;
+  --code-bg: #14181f;
+  --code-ink: #d7dce5;
+  --paper: #fcfcff;
+}
+
+/* 皮肤二 · 紫色清春（violet）：白底为主，紫色与多彩点缀（清华视觉色板气质，
+   无任何校徽元素）；字体以微软雅黑为主。 */
+:root[data-skin='violet'] {
+  color-scheme: light;
+  --app-bg: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f7f4fb;
+  --soft: #f1ecf8;
+  --line: #e8e2f0;
+  --ink: #2b2333;
+  --muted: #7a6f8a;
+  --accent: #6d28d9;
+  --accent-ink: #ffffff;
+  --accent-soft: #f5f0fc;
+  --accent-soft-strong: #eadcfb;
+  --accent-soft-2: #fdf0fa;
+  --ok: #15803d;
+  --ok-soft: #f2fdf5;
+  --ok-soft-strong: #d9f7e2;
+  --bad: #dc2626;
+  --bad-soft: #fef2f2;
+  --bad-soft-strong: #fde3e3;
+  --warn: #b45309;
+  --warn-soft: #fffaf0;
+  --warn-soft-strong: #fdf0cd;
+  --warn-ink: #92400e;
+  --warn-ink-2: #b45309;
+  --warn-banner-bg: #fdf6e3;
+  --warn-banner-ink: #9a6700;
+  --warn-banner-line: rgba(180, 83, 9, 0.35);
+  --shadow-rgb: 60, 45, 90;
+  --code-bg: #241b33;
+  --code-ink: #e8e2f5;
+  --paper: #fdfdff;
+  --font-ui: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+}
+/* 点睛：主按钮与激活导航走紫渐变（紫 → 清华紫的过渡） */
+:root[data-skin='violet'] button.primary {
+  background: linear-gradient(135deg, #7c3aed, #660874);
+}
+:root[data-skin='violet'] .topbar nav a.active {
+  border-bottom-color: #9d3ff0;
+}
+
+/* 皮肤三 · 堇庭流华（liuhua）：深蓝底，冰蓝提亮，金色点缀关键处；
+   正文默认字体栈，标题等文字量少的关键处用汉仪文黑85W（缺字体自动回退）。 */
+:root[data-skin='liuhua'] {
+  color-scheme: dark;
+  --app-bg: linear-gradient(170deg, #121c3c 0%, #0d1530 60%, #0b1228 100%);
+  --panel: #16234a;
+  --panel-2: #1c2b57;
+  --soft: #22315f;
+  --line: #2b3c6e;
+  --ink: #e3ecff;
+  --muted: #93a6cf;
+  --accent: #7dd3fc;
+  --accent-ink: #0a2540;
+  --accent-soft: rgba(125, 211, 252, 0.12);
+  --accent-soft-strong: rgba(125, 211, 252, 0.24);
+  --accent-soft-2: rgba(232, 196, 106, 0.12);
+  --ok: #4ade80;
+  --ok-soft: rgba(74, 222, 128, 0.1);
+  --ok-soft-strong: rgba(74, 222, 128, 0.24);
+  --bad: #f87171;
+  --bad-soft: rgba(248, 113, 113, 0.1);
+  --bad-soft-strong: rgba(248, 113, 113, 0.26);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.1);
+  --warn-soft-strong: rgba(251, 191, 36, 0.24);
+  --warn-ink: #fcd34d;
+  --warn-ink-2: #fbbf24;
+  --warn-banner-bg: rgba(251, 191, 36, 0.12);
+  --warn-banner-ink: #fcd34d;
+  --warn-banner-line: rgba(251, 191, 36, 0.4);
+  --shadow-rgb: 0, 0, 0;
+  --code-bg: #0b1228;
+  --code-ink: #c7d6f5;
+  --paper: #fcfcff;
+  --font-display: '汉仪文黑85W', 'HYWenHei 85W', 'HYWenHei-85W', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+}
+/* 点睛：品牌与激活导航金色；主按钮金渐变（深蓝上最亮的关键件） */
+:root[data-skin='liuhua'] .brand {
+  color: #e8c46a;
+}
+:root[data-skin='liuhua'] .brand small {
+  color: #93a6cf;
+}
+:root[data-skin='liuhua'] .topbar {
+  border-bottom-color: rgba(232, 196, 106, 0.35);
+}
+:root[data-skin='liuhua'] .topbar nav a.active {
+  color: #e8c46a;
+  border-bottom-color: #e8c46a;
+}
+:root[data-skin='liuhua'] button.primary {
+  background: linear-gradient(135deg, #e8c46a, #c99a2e);
+  color: #1c1503;
+}
+:root[data-skin='liuhua'] .docs-article h1 {
+  border-bottom-color: rgba(232, 196, 106, 0.35);
+}
