@@ -7,6 +7,7 @@ import { SeriesPage } from './pages/SeriesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ensureSeeded } from './library/db'
 import { getAccountSnapshot, probeAccount, subscribeAccount } from './account/store'
+import { getSkinSnapshot, initSkin, subscribeSkin } from './skin/store'
 
 /**
  * 路由级懒加载（批次11 Bundle 瘦身）：重组件只随路由按需加载，控制主包体积。
@@ -18,6 +19,7 @@ const TunerDemo = lazy(() => import('./pages/TunerDemo').then((m) => ({ default:
 const RhythmDemo = lazy(() => import('./pages/RhythmDemo').then((m) => ({ default: m.RhythmDemo })))
 const AdminPage = lazy(() => import('./admin/AdminPage').then((m) => ({ default: m.AdminPage })))
 const DocsPage = lazy(() => import('./pages/DocsPage').then((m) => ({ default: m.DocsPage })))
+const SkinCenterPage = lazy(() => import('./skin/SkinCenterPage').then((m) => ({ default: m.SkinCenterPage })))
 
 const PageLoading = (
   <p className="muted" style={{ padding: 24 }}>
@@ -41,6 +43,12 @@ export default function App() {
   const [seedError, setSeedError] = useState('')
   const [seedAttempt, setSeedAttempt] = useState(0)
   const account = useSyncExternalStore(subscribeAccount, getAccountSnapshot)
+  const skin = useSyncExternalStore(subscribeSkin, getSkinSnapshot)
+
+  // 皮肤装载（docs/35）：读偏好 → 解析本地资产 → data-skin/--user-* 变量；失败不阻塞首屏
+  useEffect(() => {
+    void initSkin()
+  }, [])
 
   // 首次启动把内置示例关卡入库；此后一切内容只从库读取
   useEffect(() => {
@@ -107,6 +115,12 @@ export default function App() {
         <DocsPage subId={hash.slice('#/docs/'.length)} />
       </Suspense>
     )
+  } else if (hash === '#/skins') {
+    page = (
+      <Suspense fallback={PageLoading}>
+        <SkinCenterPage />
+      </Suspense>
+    )
   } else if (hash === '#/settings') {
     page = <SettingsPage />
   } else if (hash === '#/admin') {
@@ -131,8 +145,14 @@ export default function App() {
     page = <HomePage />
   }
 
+  const isHome = hash === '' || hash === '#/' || hash === '#'
+
   return (
     <div className="app">
+      {/* 背景图/水印层（docs/35 §2）：fixed + pointer-events:none，z 序在 body 背景上、内容下，
+          不拦截任何交互；「仅首页」范围随路由显隐。图片与透明度由皮肤变量驱动 */}
+      {skin.rt.bgUrl && (skin.bg.scope === 'all' || isHome) && <div className="user-bg" aria-hidden="true" />}
+      {skin.rt.wmUrl && <div className="watermark" aria-hidden="true" />}
       <header className="topbar">
         <a className="brand" href="#/">
           🎵 音乐练习 <small>UGC POC</small>
@@ -146,6 +166,9 @@ export default function App() {
           </a>
           <a href="#/docs" className={hash.startsWith('#/docs') ? 'active' : ''}>
             文档
+          </a>
+          <a href="#/skins" className={hash === '#/skins' ? 'active' : ''} title="皮肤中心">
+            🎨 皮肤
           </a>
           <a href="#/tuner" className={hash === '#/tuner' ? 'active' : ''}>
             校音器

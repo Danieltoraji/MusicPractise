@@ -5205,3 +5205,284 @@ a.lib-title:hover {
     max-width: 60%;
   }
 }
+
+/* ---------- 皮肤系统（docs/35 §2-4）：背景图层 / 水印层 / 皮肤中心 ---------- */
+
+/* 背景图层：fixed 全视口，z:-1 落在 body 背景之上、内容之下；变量由 skin/store 写入 */
+.user-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--user-bg-image, none);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: var(--user-bg-opacity, 1);
+}
+/* 水印层：与背景层同 z 序，DOM 靠后因此叠在背景图上方；位置/平铺/渐隐全由变量折算 */
+.watermark {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--wm-image, none);
+  background-repeat: var(--wm-repeat, no-repeat);
+  background-position: var(--wm-position, center);
+  background-size: var(--wm-size, auto);
+  opacity: var(--wm-opacity, 1);
+  -webkit-mask-image: var(--wm-mask, none);
+  mask-image: var(--wm-mask, none);
+}
+
+/* 皮肤中心页 */
+.skin-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.skin-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.skin-card:hover {
+  border-color: var(--accent);
+}
+.skin-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+/* 迷你预览：每皮肤一组写死色值（即该皮肤的缩略真相，不随当前皮肤变化） */
+.skin-preview {
+  display: flex;
+  height: 76px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.skin-preview-side {
+  width: 22px;
+  flex: none;
+}
+.skin-preview-main {
+  flex: 1;
+  position: relative;
+  padding: 8px 10px;
+}
+.skin-preview-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+}
+.skin-preview-line {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  margin-top: 6px;
+  opacity: 0.55;
+}
+.skin-preview-line.short {
+  width: 60%;
+}
+.skin-preview-chip {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  width: 26px;
+  height: 10px;
+  border-radius: 5px;
+}
+.skin-preview-dream {
+  background: #f6f7fb;
+}
+.skin-preview-dream .skin-preview-side {
+  background: #eef2ff;
+}
+.skin-preview-dream .skin-preview-title {
+  color: #1e2430;
+}
+.skin-preview-dream .skin-preview-line {
+  background: #d7dce8;
+}
+.skin-preview-dream .skin-preview-chip {
+  background: #4f46e5;
+}
+.skin-preview-violet {
+  background: #ffffff;
+}
+.skin-preview-violet .skin-preview-side {
+  background: #f3ecfb;
+}
+.skin-preview-violet .skin-preview-title {
+  color: #2b2333;
+}
+.skin-preview-violet .skin-preview-line {
+  background: #e6ddf2;
+}
+.skin-preview-violet .skin-preview-chip {
+  background: linear-gradient(90deg, #660874, #9d3ff0);
+}
+.skin-preview-liuhua {
+  background: linear-gradient(160deg, #131d3d, #0d1530);
+}
+.skin-preview-liuhua .skin-preview-side {
+  background: #182650;
+}
+.skin-preview-liuhua .skin-preview-title {
+  color: #e3ecff;
+}
+.skin-preview-liuhua .skin-preview-line {
+  background: #2a3a6b;
+}
+.skin-preview-liuhua .skin-preview-chip {
+  background: linear-gradient(90deg, #7dd3fc, #e8c46a);
+}
+.skin-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.skin-card-current {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.skin-card-desc {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.skin-card-font {
+  font-size: 11.5px;
+  color: var(--muted);
+  border-top: 1px dashed var(--line);
+  padding-top: 6px;
+}
+.skin-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 760px;
+}
+.skin-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.skin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 140px;
+}
+.skin-field-grow {
+  flex: 1;
+  min-width: 180px;
+}
+.skin-field select,
+.skin-field input[type='range'],
+.skin-custom-row input {
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.skin-field select {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-2);
+}
+.skin-custom-row {
+  display: flex;
+  gap: 8px;
+}
+.skin-custom-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-2);
+}
+.skin-upload input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.skin-thumb {
+  width: 96px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.skin-fonts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.skin-font-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 12.5px;
+  border-radius: 999px;
+  padding: 3px 6px 3px 10px;
+}
+.skin-font-chip button {
+  border: none;
+  background: none;
+  color: var(--muted);
+  padding: 0 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.skin-font-chip button:hover {
+  color: var(--bad);
+}
+.skin-note,
+.skin-note-top {
+  font-size: 12.5px;
+  margin: 0;
+}
+.skin-notice {
+  color: var(--accent);
+  font-size: 13.5px;
+}
+
+@media (max-width: 720px) {
+  .skin-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+}
