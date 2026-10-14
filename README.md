@@ -37,10 +37,13 @@ npm run build            # tsc strict + Vite 生产构建
 
 创建管理员（一次性，脚本本地计算哈希、不经网络；**昵称建议 ASCII**）：
 
-```bash
-node scripts/seed-admin.ts --nickname=admin --password=<密码>   # 输出 INSERT 语句
-npx wrangler d1 execute musicpractise-db --remote --command "<输出整句>"
+```powershell
+node scripts/seed-admin.ts --nickname=admin --password=<你的密码> --out=seed-admin.sql
+npx wrangler d1 execute musicpractise-db --remote --file=seed-admin.sql
+Remove-Item seed-admin.sql   # 内含密码哈希，执行后删除
 ```
+
+（`--out` 文件方式绕开 PowerShell/Git Bash 的引号转义差异，直接 `--command` 粘贴长 SQL 会踩坑。）
 
 管理员登录后经设置页「管理后台 →」进入 `#/admin`（用户管理/云盘关卡管理/审计日志）。
 

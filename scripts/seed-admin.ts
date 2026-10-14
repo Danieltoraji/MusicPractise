@@ -1,11 +1,12 @@
 /**
  * 管理员种子脚本（docs/31 §6.7）：本地计算 PBKDF2 哈希（直接复用 worker/password.ts，
- * 与服务端同一实现），输出可粘贴执行的 INSERT——脚本不经网络、不落盘任何凭据。
+ * 与服务端同一实现），生成 INSERT——脚本不经网络。密码哈希落盘文件用后请删除。
  *
- * 用法一（非交互，推荐自动化/管道场景）：
- *   node scripts/seed-admin.ts --nickname=站长 --password=admin-pass-123
+ * 用法一（推荐，绕开各 shell 引号差异）：
+ *   node scripts/seed-admin.ts --nickname=admin --password=<密码> --out=seed-admin.sql
+ *   npx wrangler d1 execute musicpractise-db --remote --file=seed-admin.sql
  * 用法二（交互，TTY 下自动启用）：node scripts/seed-admin.ts
- * 然后：npx wrangler d1 execute musicpractise-db --remote --command "<输出整句>"
+ *   （输出 --command 形式；PowerShell/Git Bash 下内层引号易出问题，建议用法一）
  *
  * 注意：Node ≥24 原生运行 TS；导入链全部为可擦除语法。
  */
@@ -67,8 +68,22 @@ async function main(): Promise<void> {
   const id = newUserId()
   const pwHash = await hashPassword(password.value)
   const now = Date.now()
-  console.log('\n在仓库根目录执行：\n')
-  console.log(`npx wrangler d1 execute musicpractise-db --remote --command "${buildAdminInsert({ id, nickname: nickname.value, pwHash, now })}"`)
+  const insert = buildAdminInsert({ id, nickname: nickname.value, pwHash, now })
+
+  // --out=<文件>：SQL 落盘 + --file 执行——绕开各 shell 的引号转义差异
+  // （Git Bash 会损坏中文/内层引号；PowerShell 双引号里 $100000 被当变量展开，均实测踩坑）
+  const argOut = process.argv.find((a) => a.startsWith('--out='))
+  if (argOut !== undefined) {
+    const file = argOut.slice('--out='.length)
+    const { writeFile } = await import('node:fs/promises')
+    await writeFile(file, insert + '\n', 'utf8')
+    console.log(`已写入 ${file}（内含密码哈希，执行后请删除该文件）。在仓库根目录执行：\n`)
+    console.log(`npx wrangler d1 execute musicpractise-db --remote --file=${file}`)
+    return
+  }
+
+  console.log('\n在仓库根目录执行（PowerShell 下建议改用 --out=<文件> + --file 方式，避免引号问题）：\n')
+  console.log(`npx wrangler d1 execute musicpractise-db --remote --command "${insert}"`)
 }
 
 // 仅直接运行本文件时执行；被测试/其他模块导入时无副作用
