@@ -1008,7 +1008,10 @@ a.level-row:hover {
   position: relative;
   width: 100%;
   height: 560px;
-  background: var(--panel) repeating-linear-gradient(0deg, transparent, transparent 19px, #f0f1f7 19px, #f0f1f7 20px),
+  /* background 简写不允许在非末层带颜色（原写法整条声明被浏览器丢弃，画布一直透明），
+     拆成 color + image 才能真正铺出白底网格 */
+  background-color: var(--panel);
+  background-image: repeating-linear-gradient(0deg, transparent, transparent 19px, #f0f1f7 19px, #f0f1f7 20px),
     repeating-linear-gradient(90deg, transparent, transparent 19px, #f0f1f7 19px, #f0f1f7 20px);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -5623,4 +5626,35 @@ a.lib-title:hover {
 }
 :root[data-skin='liuhua'] .docs-article h1 {
   border-bottom-color: rgba(232, 196, 106, 0.35);
+}
+
+/* ---------- 内容层浅色岛（docs/35 验证轮修复）---------- */
+/* 关卡舞台与编辑器画布里的组件是「内容」而非镶边：不随皮肤翻转。
+   内容 token 在此钉回浅色原值——任意皮肤（含深色）下纸面与组件可读性不变，
+   同时让编辑器画布保持原工作台观感（编辑器不在换肤范围，docs/35 §1）。 */
+.stage-canvas,
+.editor-canvas {
+  --panel: #ffffff;
+  --panel-2: #fafbfe;
+  --soft: #eef0f7;
+  --line: #e4e7ee;
+  --ink: #1e2430;
+  --muted: #667085;
+  --accent: #4f46e5;
+  --accent-ink: #ffffff;
+  --ok: #16a34a;
+  --bad: #dc2626;
+  --warn: #d97706;
+  --paper: #fcfcff;
+}
+/* 舞台给纸面底（挂在视口上：整块舞台连续铺满，横向滚动区也是纸面） */
+.stage-viewport {
+  background: var(--paper);
+}
+/* 表单控件随主题强调色（range/checkbox/radio 的 UA 绘制色） */
+input[type='range'],
+input[type='checkbox'],
+input[type='radio'],
+progress {
+  accent-color: var(--accent);
 }

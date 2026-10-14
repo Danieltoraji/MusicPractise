@@ -60,7 +60,8 @@ export async function initSkin(): Promise<void> {
 export function updatePrefs(patch: Partial<Omit<SkinSnapshot, 'rt'>>): void {
   const { rt: _rt, ...rest } = patch as Partial<SkinSnapshot>
   snapshot = { ...normalizePrefs({ ...snapshot, ...rest }), rt: snapshot.rt }
-  savePrefs(snapshot)
+  // 落盘前归一化：剥离 rt 运行时字段，存储里只有元数据
+  savePrefs(normalizePrefs(snapshot))
   emit()
   void applySkin()
 }
