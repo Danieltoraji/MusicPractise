@@ -6221,3 +6221,9 @@ progress {
   color: var(--accent);
   box-shadow: var(--shadow-1);
 }
+.theater .level-runner {
+  max-width: 1020px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
