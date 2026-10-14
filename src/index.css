@@ -9,6 +9,40 @@
   --ok: #16a34a;
   --bad: #dc2626;
   --warn: #d97706;
+  /* ---- 语义扩展层（docs/35 §2）：默认值 = 现视觉，皮肤经 :root[data-skin=…] 整组覆盖 ---- */
+  /* body 背景：纯色或渐变（token 喂给 background 简写，渐变原生支持） */
+  --app-bg: var(--bg);
+  /* 次级面板面：表头 / 按钮面 / 输入底 */
+  --panel-2: #fafbfe;
+  /* 中性软填充：标签 / 徽章 / 行内代码 */
+  --soft: #eef0f7;
+  /* 强调软底及其 hover 加深态 */
+  --accent-soft-2: #fdf4ff;
+  --accent-soft: var(--accent-soft);
+  --accent-soft-strong: var(--accent-soft-strong);
+  /* 状态软底（深浅两档）与警示文字色 */
+  --ok-soft: #f0fdf4;
+  --ok-soft-strong: #dcfce7;
+  --bad-soft: #fef2f2;
+  --bad-soft-strong: #fde3e3;
+  --warn-soft: #fffbeb;
+  --warn-soft-strong: #fef3c7;
+  --warn-ink: #92400e;
+  --warn-ink-2: #b45309;
+  --warn-banner-bg: var(--warn-banner-bg);
+  --warn-banner-ink: var(--warn-banner-ink);
+  --warn-banner-line: rgba(212, 167, 44, 0.4);
+  /* 代码块 */
+  --code-bg: #14181f;
+  --code-ink: #d7dce5;
+  /* 关卡舞台纸面（内容层：乐谱可读性优先，皮肤预设不翻转） */
+  --paper: #fcfcff;
+  /* 阴影基色（rgb 三元组，供 rgba(var(--shadow-rgb), a) 组装） */
+  --shadow-rgb: 30, 36, 48;
+  /* 字体栈：界面 / 标题 / 等宽（皮肤可换；用户经 --user-font-* 覆盖） */
+  --font-ui: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, 'Courier New', monospace;
 }
 
 * {
@@ -21,10 +55,17 @@ body,
   min-height: 100vh;
 }
 body {
-  background: var(--bg);
+  background: var(--app-bg);
   color: var(--ink);
-  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family: var(--user-font-ui, var(--font-ui));
   font-size: 15px;
+}
+/* 标题/品牌走展示字体槽（皮肤三的分甲处：汉仪文黑85W 等标题字体只落在这里） */
+h1,
+h2,
+h3,
+.brand {
+  font-family: var(--user-font-display, var(--font-display));
 }
 
 .app {
@@ -95,7 +136,7 @@ h2 {
   color: var(--muted);
 }
 code {
-  background: #eef0f7;
+  background: var(--soft);
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 13px;
@@ -105,7 +146,7 @@ a {
 }
 
 .hero {
-  background: linear-gradient(135deg, #eef2ff, #fdf4ff);
+  background: linear-gradient(135deg, var(--accent-soft), var(--accent-soft-2));
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 20px 22px;
@@ -132,7 +173,7 @@ a {
   transition: box-shadow 0.15s, transform 0.15s;
 }
 .card:hover {
-  box-shadow: 0 6px 24px rgba(30, 36, 48, 0.09);
+  box-shadow: 0 6px 24px rgba(var(--shadow-rgb), 0.09);
   transform: translateY(-1px);
 }
 .card h3 {
@@ -162,7 +203,7 @@ a {
   margin-bottom: 8px;
 }
 .tag {
-  background: #eef0f7;
+  background: var(--soft);
   color: var(--muted);
   font-size: 12px;
   border-radius: 999px;
@@ -238,7 +279,7 @@ a {
 .comp-staff {
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fcfcff;
+  background: var(--paper);
   overflow: hidden;
 }
 .comp-button {
@@ -303,7 +344,7 @@ a {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #eef0f7;
+  background: var(--soft);
   color: var(--muted);
   display: inline-flex;
   align-items: center;
@@ -352,8 +393,8 @@ button.link {
   color: var(--muted);
 }
 .json-view pre {
-  background: #14181f;
-  color: #d7dce5;
+  background: var(--code-bg);
+  color: var(--code-ink);
   border-radius: 10px;
   padding: 16px;
   overflow: auto;
@@ -385,7 +426,7 @@ button.link {
   position: relative;
   height: 12px;
   border-radius: 999px;
-  background: linear-gradient(to right, #fee2e2, #dcfce7 42%, 58%, #fee2e2);
+  background: linear-gradient(to right, var(--bad-soft-strong), var(--ok-soft-strong) 42%, 58%, var(--bad-soft-strong));
   border: 1px solid var(--line);
 }
 .cents-tick {
@@ -456,7 +497,7 @@ button.link {
 .library-table th {
   color: var(--muted);
   font-weight: 600;
-  background: #fafbfe;
+  background: var(--panel-2);
 }
 .library-table tbody tr:last-child td {
   border-bottom: none;
@@ -521,7 +562,7 @@ button.link {
   transition: box-shadow 0.15s;
 }
 a.level-row:hover {
-  box-shadow: 0 4px 16px rgba(30, 36, 48, 0.08);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.08);
 }
 .level-row .level-title {
   font-weight: 600;
@@ -539,7 +580,7 @@ a.level-row:hover {
 }
 .badge {
   display: inline-block;
-  background: #eef0f7;
+  background: var(--soft);
   color: var(--muted);
   font-size: 12px;
   border-radius: 999px;
@@ -547,7 +588,7 @@ a.level-row:hover {
   font-weight: 600;
 }
 .badge.pass {
-  background: #dcfce7;
+  background: var(--ok-soft-strong);
   color: var(--ok);
 }
 
@@ -712,7 +753,7 @@ a.level-row:hover {
   word-break: break-word;
 }
 .ai-msg-user {
-  background: #eef2ff;
+  background: var(--accent-soft);
   border-radius: 10px;
   padding: 8px 10px;
 }
@@ -722,8 +763,8 @@ a.level-row:hover {
   font-size: 12.5px;
 }
 .ai-msg-tool pre {
-  background: #14181f;
-  color: #d7dce5;
+  background: var(--code-bg);
+  color: var(--code-ink);
   border-radius: 8px;
   padding: 10px;
   font-size: 11.5px;
@@ -743,7 +784,7 @@ a.level-row:hover {
 }
 .ai-panel-error {
   border: 1.5px solid var(--bad);
-  background: #fef2f2;
+  background: var(--bad-soft);
   border-radius: 10px;
   padding: 8px 10px;
   font-size: 13px;
@@ -775,7 +816,7 @@ a.level-row:hover {
   flex: none;
 }
 .ai-panel-error-retry:hover:not(:disabled) {
-  background: #fde3e3;
+  background: var(--bad-soft-strong);
 }
 .ai-panel-error-retry:disabled {
   opacity: 0.5;
@@ -791,7 +832,7 @@ a.level-row:hover {
 /* 撞限续跑条：轮数预算用尽后提示可一键接着跑 */
 .ai-panel-capbar {
   border: 1.5px solid var(--accent);
-  background: #eef2ff;
+  background: var(--accent-soft);
   border-radius: 10px;
   padding: 8px 10px;
   font-size: 13px;
@@ -815,7 +856,7 @@ a.level-row:hover {
   flex: none;
 }
 .ai-panel-cap-run:hover:not(:disabled) {
-  background: #e0e7ff;
+  background: var(--accent-soft-strong);
 }
 .ai-panel-cap-run:disabled {
   opacity: 0.5;
@@ -896,9 +937,9 @@ a.level-row:hover {
 }
 .ai-attach-warn {
   font-size: 12px;
-  color: #9a6700;
-  background: #fff8c5;
-  border: 1px solid #d4a72c66;
+  color: var(--warn-banner-ink);
+  background: var(--warn-banner-bg);
+  border: 1px solid var(--warn-banner-line);
   border-radius: 6px;
   padding: 2px 8px;
 }
@@ -1149,7 +1190,7 @@ a.level-row:hover {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #e4e7ee;
+  background: var(--line);
   transition: transform 0.08s;
 }
 .comp-rhythm .beat-dot.active {
@@ -1217,6 +1258,7 @@ a.level-row:hover {
   color: var(--muted);
 }
 .rhythm-controls input {
+  background: var(--panel-2);
   width: 70px;
   margin: 0 6px;
   padding: 4px 8px;
@@ -1232,7 +1274,7 @@ a.level-row:hover {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #e4e7ee;
+  background: var(--line);
   transition: transform 0.08s;
 }
 .beat-dot.active {
@@ -1322,7 +1364,7 @@ a.level-row:hover {
   background: #ffffff;
 }
 .comp-fingering .key.white:hover {
-  background: #eef2ff;
+  background: var(--accent-soft);
 }
 .comp-fingering .key.black {
   height: 62%;
@@ -1970,7 +2012,7 @@ path.gedge-false {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #eef0f7;
+  background: var(--soft);
   font-weight: 600;
 }
 .tgrid-colhead {
@@ -2043,7 +2085,7 @@ path.gedge-false {
   position: relative;
   text-align: center;
   white-space: nowrap;
-  background: #eef0f7;
+  background: var(--soft);
 }
 .tgrid-rownum {
   font-family: Consolas, monospace;
@@ -2271,7 +2313,7 @@ path.gedge-false {
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fcfcff;
+  background: var(--paper);
   cursor: crosshair;
   min-height: 212px;
 }
@@ -2500,7 +2542,7 @@ path.gedge-false {
   cursor: pointer;
 }
 .graph-log-entry.has-node:hover {
-  background: #eef2ff;
+  background: var(--accent-soft);
   border-color: var(--accent);
 }
 .graph-log-kind {
@@ -3055,7 +3097,7 @@ a.lib-title:hover {
   padding: 1px 6px;
   border-radius: 99px;
   border: 1px solid rgba(217, 119, 6, 0.45);
-  color: #b45309;
+  color: var(--warn-ink-2);
   background: rgba(251, 191, 36, 0.12);
 }
 .lib-row .id-hint {
@@ -3351,7 +3393,7 @@ a.lib-title:hover {
 }
 .provider-card.active {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px #4f46e533;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .provider-card b {
   font-size: 15px;
@@ -3421,6 +3463,7 @@ a.lib-title:hover {
   color: var(--muted);
 }
 .settings-form input {
+  background: var(--panel-2);
   padding: 7px 9px;
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -3843,13 +3886,13 @@ a.lib-title:hover {
   flex: none;
   border: 1px solid var(--warn);
   color: var(--warn);
-  background: #fffbeb;
+  background: var(--warn-soft);
   font-size: 11px;
   padding: 1px 8px;
   border-radius: 999px;
 }
 .ai-panel-rollback:hover:not(:disabled) {
-  background: #fef3c7;
+  background: var(--warn-soft-strong);
 }
 .ge-dark .ai-mode-tabs {
   border-color: var(--ge-line);
@@ -3876,7 +3919,7 @@ a.lib-title:hover {
   margin: 0 12px 8px;
   padding: 7px 10px;
   border: 1px solid var(--accent);
-  background: #eef2ff;
+  background: var(--accent-soft);
   border-radius: 10px;
   font-size: 12.5px;
 }
@@ -3932,7 +3975,7 @@ a.lib-title:hover {
   margin: 10px 0;
   padding: 12px;
   border: 1px solid var(--accent);
-  background: #eef2ff;
+  background: var(--accent-soft);
   border-radius: 12px;
 }
 .ai-new-form textarea {
@@ -4104,8 +4147,8 @@ a.lib-title:hover {
   flex: 1;
   min-height: 60px;
   overflow: auto;
-  background: #14181f;
-  color: #d7dce5;
+  background: var(--code-bg);
+  color: var(--code-ink);
   border-radius: 8px;
   padding: 6px 8px;
   font-family: Consolas, monospace;
@@ -4190,7 +4233,7 @@ a.lib-title:hover {
 .ai-plan-card {
   margin: 0 12px 8px;
   border: 1px solid var(--accent);
-  background: #eef2ff;
+  background: var(--accent-soft);
   border-radius: 10px;
   font-size: 12.5px;
   overflow: hidden;
@@ -4373,18 +4416,18 @@ a.lib-title:hover {
   text-align: left;
 }
 .ai-md th {
-  background: #eef0f7;
+  background: var(--soft);
 }
 .ai-md code {
-  background: #eef0f7;
+  background: var(--soft);
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 12px;
   font-family: Consolas, monospace;
 }
 .ai-md pre {
-  background: #14181f;
-  color: #d7dce5;
+  background: var(--code-bg);
+  color: var(--code-ink);
   border-radius: 8px;
   padding: 10px;
   font-size: 11.5px;
@@ -4607,9 +4650,9 @@ a.lib-title:hover {
   font-size: 12px;
 }
 .flow-warn {
-  color: #9a6700;
-  background: #fff8c5;
-  border: 1px solid #d4a72c66;
+  color: var(--warn-banner-ink);
+  background: var(--warn-banner-bg);
+  border: 1px solid var(--warn-banner-line);
   border-radius: 6px;
   padding: 1px 8px;
 }
