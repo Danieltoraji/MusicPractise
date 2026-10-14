@@ -17,6 +17,7 @@ const EditorPage = lazy(() => import('./editor/EditorPage').then((m) => ({ defau
 const TunerDemo = lazy(() => import('./pages/TunerDemo').then((m) => ({ default: m.TunerDemo })))
 const RhythmDemo = lazy(() => import('./pages/RhythmDemo').then((m) => ({ default: m.RhythmDemo })))
 const AdminPage = lazy(() => import('./admin/AdminPage').then((m) => ({ default: m.AdminPage })))
+const DocsPage = lazy(() => import('./pages/DocsPage').then((m) => ({ default: m.DocsPage })))
 
 const PageLoading = (
   <p className="muted" style={{ padding: 24 }}>
@@ -100,6 +101,12 @@ export default function App() {
     )
   } else if (hash === '#/library') {
     page = <LibraryPage />
+  } else if (hash === '#/docs' || hash.startsWith('#/docs/')) {
+    page = (
+      <Suspense fallback={PageLoading}>
+        <DocsPage subId={hash.slice('#/docs/'.length)} />
+      </Suspense>
+    )
   } else if (hash === '#/settings') {
     page = <SettingsPage />
   } else if (hash === '#/admin') {
@@ -136,6 +143,9 @@ export default function App() {
           </a>
           <a href="#/library" className={hash === '#/library' ? 'active' : ''}>
             资源库
+          </a>
+          <a href="#/docs" className={hash.startsWith('#/docs') ? 'active' : ''}>
+            文档
           </a>
           <a href="#/tuner" className={hash === '#/tuner' ? 'active' : ''}>
             校音器

@@ -4939,3 +4939,226 @@ a.lib-title:hover {
   margin-left: 10px;
   font-size: 13px;
 }
+
+/* ---------- 文档页（docs/35 §4）：目录 + 文章 + 翻页器，全部走主题 token ---------- */
+
+.docs {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.docs-side {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.docs-search {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-family: inherit;
+}
+.docs-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.docs-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.docs-nav-empty {
+  font-size: 13px;
+}
+.docs-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.docs-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.docs-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13.5px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border-left: 2px solid transparent;
+}
+.docs-link:hover {
+  color: var(--ink);
+  background: var(--soft);
+}
+.docs-link.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.docs-article {
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 24px 28px 20px;
+}
+.docs-article h1 {
+  margin-top: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.docs-article h2 {
+  color: var(--ink);
+  font-size: 15.5px;
+  margin-top: 24px;
+}
+.docs-article p,
+.docs-article li {
+  line-height: 1.75;
+}
+.docs-article code {
+  background: var(--soft);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+}
+.docs-callout {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  padding: 10px 14px;
+  margin: 14px 0;
+  font-size: 13.5px;
+}
+.docs-callout p {
+  margin: 6px 0 0;
+}
+.docs-callout-warn {
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+.docs-callout-warn b {
+  color: var(--warn-ink);
+}
+.docs-code {
+  background: var(--code-bg);
+  color: var(--code-ink);
+  border-radius: 10px;
+  padding: 14px 16px;
+  overflow: auto;
+  font-size: 12.5px;
+  line-height: 1.6;
+  font-family: var(--font-mono);
+}
+.docs-code code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.docs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 12px 0;
+}
+.docs-table th,
+.docs-table td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.docs-table th {
+  color: var(--muted);
+  background: var(--panel-2);
+  font-weight: 600;
+}
+.docs-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.docs-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.docs-pager-link {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+  min-width: 0;
+  max-width: 46%;
+}
+.docs-pager-link:hover {
+  border-color: var(--accent);
+}
+.docs-pager-next {
+  margin-left: auto;
+  text-align: right;
+}
+.docs-pager-dir {
+  font-size: 12px;
+  color: var(--muted);
+}
+.docs-pager-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .docs {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .docs-side {
+    position: static;
+  }
+  .docs-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 10px;
+    padding-bottom: 4px;
+  }
+  .docs-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+  }
+  .docs-group-title {
+    margin-bottom: 0;
+    margin-right: 2px;
+    white-space: nowrap;
+  }
+  .docs-link {
+    white-space: nowrap;
+    border-left: none;
+  }
+  .docs-article {
+    padding: 18px 16px 16px;
+  }
+  .docs-pager-link {
+    max-width: 60%;
+  }
+}
