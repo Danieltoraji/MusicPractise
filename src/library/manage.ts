@@ -1,0 +1,199 @@
+/**
+ * 资源库文件管理器操作（docs/39 批次 H1）：新建/重命名/移动/复制的纯函数层。
+ * 全部不可变（structuredClone 后改写），不触碰 Dexie；入库由调用方 putResource。
+ * 组织语义：移动执行「单亲」不变量——关卡/专题移动后只被一个容器引用
+ * （browse.ts 容许多亲引用，移动操作负责收敛）。内置（builtIn）文档整体只读：
+ * 种子每次启动会重放内置记录，任何对内置文档的改写都会被覆盖——移动/复制/新建专题
+ * 的目标为内置容器时调用方必须禁用。
+ */
+import type { ResourceKind } from './db'
+import { newResourceId } from './id'
+import { childIds } from './browse'
+
+/** 容器文档（系列/专题）的最小结构视图：信封字段 + content 引用列表 */
+export interface ContainerDoc {
+  id: string
+  kind: ResourceKind
+  version: string
+  meta: Record<string, unknown>
+  content: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export interface SeriesDoc extends ContainerDoc {
+  kind: 'series'
+  content: { topicIds: string[] } & Record<string, unknown>
+}
+
+export interface TopicDoc extends ContainerDoc {
+  kind: 'topic'
+  content: { levelIds: string[]; brief?: string } & Record<string, unknown>
+}
+
+/** 关卡文档的宽松视图（库内允许 v1/v2 旧格式，复制不迁移格式） */
+export interface LevelLike {
+  id: string
+  kind: 'level'
+  version: string
+  meta: Record<string, unknown>
+  [key: string]: unknown
+}
+
+// ---------------------------------------------------------------------------
+// 文档工厂
+// ---------------------------------------------------------------------------
+
+function blankMeta(title: string): Record<string, unknown> {
+  return {
+    title,
+    description: '',
+    author: { name: '' },
+    tags: [],
+    locale: 'zh-CN',
+    license: 'CC0-1.0',
+    difficulty: 1,
+  }
+}
+
+export function blankSeriesDoc(title = '未命名系列'): SeriesDoc {
+  return {
+    schemaVersion: 1,
+    kind: 'series',
+    id: newResourceId(),
+    version: '0.1.0',
+    meta: blankMeta(title),
+    refs: [],
+    content: { topicIds: [] },
+  }
+}
+
+export function blankTopicDoc(title = '未命名专题'): TopicDoc {
+  return {
+    schemaVersion: 1,
+    kind: 'topic',
+    id: newResourceId(),
+    version: '0.1.0',
+    meta: blankMeta(title),
+    refs: [],
+    content: { levelIds: [], brief: '' },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 重命名与引用列表
+// ---------------------------------------------------------------------------
+
+/** 重命名（改 meta.title）：NFC + trim；空标题原样返回（调用方应先校验非空） */
+export function renameDoc<T extends { meta: Record<string, unknown> }>(doc: T, title: string): T {
+  const cleaned = title.normalize('NFC').trim()
+  if (cleaned === '') return doc
+  const next = structuredClone(doc)
+  next.meta = { ...next.meta, title: cleaned }
+  return next
+}
+
+function withRefList<T extends ContainerDoc>(doc: T, key: 'topicIds' | 'levelIds', ids: string[]): T {
+  const next = structuredClone(doc)
+  next.content = { ...next.content, [key]: ids }
+  return next
+}
+
+/** 追加引用 id（已存在则原样返回，不产生新对象） */
+export function appendRefId<T extends ContainerDoc>(doc: T, key: 'topicIds' | 'levelIds', id: string): T {
+  const ids = childIds(doc, key)
+  if (ids.includes(id)) return doc
+  return withRefList(doc, key, [...ids, id])
+}
+
+// ---------------------------------------------------------------------------
+// 移动（单亲不变量：只克隆被触及的容器，未触及的保持原引用）
+// ---------------------------------------------------------------------------
+
+/** 关卡移动到目标专题（null = 移出全部专题，回落未整理） */
+export function moveLevelIntoTopic(levelId: string, targetTopicId: string | null, topics: ContainerDoc[]): ContainerDoc[] {
+  return topics.map((t) => {
+    const ids = childIds(t, 'levelIds')
+    const has = ids.includes(levelId)
+    if (t.id === targetTopicId) {
+      return has ? t : withRefList(t, 'levelIds', [...ids, levelId])
+    }
+    return has ? withRefList(t, 'levelIds', ids.filter((x) => x !== levelId)) : t
+  })
+}
+
+/** 专题移动到目标系列（null = 移出全部系列，回落未整理） */
+export function moveTopicIntoSeries(topicId: string, targetSeriesId: string | null, series: ContainerDoc[]): ContainerDoc[] {
+  return series.map((s) => {
+    const ids = childIds(s, 'topicIds')
+    const has = ids.includes(topicId)
+    if (s.id === targetSeriesId) {
+      return has ? s : withRefList(s, 'topicIds', [...ids, topicId])
+    }
+    return has ? withRefList(s, 'topicIds', ids.filter((x) => x !== topicId)) : s
+  })
+}
+
+// ---------------------------------------------------------------------------
+// 复制
+// ---------------------------------------------------------------------------
+
+const COPY_SUFFIX = '（副本）'
+
+function withCopySuffix(title: unknown): string {
+  const t = typeof title === 'string' ? title : ''
+  return t.includes(COPY_SUFFIX) ? t : `${t}${COPY_SUFFIX}`
+}
+
+/** 复制单个关卡文档：新 id、标题加「（副本）」（已有后缀不重复），内容原样深拷贝不迁移格式 */
+export function copyLevelDoc<T extends LevelLike>(doc: T): T {
+  const copy = structuredClone(doc)
+  copy.id = newResourceId()
+  copy.meta = { ...copy.meta, title: withCopySuffix(copy.meta.title) }
+  return copy
+}
+
+/**
+ * 整树复制系列：系列/专题/被引用关卡全部换新 id 并重写引用。
+ * 共享关卡只复制一份（多专题引用同一旧关卡 → 引用同一新副本）；
+ * 库内缺件（levels 中找不到）的引用 id 原样保留；仅系列根标题加「（副本）」。
+ */
+export function copySeriesTree(
+  series: SeriesDoc,
+  topics: TopicDoc[],
+  levels: LevelLike[],
+): { series: SeriesDoc; topics: TopicDoc[]; levels: LevelLike[] } {
+  const referenced = new Set<string>()
+  for (const t of topics) {
+    for (const id of childIds(t, 'levelIds')) referenced.add(id)
+  }
+  const levelMap = new Map<string, LevelLike>()
+  const newLevels: LevelLike[] = []
+  for (const id of referenced) {
+    const src = levels.find((l) => l.id === id)
+    if (src === undefined) continue
+    const copy = structuredClone(src)
+    copy.id = newResourceId()
+    levelMap.set(id, copy)
+    newLevels.push(copy)
+  }
+  const topicMap = new Map<string, TopicDoc>()
+  const newTopics: TopicDoc[] = []
+  for (const t of topics) {
+    const copy = structuredClone(t)
+    copy.id = newResourceId()
+    copy.content = {
+      ...copy.content,
+      levelIds: childIds(t, 'levelIds').map((id) => levelMap.get(id)?.id ?? id),
+    }
+    topicMap.set(t.id, copy)
+    newTopics.push(copy)
+  }
+  const newSeries = structuredClone(series)
+  newSeries.id = newResourceId()
+  newSeries.meta = { ...newSeries.meta, title: withCopySuffix(newSeries.meta.title) }
+  newSeries.content = {
+    ...newSeries.content,
+    topicIds: childIds(series, 'topicIds').map((id) => topicMap.get(id)?.id ?? id),
+  }
+  return { series: newSeries, topics: newTopics, levels: newLevels }
+}

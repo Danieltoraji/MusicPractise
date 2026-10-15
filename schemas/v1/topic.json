@@ -13,7 +13,7 @@
     "content": {
       "type": "object",
       "properties": {
-        "levelIds": { "type": "array", "items": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" }, "minItems": 1 },
+        "levelIds": { "type": "array", "items": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" }, "description": "允许空数组（docs/39 H1：文件管理器语义，空专题合法）" },
         "brief": { "type": "string" }
       },
       "required": ["levelIds"],

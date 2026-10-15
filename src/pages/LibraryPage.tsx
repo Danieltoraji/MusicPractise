@@ -1,18 +1,35 @@
 /**
  * 资源库：系列 = 文件夹（可展开：系列 ▸ 专题 ▸ 关卡），未被引用的资源归入「未整理」区。
- * 关卡可直接编辑（内置示例保存时自动另存为副本）；支持标题搜索、导入导出、新建。
+ * 文件管理器操作（docs/39 H1）：新建系列/专题、重命名、移动/复制、删除（容器删除不级联，子级回落未整理）。
+ * 关卡可直接编辑（内置示例保存时自动另存为副本）；支持标题搜索、导入导出。
+ * 内置（builtIn）文档只读：不可改名/删除/移动、不可作为组织目标（种子每次启动会重放内置记录）。
  */
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Fragment, useRef, useState, useSyncExternalStore } from 'react'
 import type { LibraryRecord } from '../library/db'
 import { db, deleteResource, putResource } from '../library/db'
 import { downloadBlob, exportResource, importFromFiles, type ImportReport } from '../library/io'
-import { buildLibraryTree, filterTree, type LibraryTreeRow } from '../library/browse'
+import { buildLibraryTree, childIds, filterTree, type LibraryTreeRow } from '../library/browse'
+import {
+  appendRefId,
+  blankSeriesDoc,
+  blankTopicDoc,
+  copyLevelDoc,
+  copySeriesTree,
+  moveLevelIntoTopic,
+  moveTopicIntoSeries,
+  renameDoc,
+  type ContainerDoc,
+  type LevelLike,
+  type SeriesDoc,
+  type TopicDoc,
+} from '../library/manage'
 import { blankLevelDoc } from '../editor/docState'
 import { getAccountSnapshot, subscribeAccount } from '../account/store'
 import { uploadLibraryLevel } from '../cloud/api'
 
 const KIND_ICON: Record<string, string> = { series: '📚', topic: '📂', level: '🎯', instrument: '🎹' }
+const BUILTIN_HINT = '内置示例不可改动'
 
 export function LibraryPage() {
   const resources = useLiveQuery(() => db.resources.orderBy('importedAt').toArray(), [], undefined)
@@ -27,6 +44,8 @@ export function LibraryPage() {
   const cloudReady = account.phase === 'available' && account.user !== null
   const [cloudMsg, setCloudMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [cloudUploadingId, setCloudUploadingId] = useState<string | null>(null)
+  // 移动/复制选目标弹窗（docs/39 H1）
+  const [moveDialog, setMoveDialog] = useState<{ mode: 'move' | 'copy'; rec: LibraryRecord } | null>(null)
 
   async function handleCloudUpload(rec: LibraryRecord): Promise<void> {
     setCloudMsg(null)
@@ -81,7 +100,13 @@ export function LibraryPage() {
   }
 
   async function handleDelete(rec: LibraryRecord): Promise<void> {
-    if (!window.confirm(`删除「${rec.title}」？此操作不可撤销。`)) return
+    const msg =
+      rec.kind === 'series'
+        ? `删除系列「${rec.title}」？其中的专题与关卡不会被删除，将回到「未整理」区。`
+        : rec.kind === 'topic'
+          ? `删除专题「${rec.title}」？其中的关卡不会被删除，将回到「未整理」区。`
+          : `删除「${rec.title}」？此操作不可撤销。`
+    if (!window.confirm(msg)) return
     setError('')
     try {
       await deleteResource(rec.id)
@@ -96,6 +121,128 @@ export function LibraryPage() {
       const doc = blankLevelDoc()
       await putResource(doc as never)
       window.location.hash = `#/edit/${doc.id}`
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  /** 输入名称的公共前置：取消返回 null；空串报错返回 null */
+  function promptTitle(header: string, fallback: string): string | null {
+    const input = window.prompt(header, fallback)
+    if (input === null) return null
+    const title = input.trim()
+    if (title === '') {
+      setError('名称不能为空')
+      return null
+    }
+    setError('')
+    return title
+  }
+
+  async function handleCreateContainer(kind: 'series' | 'topic'): Promise<void> {
+    const isSeries = kind === 'series'
+    const title = promptTitle(isSeries ? '新建系列：输入名称' : '新建专题：输入名称', isSeries ? '未命名系列' : '未命名专题')
+    if (title === null) return
+    try {
+      const doc = isSeries ? blankSeriesDoc(title) : blankTopicDoc(title)
+      await putResource(doc)
+      if (isSeries) setExpanded((prev) => new Set(prev).add(doc.id))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function handleRename(rec: LibraryRecord): Promise<void> {
+    const title = promptTitle(`重命名「${rec.title}」`, rec.title)
+    if (title === null) return
+    try {
+      await putResource(renameDoc(rec.doc as ContainerDoc, title))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function handleCreateTopicIn(seriesRec: LibraryRecord): Promise<void> {
+    const title = promptTitle(`在「${seriesRec.title}」下新建专题：输入名称`, '未命名专题')
+    if (title === null) return
+    try {
+      const topic = blankTopicDoc(title)
+      await putResource(topic)
+      await putResource(appendRefId(seriesRec.doc as ContainerDoc, 'topicIds', topic.id))
+      setExpanded((prev) => new Set(prev).add(topic.id))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function commitDocs(docs: Parameters<typeof putResource>[0][]): Promise<void> {
+    for (const d of docs) await putResource(d)
+  }
+
+  async function handleMoveTarget(
+    rec: LibraryRecord,
+    target: { topicId?: string | null; seriesId?: string | null },
+  ): Promise<void> {
+    setError('')
+    try {
+      if (rec.kind === 'level') {
+        const topics = rows.filter((r) => r.kind === 'topic').map((r) => r.doc as ContainerDoc)
+        const next = moveLevelIntoTopic(rec.id, target.topicId ?? null, topics)
+        await commitDocs(next.filter((d, i) => d !== topics[i]))
+      } else if (rec.kind === 'topic') {
+        const series = rows.filter((r) => r.kind === 'series').map((r) => r.doc as ContainerDoc)
+        const next = moveTopicIntoSeries(rec.id, target.seriesId ?? null, series)
+        await commitDocs(next.filter((d, i) => d !== series[i]))
+      }
+      setMoveDialog(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function handleCopyLevel(rec: LibraryRecord, targetTopicId: string | null): Promise<void> {
+    setError('')
+    try {
+      const copy = copyLevelDoc(rec.doc as LevelLike)
+      await putResource(copy)
+      if (targetTopicId !== null) {
+        const trec = rows.find((r) => r.id === targetTopicId)
+        if (trec) await putResource(appendRefId(trec.doc as ContainerDoc, 'levelIds', copy.id))
+      }
+      setMoveDialog(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function handleCopySeries(rec: LibraryRecord): Promise<void> {
+    setError('')
+    try {
+      const seriesDoc = rec.doc as SeriesDoc
+      const topicRecs = childIds(seriesDoc, 'topicIds')
+        .map((id) => rows.find((r) => r.id === id))
+        .filter((r): r is LibraryRecord => r !== undefined && r.kind === 'topic')
+      const levelIds = new Set<string>()
+      for (const t of topicRecs) {
+        for (const id of childIds(t.doc, 'levelIds')) levelIds.add(id)
+      }
+      const levelRecs = [...levelIds]
+        .map((id) => rows.find((r) => r.id === id))
+        .filter((r): r is LibraryRecord => r !== undefined && r.kind === 'level')
+      if (
+        !window.confirm(
+          `复制系列「${rec.title}」（${topicRecs.length} 个专题、${levelRecs.length} 个关卡）？将生成全新 id 的副本，原系列不受影响。`,
+        )
+      ) {
+        return
+      }
+      const tree = copySeriesTree(
+        seriesDoc,
+        topicRecs.map((r) => r.doc as TopicDoc),
+        levelRecs.map((r) => r.doc as LevelLike),
+      )
+      await commitDocs([tree.series, ...tree.topics, ...tree.levels])
+      setExpanded((prev) => new Set(prev).add(tree.series.id))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -132,14 +279,20 @@ export function LibraryPage() {
   const featuredRows = visibleLoose.filter((r) => isFeatured(r.rec))
   const restLoose = visibleLoose.filter((r) => !isFeatured(r.rec))
 
+  const openMove = (rec: LibraryRecord): void => setMoveDialog({ mode: 'move', rec })
+  const openCopy = (rec: LibraryRecord): void => {
+    if (rec.kind === 'series') void handleCopySeries(rec)
+    else setMoveDialog({ mode: 'copy', rec })
+  }
+
   return (
     <div className="page">
       <header className="page-head">
         <div>
           <h1>资源库</h1>
           <p className="page-sub">
-            系列 = 文件夹：点开即可浏览其中的专题与关卡。关卡可直接编辑（内置示例的修改会自动另存为你的副本）。
-            支持 <code>.json</code> 单文档与 <code>.zip</code> 系列包导入。
+            系列 = 文件夹：可新建系列/专题，重命名、移动与复制。删除容器不删内容，子级回到「未整理」。
+            关卡可直接编辑（内置示例的修改会自动另存为你的副本）。支持 <code>.json</code> 单文档与 <code>.zip</code> 系列包导入。
           </p>
         </div>
         <div className="page-actions">
@@ -151,6 +304,12 @@ export function LibraryPage() {
           />
           <button type="button" className="primary" onClick={() => void handleNew()}>
             ✏ 新建关卡
+          </button>
+          <button type="button" onClick={() => void handleCreateContainer('series')}>
+            📚 新建系列
+          </button>
+          <button type="button" onClick={() => void handleCreateContainer('topic')}>
+            📂 新建专题
           </button>
           <button
             type="button"
@@ -229,7 +388,23 @@ export function LibraryPage() {
             <>
               <div className="lib-divider">🎵 教程与示例</div>
               {featuredRows.map((row) => (
-                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} onCloudUpload={handleCloudUpload} cloudUploadingId={cloudUploadingId} cloudReady={cloudReady} />
+                <TreeRow
+                  key={row.rec.id}
+                  row={row}
+                  depth={0}
+                  searching={searching}
+                  expanded={expanded}
+                  onToggle={toggle}
+                  onExport={handleExport}
+                  onDelete={handleDelete}
+                  onCloudUpload={handleCloudUpload}
+                  cloudUploadingId={cloudUploadingId}
+                  cloudReady={cloudReady}
+                  onCreateTopic={(r) => void handleCreateTopicIn(r)}
+                  onRename={(r) => void handleRename(r)}
+                  onMove={openMove}
+                  onCopy={openCopy}
+                />
               ))}
             </>
           )}
@@ -237,7 +412,23 @@ export function LibraryPage() {
             <>
               <div className="lib-divider">系列</div>
               {visibleSeries.map((row) => (
-                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} onCloudUpload={handleCloudUpload} cloudUploadingId={cloudUploadingId} cloudReady={cloudReady} />
+                <TreeRow
+                  key={row.rec.id}
+                  row={row}
+                  depth={0}
+                  searching={searching}
+                  expanded={expanded}
+                  onToggle={toggle}
+                  onExport={handleExport}
+                  onDelete={handleDelete}
+                  onCloudUpload={handleCloudUpload}
+                  cloudUploadingId={cloudUploadingId}
+                  cloudReady={cloudReady}
+                  onCreateTopic={(r) => void handleCreateTopicIn(r)}
+                  onRename={(r) => void handleRename(r)}
+                  onMove={openMove}
+                  onCopy={openCopy}
+                />
               ))}
             </>
           )}
@@ -245,12 +436,153 @@ export function LibraryPage() {
             <>
               <div className="lib-divider">未整理</div>
               {restLoose.map((row) => (
-                <TreeRow key={row.rec.id} row={row} depth={0} searching={searching} expanded={expanded} onToggle={toggle} onExport={handleExport} onDelete={handleDelete} onCloudUpload={handleCloudUpload} cloudUploadingId={cloudUploadingId} cloudReady={cloudReady} />
+                <TreeRow
+                  key={row.rec.id}
+                  row={row}
+                  depth={0}
+                  searching={searching}
+                  expanded={expanded}
+                  onToggle={toggle}
+                  onExport={handleExport}
+                  onDelete={handleDelete}
+                  onCloudUpload={handleCloudUpload}
+                  cloudUploadingId={cloudUploadingId}
+                  cloudReady={cloudReady}
+                  onCreateTopic={(r) => void handleCreateTopicIn(r)}
+                  onRename={(r) => void handleRename(r)}
+                  onMove={openMove}
+                  onCopy={openCopy}
+                />
               ))}
             </>
           )}
         </div>
       )}
+
+      {moveDialog && (
+        <MoveDialog
+          mode={moveDialog.mode}
+          rec={moveDialog.rec}
+          rows={rows}
+          onClose={() => setMoveDialog(null)}
+          onTarget={(target) => {
+            const { rec, mode } = moveDialog
+            if (mode === 'move') void handleMoveTarget(rec, target)
+            else void handleCopyLevel(rec, target.topicId ?? null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** 移动/复制选目标弹窗：单列目标清单（未整理 + 各容器，标注当前位置，内置容器禁选） */
+function MoveDialog(props: {
+  mode: 'move' | 'copy'
+  rec: LibraryRecord
+  rows: LibraryRecord[]
+  onTarget: (target: { topicId?: string | null; seriesId?: string | null }) => void
+  onClose: () => void
+}): React.ReactNode {
+  const { rec, mode, rows } = props
+  const isLevel = rec.kind === 'level'
+  const verb = mode === 'move' ? '移动' : '复制'
+
+  const currentParents = new Set<string>()
+  if (isLevel) {
+    for (const r of rows) {
+      if (r.kind === 'topic' && childIds(r.doc, 'levelIds').includes(rec.id)) currentParents.add(r.id)
+    }
+  } else if (rec.kind === 'topic') {
+    for (const r of rows) {
+      if (r.kind === 'series' && childIds(r.doc, 'topicIds').includes(rec.id)) currentParents.add(r.id)
+    }
+  }
+
+  const targets: { key: string; label: string; disabled: boolean; hint?: string; value: { topicId?: string | null; seriesId?: string | null } }[] = []
+  if (isLevel) {
+    targets.push({
+      key: '__loose',
+      label: '📄 未整理（移出所有专题）',
+      disabled: mode === 'move' && currentParents.size === 0,
+      value: { topicId: null },
+    })
+    const parentSeries = new Map<string, string>()
+    for (const s of rows) {
+      if (s.kind !== 'series') continue
+      for (const tid of childIds(s.doc, 'topicIds')) {
+        if (!parentSeries.has(tid)) parentSeries.set(tid, s.title)
+      }
+    }
+    for (const t of rows) {
+      if (t.kind !== 'topic') continue
+      const parentBuiltIn = parentSeries.has(t.id) && rows.find((s) => s.id === parentSeries.get(t.id))?.builtIn === 1
+      const builtInChain = t.builtIn === 1 || parentBuiltIn
+      const isCurrent = mode === 'move' && currentParents.has(t.id)
+      targets.push({
+        key: t.id,
+        label: `📂 ${t.title}${parentSeries.has(t.id) ? ` — 📚 ${parentSeries.get(t.id)}` : ''}${isCurrent ? '（当前位置）' : ''}`,
+        hint: builtInChain ? BUILTIN_HINT : undefined,
+        disabled: builtInChain || isCurrent,
+        value: { topicId: t.id },
+      })
+    }
+  } else {
+    targets.push({
+      key: '__loose',
+      label: '📄 未整理（移出所有系列）',
+      disabled: mode === 'move' && currentParents.size === 0,
+      value: { seriesId: null },
+    })
+    for (const s of rows) {
+      if (s.kind !== 'series') continue
+      const isCurrent = mode === 'move' && currentParents.has(s.id)
+      targets.push({
+        key: s.id,
+        label: `📚 ${s.title}${isCurrent ? '（当前位置）' : ''}`,
+        hint: s.builtIn === 1 ? BUILTIN_HINT : undefined,
+        disabled: s.builtIn === 1 || isCurrent,
+        value: { seriesId: s.id },
+      })
+    }
+  }
+
+  const kindLabel = isLevel ? '关卡' : '专题'
+
+  return (
+    <div
+      className="tjson-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) props.onClose()
+      }}
+    >
+      <div className="tjson-modal tlist-modal">
+        <div className="tjson-modal-head">
+          <b>
+            {verb}
+            {kindLabel}「{rec.title}」到…
+          </b>
+          <button type="button" className="link" onClick={props.onClose}>
+            取消
+          </button>
+        </div>
+        <div className="tlist-rows">
+          {targets.map((t) => (
+            <div className="tlist-row" key={t.key}>
+              <button
+                type="button"
+                className="lib-move-target"
+                disabled={t.disabled}
+                title={t.hint}
+                onClick={() => props.onTarget(t.value)}
+              >
+                {t.label}
+              </button>
+            </div>
+          ))}
+        </div>
+        <span className="muted">移动为单亲语义：{kindLabel}同一时刻只属于一个容器；复制生成新 id 副本。</span>
+      </div>
     </div>
   )
 }
@@ -266,12 +598,17 @@ function TreeRow(props: {
   onCloudUpload: (rec: LibraryRecord) => Promise<void>
   cloudUploadingId: string | null
   cloudReady: boolean
+  onCreateTopic: (rec: LibraryRecord) => void
+  onRename: (rec: LibraryRecord) => void
+  onMove: (rec: LibraryRecord) => void
+  onCopy: (rec: LibraryRecord) => void
 }): React.ReactNode {
   const { row, depth, searching, expanded, onToggle } = props
   const rec = row.rec
   const isContainer = row.children !== undefined
   const childCount = row.children?.length ?? 0
   const open = searching || expanded.has(rec.id)
+  const frozen = rec.builtIn === 1
 
   return (
     <Fragment>
@@ -318,6 +655,36 @@ function TreeRow(props: {
               <a href={`#/level/${rec.id}`}>试玩</a>
             </>
           )}
+          {(rec.kind === 'level' || rec.kind === 'topic') && (
+            <button
+              type="button"
+              className="link"
+              disabled={frozen}
+              title={frozen ? BUILTIN_HINT : '移动到其他容器（单亲语义）'}
+              onClick={() => props.onMove(rec)}
+            >
+              移动…
+            </button>
+          )}
+          <button type="button" className="link" title="复制（生成新 id 副本）" onClick={() => props.onCopy(rec)}>
+            {rec.kind === 'series' ? '复制' : '复制…'}
+          </button>
+          {rec.kind === 'series' && (
+            <button
+              type="button"
+              className="link"
+              disabled={frozen}
+              title={frozen ? BUILTIN_HINT : '在此系列下新建专题'}
+              onClick={() => props.onCreateTopic(rec)}
+            >
+              新建专题
+            </button>
+          )}
+          {!frozen && (
+            <button type="button" className="link" title="重命名" onClick={() => props.onRename(rec)}>
+              重命名
+            </button>
+          )}
           {rec.kind === 'level' && props.cloudReady && (
             <button
               type="button"
@@ -332,7 +699,7 @@ function TreeRow(props: {
           <button type="button" className="link" onClick={() => void props.onExport(rec)}>
             导出
           </button>
-          {!rec.builtIn && (
+          {!frozen && (
             <button type="button" className="link danger" onClick={() => void props.onDelete(rec)}>
               删除
             </button>
@@ -359,6 +726,10 @@ function TreeRow(props: {
               onCloudUpload={props.onCloudUpload}
               cloudUploadingId={props.cloudUploadingId}
               cloudReady={props.cloudReady}
+              onCreateTopic={props.onCreateTopic}
+              onRename={props.onRename}
+              onMove={props.onMove}
+              onCopy={props.onCopy}
             />
           ))}
         </div>

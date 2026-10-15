@@ -17,7 +17,7 @@
     "content": {
       "type": "object",
       "properties": {
-        "topicIds": { "type": "array", "items": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" }, "minItems": 1 },
+        "topicIds": { "type": "array", "items": { "type": "string", "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$" }, "description": "允许空数组（docs/39 H1：文件管理器语义，空系列合法）" },
         "coverAsset": { "type": "string" }
       },
       "required": ["topicIds"],
