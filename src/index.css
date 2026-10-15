@@ -5126,21 +5126,8 @@ a.lib-title:hover {
   .page {
     font-size: 14px;
   }
-  /* 游玩页（docs/37 R3）：theater 收窄、顶栏标题独占一行、题面条缩字号 */
-  .theater {
-    padding: var(--sp-2);
-    border-radius: var(--r-lg);
-  }
-  .theater-top {
-    flex-wrap: wrap;
-  }
-  .theater-title {
-    flex-basis: 100%;
-    order: -1;
-    text-align: left;
-    font-size: var(--fs-3);
-    white-space: normal;
-  }
+  /* 游玩页（docs/37 R3）：题面条/结算条移动端字号——theater 本体的移动端
+     规则放在文件尾 theater 区块之后（同特异性后者胜，此处会被覆盖） */
   .stage-prompt {
     gap: var(--sp-2);
   }
@@ -6240,6 +6227,24 @@ progress {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+/* 移动端（docs/37 R3）：置于此处才能覆盖上面的同名规则（同特异性后者胜） */
+@media (max-width: 720px) {
+  .theater {
+    padding: var(--sp-2);
+    border-radius: var(--r-lg);
+  }
+  .theater-top {
+    flex-wrap: wrap;
+    row-gap: var(--sp-1);
+  }
+  .theater-title {
+    flex-basis: 100%;
+    order: -1;
+    text-align: left;
+    font-size: var(--fs-3);
+    white-space: normal;
+  }
 }
 
 /* ---------- 系列页（§2.4）：系列进度条 ---------- */
