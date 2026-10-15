@@ -1342,7 +1342,7 @@ a.level-row:hover {
 .editor-canvas-layout {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: var(--sp-4);
   align-items: flex-start;
 }
 /* 提示文字独占一行，不与画布争抢宽度（此前它作为 flex 子项按内容宽度
@@ -1361,63 +1361,64 @@ a.level-row:hover {
   height: auto;
   min-height: 560px;
 }
+/* 左栏组件面板 */
 .palette {
   width: 170px;
   flex: none;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 .palette b {
-  font-size: 13px;
+  font-size: var(--fs-0);
   color: var(--muted);
 }
 .palette-cat {
-  font-size: 12px;
+  font-size: var(--fs-0);
   color: var(--accent);
   font-weight: 600;
-  margin-top: 4px;
+  margin-top: var(--sp-1);
 }
 .palette button {
   width: 100%;
   text-align: left;
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: var(--fs-1);
 }
 .editor-canvas {
   position: relative;
   width: 100%;
   height: 560px;
   /* background 简写不允许在非末层带颜色（原写法整条声明被浏览器丢弃，画布一直透明），
-     拆成 color + image 才能真正铺出白底网格 */
+     拆成 color + image 才能真正铺出白底网格；网格线走 --soft（随浅色岛，不硬编码） */
   background-color: var(--panel);
-  background-image: repeating-linear-gradient(0deg, transparent, transparent 19px, #f0f1f7 19px, #f0f1f7 20px),
-    repeating-linear-gradient(90deg, transparent, transparent 19px, #f0f1f7 19px, #f0f1f7 20px);
+  background-image: repeating-linear-gradient(0deg, transparent, transparent 19px, var(--soft) 19px, var(--soft) 20px),
+    repeating-linear-gradient(90deg, transparent, transparent 19px, var(--soft) 19px, var(--soft) 20px);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   overflow: auto;
 }
 .editor-box {
   position: absolute;
   border: 1.5px solid var(--accent);
-  background: rgba(79, 70, 229, 0.08);
-  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: var(--r-sm);
   cursor: move;
   user-select: none;
   touch-action: none;
   padding: 4px 6px;
-  font-size: 12px;
+  font-size: var(--fs-0);
   display: flex;
   justify-content: space-between;
   gap: 6px;
 }
 .editor-box.is-selected {
   border-width: 2.5px;
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.18);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .editor-box.is-ghost {
   opacity: 0.4;
@@ -1441,12 +1442,12 @@ a.level-row:hover {
   flex: none;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  font-size: 14px;
+  gap: var(--sp-2);
+  font-size: var(--fs-1);
 }
 .inspector label {
   display: flex;
@@ -1462,8 +1463,7 @@ a.level-row:hover {
 .inspector input[type='text'],
 .inspector input:not([type]) {
   padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   font-family: inherit;
 }
 .inspector-layout {
@@ -1472,11 +1472,11 @@ a.level-row:hover {
   gap: 6px;
 }
 .inspector textarea {
-  font-family: Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-0);
 }
 .props-doc {
-  font-size: 12px;
+  font-size: var(--fs-0);
 }
 .inspector .danger {
   color: var(--bad);
@@ -2346,50 +2346,41 @@ path.gedge-false {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  padding: 6px 2px;
-  font-size: 12.5px;
+  padding: var(--sp-1) 2px;
+  font-size: var(--fs-1);
 }
 .views-chip {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-pill);
   padding: 2px 4px 2px 2px;
-  background: #fff;
+  background: var(--panel);
+  transition: border-color var(--tr-fast), box-shadow var(--tr-fast);
 }
 .views-chip.is-current {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .views-chip .views-open {
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--fs-1);
   color: var(--ink);
   padding: 2px 4px;
 }
-.views-chip .views-tpl,
 .views-chip .views-del {
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-0);
   padding: 2px;
   color: var(--muted);
 }
-.views-chip .views-tpl.on {
-  color: #d97706;
-}
 .views-hint {
-  font-size: 11.5px;
-}
-.inspector-bindings {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12.5px;
+  font-size: var(--fs-0);
 }
 .table-editor {
   display: flex;
