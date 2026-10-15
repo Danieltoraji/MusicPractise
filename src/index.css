@@ -18,8 +18,8 @@
   --soft: #eef0f7;
   /* 强调软底及其 hover 加深态 */
   --accent-soft-2: #fdf4ff;
-  --accent-soft: var(--accent-soft);
-  --accent-soft-strong: var(--accent-soft-strong);
+  --accent-soft: #eef1ff;
+  --accent-soft-strong: #dfe3ff;
   /* 状态软底（深浅两档）与警示文字色 */
   --ok-soft: #f0fdf4;
   --ok-soft-strong: #dcfce7;
@@ -29,8 +29,8 @@
   --warn-soft-strong: #fef3c7;
   --warn-ink: #92400e;
   --warn-ink-2: #b45309;
-  --warn-banner-bg: var(--warn-banner-bg);
-  --warn-banner-ink: var(--warn-banner-ink);
+  --warn-banner-bg: #fdf6e3;
+  --warn-banner-ink: #9a6700;
   --warn-banner-line: rgba(212, 167, 44, 0.4);
   /* 代码块 */
   --code-bg: #14181f;
@@ -629,35 +629,6 @@ input::placeholder {
   justify-content: center;
   font-size: 13px;
   flex: none;
-}
-
-button.primary,
-.comp-button {
-  font-family: inherit;
-}
-button.primary {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border: none;
-  border-radius: 10px;
-  font-size: 16px;
-  padding: 10px 22px;
-  cursor: pointer;
-}
-button {
-  font-family: inherit;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  border-radius: 10px;
-  font-size: 15px;
-  padding: 8px 18px;
-  cursor: pointer;
-}
-button.link {
-  border: none;
-  background: none;
-  color: var(--accent);
-  padding: 0;
 }
 
 .breadcrumb {
