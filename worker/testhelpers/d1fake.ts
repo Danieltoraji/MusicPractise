@@ -48,6 +48,25 @@ export interface AuditRow {
   created_at: number
 }
 
+export interface CloudFolderRow {
+  id: string
+  user_id: string
+  folder_id: string
+  title: string
+  level_count: number
+  bytes: number
+  created_at: number
+  updated_at: number
+}
+
+export interface CloudFolderDocRow {
+  folder_id: string
+  doc_id: string
+  kind: string
+  payload: string
+  bytes: number
+}
+
 /** LIKE '%x%' → 大小写不敏感子串匹配（SQLite LIKE 的 ASCII 不敏感语义近似） */
 function likeMatch(value: string, pattern: string): boolean {
   return value.toLowerCase().includes(pattern.replace(/^%/, '').replace(/%$/, '').toLowerCase())
@@ -68,6 +87,8 @@ export class D1Fake implements D1Database {
   sessions: SessionRow[] = []
   login_attempts: LoginAttemptRow[] = []
   cloud_levels: CloudLevelRow[] = []
+  cloud_folders: CloudFolderRow[] = []
+  cloud_folder_docs: CloudFolderDocRow[] = []
   progress: ProgressRow[] = []
   audit_log: AuditRow[] = []
   /** 已执行的规范化 SQL（断言/排查用） */
@@ -300,6 +321,105 @@ export class D1Fake implements D1Database {
       const before = this.cloud_levels.length
       this.cloud_levels = this.cloud_levels.filter((r) => !(r.id === p[0] && r.user_id === p[1]))
       return { results: [], changes: before - this.cloud_levels.length }
+    }
+
+    // ---- cloud_folders（docs/39 H2）----
+    m = /^SELECT COALESCE\(SUM\(level_count\), 0\) AS n FROM cloud_folders WHERE user_id = \?$/.exec(sql)
+    if (m) {
+      const n = this.cloud_folders.filter((r) => r.user_id === p[0]).reduce((acc, r) => acc + Number(r.level_count), 0)
+      return { results: [{ n }], changes: 0 }
+    }
+
+    m = /^SELECT id, folder_id, title, level_count, bytes, created_at, updated_at FROM cloud_folders WHERE user_id = \? ORDER BY updated_at DESC$/.exec(sql)
+    if (m) {
+      const rows = this.cloud_folders
+        .filter((r) => r.user_id === p[0])
+        .slice()
+        .sort((a, b) => b.updated_at - a.updated_at)
+      return { results: rows as unknown as Row[], changes: 0 }
+    }
+
+    m = /^SELECT id, folder_id, title, level_count, bytes, created_at, updated_at FROM cloud_folders WHERE id = \? AND user_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.cloud_folders.find((r) => r.id === p[0] && r.user_id === p[1])
+      return { results: row ? [row as unknown as Row] : [], changes: 0 }
+    }
+
+    m = /^SELECT id, level_count FROM cloud_folders WHERE user_id = \? AND folder_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.cloud_folders.find((r) => r.user_id === p[0] && r.folder_id === p[1])
+      return { results: row ? [row as unknown as Row] : [], changes: 0 }
+    }
+
+    m = /^INSERT INTO cloud_folders \(.+\) VALUES \((\?, ){7}\?\)$/.exec(sql)
+    if (m) {
+      if (this.cloud_folders.some((r) => r.id === p[0])) {
+        throw new Error('UNIQUE constraint failed: cloud_folders.id')
+      }
+      if (this.cloud_folders.some((r) => r.user_id === p[1] && r.folder_id === p[2])) {
+        throw new Error('UNIQUE constraint failed: cloud_folders.user_id, cloud_folders.folder_id')
+      }
+      this.cloud_folders.push({
+        id: String(p[0]),
+        user_id: String(p[1]),
+        folder_id: String(p[2]),
+        title: String(p[3]),
+        level_count: Number(p[4]),
+        bytes: Number(p[5]),
+        created_at: Number(p[6]),
+        updated_at: Number(p[7]),
+      })
+      return { results: [], changes: 1 }
+    }
+
+    m = /^UPDATE cloud_folders SET title = \?, level_count = \?, bytes = \?, updated_at = \? WHERE id = \? AND user_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.cloud_folders.find((r) => r.id === p[4] && r.user_id === p[5])
+      if (!row) return { results: [], changes: 0 }
+      row.title = String(p[0])
+      row.level_count = Number(p[1])
+      row.bytes = Number(p[2])
+      row.updated_at = Number(p[3])
+      return { results: [], changes: 1 }
+    }
+
+    m = /^DELETE FROM cloud_folders WHERE id = \? AND user_id = \?$/.exec(sql)
+    if (m) {
+      const before = this.cloud_folders.length
+      this.cloud_folders = this.cloud_folders.filter((r) => !(r.id === p[0] && r.user_id === p[1]))
+      return { results: [], changes: before - this.cloud_folders.length }
+    }
+
+    // ---- cloud_folder_docs（docs/39 H2）----
+    m = /^SELECT doc_id, kind, payload, bytes FROM cloud_folder_docs WHERE folder_id = \? ORDER BY doc_id$/.exec(sql)
+    if (m) {
+      const rows = this.cloud_folder_docs
+        .filter((r) => r.folder_id === p[0])
+        .slice()
+        .sort((a, b) => (a.doc_id < b.doc_id ? -1 : 1))
+      return { results: rows as unknown as Row[], changes: 0 }
+    }
+
+    m = /^DELETE FROM cloud_folder_docs WHERE folder_id = \?$/.exec(sql)
+    if (m) {
+      const before = this.cloud_folder_docs.length
+      this.cloud_folder_docs = this.cloud_folder_docs.filter((r) => r.folder_id !== p[0])
+      return { results: [], changes: before - this.cloud_folder_docs.length }
+    }
+
+    m = /^INSERT INTO cloud_folder_docs \(.+\) VALUES \((\?, ){4}\?\)$/.exec(sql)
+    if (m) {
+      if (this.cloud_folder_docs.some((r) => r.folder_id === p[0] && r.doc_id === p[1])) {
+        throw new Error('UNIQUE constraint failed: cloud_folder_docs.folder_id, cloud_folder_docs.doc_id')
+      }
+      this.cloud_folder_docs.push({
+        folder_id: String(p[0]),
+        doc_id: String(p[1]),
+        kind: String(p[2]),
+        payload: String(p[3]),
+        bytes: Number(p[4]),
+      })
+      return { results: [], changes: 1 }
     }
 
     // ---- progress ----

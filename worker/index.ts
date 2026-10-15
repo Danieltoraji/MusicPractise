@@ -7,6 +7,7 @@ import { errorJson, jsonResponse, withSecurityHeaders, HttpError } from './http'
 import { Router } from './router'
 import { changePassword, login, logout, me, register, updateNickname } from './handlers/auth'
 import { deleteLevel, getLevel, listLevels, replaceLevel, uploadLevel } from './handlers/cloud'
+import { deleteFolder, getFolder, listFolders, uploadFolder } from './handlers/cloud_folders'
 import { listProgress, putProgress } from './handlers/progress'
 import {
   adminDeleteLevel,
@@ -35,6 +36,11 @@ api.add('POST', '/api/cloud/levels', uploadLevel)
 api.add('GET', '/api/cloud/levels/:id', getLevel)
 api.add('PUT', '/api/cloud/levels/:id', replaceLevel)
 api.add('DELETE', '/api/cloud/levels/:id', deleteLevel)
+
+api.add('GET', '/api/cloud/folders', listFolders)
+api.add('POST', '/api/cloud/folders', uploadFolder)
+api.add('GET', '/api/cloud/folders/:id', getFolder)
+api.add('DELETE', '/api/cloud/folders/:id', deleteFolder)
 
 api.add('GET', '/api/progress', listProgress)
 api.add('PUT', '/api/progress', putProgress)

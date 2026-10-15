@@ -26,7 +26,7 @@ import {
 } from '../library/manage'
 import { blankLevelDoc } from '../editor/docState'
 import { getAccountSnapshot, subscribeAccount } from '../account/store'
-import { uploadLibraryLevel } from '../cloud/api'
+import { uploadLibraryFolder, uploadLibraryLevel } from '../cloud/api'
 
 const KIND_ICON: Record<string, string> = { series: '📚', topic: '📂', level: '🎯', instrument: '🎹' }
 const BUILTIN_HINT = '内置示例不可改动'
@@ -51,8 +51,14 @@ export function LibraryPage() {
     setCloudMsg(null)
     setCloudUploadingId(rec.id)
     try {
-      const { level } = await uploadLibraryLevel(rec)
-      setCloudMsg({ ok: true, text: `「${rec.title}」已上传云盘（${level.bytes >= 1024 ? `${(level.bytes / 1024).toFixed(1)} KB` : `${level.bytes} B`}）` })
+      if (rec.kind === 'series') {
+        // docs/39 H2：系列整包上传，占槽位 = 内含关卡数（缺件/超槽位在本地即报错）
+        const { folder } = await uploadLibraryFolder(rec, rows)
+        setCloudMsg({ ok: true, text: `「${rec.title}」已上传云盘（${folder.levelCount} 个关卡，占 ${folder.levelCount} 个槽位）` })
+      } else {
+        const { level } = await uploadLibraryLevel(rec)
+        setCloudMsg({ ok: true, text: `「${rec.title}」已上传云盘（${level.bytes >= 1024 ? `${(level.bytes / 1024).toFixed(1)} KB` : `${level.bytes} B`}）` })
+      }
     } catch (e) {
       setCloudMsg({ ok: false, text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -678,6 +684,17 @@ function TreeRow(props: {
               onClick={() => props.onCreateTopic(rec)}
             >
               新建专题
+            </button>
+          )}
+          {rec.kind === 'series' && props.cloudReady && (
+            <button
+              type="button"
+              className="link"
+              title={props.cloudUploadingId === rec.id ? '上传中…' : '整包上传系列（占槽位 = 内含关卡数）'}
+              disabled={props.cloudUploadingId !== null}
+              onClick={() => void props.onCloudUpload(rec)}
+            >
+              {props.cloudUploadingId === rec.id ? '☁ 上传中…' : '☁ 上传'}
             </button>
           )}
           {!frozen && (

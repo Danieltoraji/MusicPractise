@@ -22,11 +22,36 @@ for (const schema of [commonRaw, logicRaw, graphLogicRaw, seriesRaw, topicRaw, i
   validator.addSchema(schema as unknown as Schema, (schema as { $id?: string }).$id)
 }
 
-export function validateLevelDoc(doc: unknown): { ok: boolean; errors: string[] } {
-  const result = validator.validate(doc)
+/** 文件夹上传（docs/39 H2）按 kind 分发的校验器：系列/专题与关卡同一组 $ref 注册 */
+const seriesValidator = new Validator(seriesRaw as unknown as Schema)
+const topicValidator = new Validator(topicRaw as unknown as Schema)
+for (const v of [seriesValidator, topicValidator]) {
+  for (const schema of [commonRaw, levelRaw]) {
+    v.addSchema(schema as unknown as Schema, (schema as { $id?: string }).$id)
+  }
+}
+
+const VALIDATORS: Record<string, Validator> = {
+  level: validator,
+  series: seriesValidator,
+  topic: topicValidator,
+}
+
+function shapeErrors(result: { valid: boolean; errors: { instanceLocation: string; error: string }[] }): { ok: boolean; errors: string[] } {
   if (result.valid) return { ok: true, errors: [] }
   return {
     ok: false,
     errors: result.errors.slice(0, 5).map((e) => `${e.instanceLocation || '/'} ${e.error}`),
   }
+}
+
+export function validateLevelDoc(doc: unknown): { ok: boolean; errors: string[] } {
+  return shapeErrors(validator.validate(doc))
+}
+
+/** 按信封 kind 分发校验（series/topic/level 之外的 kind 一律拒绝） */
+export function validateDocByKind(kind: string, doc: unknown): { ok: boolean; errors: string[] } {
+  const v = VALIDATORS[kind]
+  if (v === undefined) return { ok: false, errors: [`未知的文档 kind: ${kind}`] }
+  return shapeErrors(v.validate(doc))
 }

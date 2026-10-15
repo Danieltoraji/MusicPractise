@@ -1,4 +1,4 @@
-import { jsonResponse, HttpError, readJsonBody } from '../http'
+import { jsonResponse, HttpError, readJsonBody, assertSameOrigin } from '../http'
 import { randomId } from '../id'
 import { hitCloudWriteLimit } from '../ratelimit'
 import { validateLevelDoc } from '../schema'
@@ -8,8 +8,9 @@ import type { RouteContext } from '../router'
 import type { D1Database } from '../types'
 
 /**
- * 云盘 API（docs/31 §5.2，批次 B2）：私有关卡槽位，每用户 ≤10。
- * (user_id, level_id) 唯一——POST 按 levelId upsert（同关卡覆盖更新，不占新槽位）；
+ * 云盘 API（docs/31 §5.2，批次 B2；docs/39 H2 扩展文件夹）：
+ * 私有云盘域，槽位合并口径 = 关卡槽位数 + Σ(文件夹内含关卡数)，上限 CLOUD_LIMIT。
+ * (user_id, level_id)/(user_id, folder_id) 唯一——POST 按资源 id upsert（覆盖更新不占新槽位）；
  * 所有按槽位 id 的读/写/删都限定 user_id，他人资源一律 404 防探测。
  */
 export const CLOUD_LIMIT = 10
@@ -18,7 +19,7 @@ export const MAX_PAYLOAD_BYTES = 512 * 1024
 /** 请求体上限 = payload 上限 + 信封/转义余量 */
 const BODY_MAX_BYTES = 560 * 1024
 
-const LEVEL_ID_RE = /^res_[0-9A-HJKMNP-TV-Z]{26}$/
+export const LEVEL_ID_RE = /^res_[0-9A-HJKMNP-TV-Z]{26}$/
 const encoder = new TextEncoder()
 
 function nowMs(): number {
@@ -47,6 +48,28 @@ function toMeta(row: CloudMetaRow) {
   }
 }
 
+export interface CloudFolderMetaRow {
+  id: string
+  folder_id: string
+  title: string
+  level_count: number
+  bytes: number
+  created_at: number
+  updated_at: number
+}
+
+export function toFolderMeta(row: CloudFolderMetaRow) {
+  return {
+    id: row.id,
+    folderId: row.folder_id,
+    title: row.title,
+    levelCount: Number(row.level_count),
+    bytes: Number(row.bytes),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  }
+}
+
 function readLevelId(body: Record<string, unknown>): string {
   const value = body.levelId
   if (typeof value !== 'string' || !LEVEL_ID_RE.test(value)) {
@@ -56,7 +79,7 @@ function readLevelId(body: Record<string, unknown>): string {
 }
 
 /** 标题：NFC + trim，超长截断到 64 字符（不拒绝——宽容输入） */
-function readTitle(body: Record<string, unknown>): string {
+export function readTitle(body: Record<string, unknown>): string {
   const raw = body.title
   if (typeof raw !== 'string') throw new HttpError(400, 'bad_request', 'title 必须是字符串')
   const value = raw.normalize('NFC').trim()
@@ -90,7 +113,7 @@ function serializePayload(payload: Record<string, unknown>, expectLevelId?: stri
   return { text, bytes, schemaVersion: Number((payload as { schemaVersion?: unknown }).schemaVersion) }
 }
 
-/** GET /api/cloud/levels：槽位列表（元数据，不含 payload） */
+/** GET /api/cloud/levels：槽位列表（元数据，不含 payload；H2 起并入文件夹与合并口径 used） */
 export async function listLevels({ req, env }: RouteContext): Promise<Response> {
   const session = await requireUser(env.DB, req, nowMs())
   const result = await env.DB
@@ -98,11 +121,21 @@ export async function listLevels({ req, env }: RouteContext): Promise<Response> 
     .bind(session.user.id)
     .all<CloudMetaRow>()
   const levels = (result.results ?? []).map(toMeta)
-  return jsonResponse({ levels, used: levels.length, limit: CLOUD_LIMIT })
+  const folders = await env.DB
+    .prepare('SELECT id, folder_id, title, level_count, bytes, created_at, updated_at FROM cloud_folders WHERE user_id = ? ORDER BY updated_at DESC')
+    .bind(session.user.id)
+    .all<CloudFolderMetaRow>()
+  return jsonResponse({
+    levels,
+    folders: (folders.results ?? []).map(toFolderMeta),
+    used: await countSlots(env.DB, session.user.id),
+    limit: CLOUD_LIMIT,
+  })
 }
 
 /** POST /api/cloud/levels：上传/覆盖（按 levelId upsert） */
 export async function uploadLevel({ req, env }: RouteContext): Promise<Response> {
+  assertSameOrigin(req)
   const body = await readJsonBody(req, BODY_MAX_BYTES)
   const now = nowMs()
   const session = await requireUser(env.DB, req, now)
@@ -139,9 +172,11 @@ export async function uploadLevel({ req, env }: RouteContext): Promise<Response>
   return jsonResponse({ level: { id, levelId, title, bytes, schemaVersion, createdAt: now, updatedAt: now }, used: used + 1 }, 201)
 }
 
-async function countSlots(db: D1Database, userId: string): Promise<number> {
-  const row = await db.prepare('SELECT COUNT(*) AS n FROM cloud_levels WHERE user_id = ?').bind(userId).first<{ n: number }>()
-  return Number(row?.n ?? 0)
+/** 槽位合并口径（docs/39 H2）：关卡槽位数 + Σ(文件夹内含关卡数） */
+export async function countSlots(db: D1Database, userId: string): Promise<number> {
+  const lv = await db.prepare('SELECT COUNT(*) AS n FROM cloud_levels WHERE user_id = ?').bind(userId).first<{ n: number }>()
+  const fd = await db.prepare('SELECT COALESCE(SUM(level_count), 0) AS n FROM cloud_folders WHERE user_id = ?').bind(userId).first<{ n: number }>()
+  return Number(lv?.n ?? 0) + Number(fd?.n ?? 0)
 }
 
 async function loadOwnedSlot(db: D1Database, slotId: string, userId: string): Promise<CloudMetaRow & { payload: string }> {
@@ -168,6 +203,7 @@ export async function getLevel({ req, env, params }: RouteContext): Promise<Resp
 
 /** PUT /api/cloud/levels/:id：按槽位覆盖（payload + title 全量替换，levelId 不变） */
 export async function replaceLevel({ req, env, params }: RouteContext): Promise<Response> {
+  assertSameOrigin(req)
   const body = await readJsonBody(req, BODY_MAX_BYTES)
   const now = nowMs()
   const session = await requireUser(env.DB, req, now)
@@ -190,6 +226,7 @@ export async function replaceLevel({ req, env, params }: RouteContext): Promise<
 
 /** DELETE /api/cloud/levels/:id */
 export async function deleteLevel({ req, env, params }: RouteContext): Promise<Response> {
+  assertSameOrigin(req)
   const now = nowMs()
   const session = await requireUser(env.DB, req, now)
   const lockedSeconds = await hitCloudWriteLimit(env.DB, session.user.id, now)

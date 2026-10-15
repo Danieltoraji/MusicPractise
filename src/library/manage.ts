@@ -6,7 +6,7 @@
  * 种子每次启动会重放内置记录，任何对内置文档的改写都会被覆盖——移动/复制/新建专题
  * 的目标为内置容器时调用方必须禁用。
  */
-import type { ResourceKind } from './db'
+import type { LibraryRecord, ResourceKind } from './db'
 import { newResourceId } from './id'
 import { childIds } from './browse'
 
@@ -196,4 +196,44 @@ export function copySeriesTree(
     topicIds: childIds(series, 'topicIds').map((id) => topicMap.get(id)?.id ?? id),
   }
   return { series: newSeries, topics: newTopics, levels: newLevels }
+}
+
+// ---------------------------------------------------------------------------
+// 云盘文件夹上传（docs/39 H2）：收集系列闭包文档
+// ---------------------------------------------------------------------------
+
+export interface BundleDoc {
+  id: string
+  kind: 'series' | 'topic' | 'level'
+  doc: unknown
+}
+
+/**
+ * 收集系列上传所需的闭包文档（系列 + 专题 + 被引关卡，共享关卡去重）。
+ * 缺件抛可读错误（调用方直接展示）；levelCount = 内含关卡数 = 槽位占用。
+ */
+export function collectSeriesDocs(seriesRec: LibraryRecord, all: LibraryRecord[]): { docs: BundleDoc[]; levelCount: number } {
+  if (seriesRec.kind !== 'series') throw new Error('不是系列文档')
+  const byId = new Map(all.map((r) => [r.id, r]))
+  const docs: BundleDoc[] = [{ id: seriesRec.id, kind: 'series', doc: seriesRec.doc }]
+  const seen = new Set<string>([seriesRec.id])
+  let levelCount = 0
+  for (const tid of childIds(seriesRec.doc, 'topicIds')) {
+    const t = byId.get(tid)
+    if (t === undefined || t.kind !== 'topic') throw new Error(`系列缺件：专题 ${tid} 不在本机库中，无法上传`)
+    if (!seen.has(tid)) {
+      seen.add(tid)
+      docs.push({ id: tid, kind: 'topic', doc: t.doc })
+    }
+    for (const lid of childIds(t.doc, 'levelIds')) {
+      const l = byId.get(lid)
+      if (l === undefined || l.kind !== 'level') throw new Error(`专题缺件：关卡 ${lid} 不在本机库中，无法上传`)
+      if (!seen.has(lid)) {
+        seen.add(lid)
+        docs.push({ id: lid, kind: 'level', doc: l.doc })
+        levelCount++
+      }
+    }
+  }
+  return { docs, levelCount }
 }
