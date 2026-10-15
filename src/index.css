@@ -949,53 +949,88 @@ a.level-row:hover {
   display: flex;
   flex-direction: column;
 }
+/* 编辑器 chrome（docs/36 §2.4 落地 + docs/38 E1 合并双真源为单一来源）：
+   返回 ｜ 标题弹性 ｜ 历史(撤销/重做)组 ｜ 动作(保存/试运行)组 */
 .editor-head {
   display: flex;
-  gap: 10px;
   align-items: center;
-  margin-bottom: 10px;
   flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--sp-2);
+}
+.editor-head > a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: var(--fs-1);
+  white-space: nowrap;
+}
+.editor-head > a:hover {
+  color: var(--accent);
+}
+.editor-head-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
 }
 .editor-title {
   flex: 1;
-  font-size: 16px;
+  min-width: 120px;
+  font-size: var(--fs-2);
   font-weight: 700;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-family: inherit;
 }
+/* 状态条：保存失败 / lint 提示 / 已保存 */
 .editor-errors,
 .editor-lint,
 .editor-saved {
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin: 8px 0;
-  font-size: 14px;
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-4);
+  margin: var(--sp-2) 0;
+  font-size: var(--fs-1);
 }
 .editor-errors {
   border: 1.5px solid var(--bad);
-  background: #fef2f2;
+  background: var(--bad-soft);
 }
 .editor-lint {
   border: 1px solid var(--warn);
-  background: #fffbeb;
+  background: var(--warn-soft);
 }
 .editor-saved {
   border: 1px solid var(--ok);
-  background: #f0fdf4;
+  background: var(--ok-soft);
   color: var(--ok);
 }
+/* 分段控件式 Tab（AI 切换钮右置） */
 .editor-tabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
+  background: var(--soft);
+  border-radius: var(--r-md);
+  padding: 3px;
+  width: fit-content;
+  max-width: 100%;
   /* 编辑页为 flex 列后相邻 margin 不再折叠：上边距归 0，间距交给 editor-head 的下边距 */
-  margin: 0 0 12px;
+  margin: 0 0 var(--sp-3);
+}
+.editor-tabs button {
+  border: none;
+  background: none;
+  border-radius: calc(var(--r-md) - 3px);
+  padding: 6px 14px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.editor-tabs button:hover {
+  color: var(--ink);
 }
 .editor-tabs button.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
+  background: var(--panel);
+  color: var(--accent);
+  box-shadow: var(--shadow-1);
 }
 .editor-ai-toggle {
   margin-left: auto;
@@ -1003,7 +1038,9 @@ a.level-row:hover {
 .editor-ai-toggle.active {
   background: var(--accent);
   color: var(--accent-ink);
-  border-color: var(--accent);
+}
+.editor-ai-toggle.active:hover {
+  filter: brightness(1.06);
 }
 
 /* 视图区 + AI 面板的行 flex 容器：面板与视图并列，五个 tab 共享同一面板。
@@ -1014,7 +1051,7 @@ a.level-row:hover {
   min-height: 0;
   display: flex;
   align-items: stretch;
-  gap: 12px;
+  gap: var(--sp-3);
 }
 .editor-body > .editor-canvas-layout,
 .editor-body > .graph-editor,
@@ -1515,8 +1552,12 @@ a.level-row:hover {
 }
 .json-tab textarea {
   width: 100%;
-  font-family: Consolas, monospace;
-  font-size: 13px;
+  flex: 1;
+  min-height: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  line-height: 1.55;
+  resize: none;
 }
 
 /* ---------- 节奏训练 / 校音器（关卡组件） ---------- */
@@ -6314,54 +6355,6 @@ progress {
   padding: var(--sp-2) var(--sp-4) var(--sp-3);
 }
 
-/* ---------- 编辑器 chrome（§2.4）：分组工具条 + 分段 Tab（内部工作区不动） ---------- */
-.editor-head {
-  gap: var(--sp-2);
-  align-items: center;
-  padding: var(--sp-2) 0;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: var(--sp-2);
-}
-.editor-head > a {
-  color: var(--muted);
-  text-decoration: none;
-  font-weight: 600;
-  font-size: var(--fs-1);
-  white-space: nowrap;
-}
-.editor-head > a:hover {
-  color: var(--accent);
-}
-.editor-title {
-  flex: 1;
-  min-width: 120px;
-  font-size: var(--fs-2);
-  font-weight: 700;
-}
-.editor-tabs {
-  gap: 4px;
-  background: var(--soft);
-  border-radius: var(--r-md);
-  padding: 3px;
-  width: fit-content;
-  max-width: 100%;
-}
-.editor-tabs button {
-  border: none;
-  background: none;
-  border-radius: 9px;
-  padding: 6px 14px;
-  color: var(--muted);
-  font-weight: 600;
-}
-.editor-tabs button:hover {
-  color: var(--ink);
-}
-.editor-tabs button.active {
-  background: var(--panel);
-  color: var(--accent);
-  box-shadow: var(--shadow-1);
-}
 .theater .level-runner {
   max-width: 1020px;
   width: 100%;

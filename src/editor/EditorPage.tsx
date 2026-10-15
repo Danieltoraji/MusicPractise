@@ -269,28 +269,32 @@ export function EditorPage({ id }: Props) {
           value={String(doc.meta.title ?? '')}
           onChange={(e) => update(setMeta(doc, { title: e.target.value }))}
         />
-        <button
-          type="button"
-          disabled={histRef.current.past.length === 0}
-          title="撤销（Ctrl+Z）"
-          onClick={() => undo()}
-        >
-          ↶
-        </button>
-        <button
-          type="button"
-          disabled={histRef.current.future.length === 0}
-          title="重做（Ctrl+Shift+Z）"
-          onClick={() => redo()}
-        >
-          ↷
-        </button>
-        <button type="button" className="primary" onClick={() => save()}>
-          💾 保存{dirty ? ' *' : ''}
-        </button>
-        <button type="button" onClick={tryRun}>
-          ▶ 试运行
-        </button>
+        <span className="editor-head-group">
+          <button
+            type="button"
+            disabled={histRef.current.past.length === 0}
+            title="撤销（Ctrl+Z）"
+            onClick={() => undo()}
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            disabled={histRef.current.future.length === 0}
+            title="重做（Ctrl+Shift+Z）"
+            onClick={() => redo()}
+          >
+            ↷
+          </button>
+        </span>
+        <span className="editor-head-group">
+          <button type="button" className="primary" onClick={() => save()}>
+            💾 保存{dirty ? ' *' : ''}
+          </button>
+          <button type="button" onClick={tryRun}>
+            ▶ 试运行
+          </button>
+        </span>
       </div>
       {saveErrors.length > 0 && (
         <div className="editor-errors">
