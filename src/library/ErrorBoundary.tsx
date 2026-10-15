@@ -22,7 +22,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render(): ReactNode {
     if (this.state.error) {
       return (
-        <div className="boundary-error">
+        <div className="boundary-error boundary-runtime">
           <h2>关卡运行出错</h2>
           <p className="muted">{this.state.error.message}</p>
           <button type="button" onClick={() => this.setState({ error: null })}>

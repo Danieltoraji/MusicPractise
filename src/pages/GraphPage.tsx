@@ -16,16 +16,34 @@ export function GraphPage({ id }: { id: string }) {
   if (record === null) {
     return (
       <div className="page">
-        <div className="breadcrumb"><a href="#/">← 返回首页</a></div>
-        <p className="muted">资源库中没有这个关卡（id: {id}）。</p>
+        <header className="page-head">
+          <div>
+            <h1>逻辑图谱</h1>
+            <p className="page-sub">资源库中没有这个关卡（id: {id}）。</p>
+          </div>
+          <div className="page-actions">
+            <a className="button-like" href="#/">
+              返回首页
+            </a>
+          </div>
+        </header>
       </div>
     )
   }
   if ((record as LibraryRecord).kind !== 'level') {
     return (
       <div className="page">
-        <div className="breadcrumb"><a href="#/">← 返回首页</a></div>
-        <p className="muted">该资源不是关卡，无法生成逻辑图谱。</p>
+        <header className="page-head">
+          <div>
+            <h1>逻辑图谱</h1>
+            <p className="page-sub">该资源不是关卡，无法生成逻辑图谱。</p>
+          </div>
+          <div className="page-actions">
+            <a className="button-like" href="#/">
+              返回首页
+            </a>
+          </div>
+        </header>
       </div>
     )
   }
@@ -38,11 +56,25 @@ export function GraphPage({ id }: { id: string }) {
 
   return (
     <div className="page">
-      <div className="breadcrumb"><a href="#/">← 返回首页</a> · <a href={`#/level/${id}`}>试玩此关</a> · <a href={`#/edit/${id}`}>编辑此关</a></div>
-      <h1>🧭 关卡脚本 · {String(doc.meta.title ?? '')}</h1>
-      <p className="muted">
-        只读伪代码视图（LevelScript）：on 事件处理器内的语句即图 IR 的顺序投影；完整节点图编辑器见编辑器「节点图」页。
-      </p>
+      <header className="page-head">
+        <div>
+          <h1>🧭 关卡脚本 · {String(doc.meta.title ?? '')}</h1>
+          <p className="page-sub">
+            只读伪代码视图（LevelScript）：on 事件处理器内的语句即图 IR 的顺序投影；完整节点图编辑器见编辑器「节点图」页。
+          </p>
+        </div>
+        <div className="page-actions">
+          <a className="button-like" href="#/">
+            返回首页
+          </a>
+          <a className="button-like" href={`#/level/${id}`}>
+            试玩此关
+          </a>
+          <a className="button-like" href={`#/edit/${id}`}>
+            编辑此关
+          </a>
+        </div>
+      </header>
       {warnings.length > 0 && (
         <div className="editor-lint">⚠ lint：{warnings.join('；')}</div>
       )}

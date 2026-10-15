@@ -28,14 +28,27 @@ export function LevelPage({ id }: { id: string }) {
     [id],
   )
 
-  if (record === 'loading') return <p className="muted page">从资源库加载…</p>
+  if (record === 'loading') {
+    return (
+      <div className="page level-page">
+        <div className="theater theater-empty">
+          <p className="muted">从资源库加载…</p>
+        </div>
+      </div>
+    )
+  }
   if (record === null) {
     return (
       <div className="page">
-        <div className="breadcrumb">
-          <a href="#/">← 返回首页</a>
-        </div>
-        <p className="muted">资源库中没有这个关卡（id: {id}）。到<a href="#/library">资源库</a>导入试试。</p>
+        <header className="page-head">
+          <div>
+            <h1>关卡不存在</h1>
+            <p className="page-sub">
+              资源库中没有这个关卡（id: {id}）。到<a href="#/library">资源库</a>导入试试，
+              或<a href="#/">返回首页</a>。
+            </p>
+          </div>
+        </header>
       </div>
     )
   }
@@ -45,11 +58,18 @@ export function LevelPage({ id }: { id: string }) {
   if (!load.ok) {
     return (
       <div className="page">
-        <div className="breadcrumb">
-          <a href="#/">← 返回首页</a>
-        </div>
+        <header className="page-head">
+          <div>
+            <h1>关卡无法加载</h1>
+            <p className="page-sub">该文档未通过装载校验，请回编辑器检查或重新导入。</p>
+          </div>
+          <div className="page-actions">
+            <a className="button-like" href="#/library">
+              返回资源库
+            </a>
+          </div>
+        </header>
         <div className="boundary-error">
-          <h2>该文档未通过装载校验</h2>
           <ul className="tone-error">
             {load.errors.map((e, i) => (
               <li key={i}>{e}</li>
@@ -69,9 +89,13 @@ export function LevelPage({ id }: { id: string }) {
     <div className="page level-page">
       <div className="theater">
         <div className="theater-top">
-          <a href="#/">← 返回首页</a>
+          <a className="theater-back" href="#/">
+            ← 返回
+          </a>
           <b className="theater-title">{String((doc.meta as { title?: unknown })?.title ?? '关卡')}</b>
-          <a href={`#/graph/${id}`}>🧭 逻辑图谱</a>
+          <a className="theater-graph" href={`#/graph/${id}`}>
+            🧭 逻辑图谱
+          </a>
         </div>
         {load.lintWarnings.length > 0 && (
           <details className="json-view theater-note">

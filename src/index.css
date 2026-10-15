@@ -488,32 +488,70 @@ input::placeholder {
   margin: 0;
 }
 
-/* ---------- 关卡运行器 ---------- */
+/* ---------- 关卡运行器（docs/37 R3：题面主视觉条 + 进度条 + 结算条） ---------- */
 
 .level-runner {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-lg);
   overflow: hidden;
 }
 .level-head {
   display: flex;
-  align-items: baseline;
-  gap: 14px;
-  padding: 12px 16px;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
   border-bottom: 1px solid var(--line);
-  flex-wrap: wrap;
 }
-.level-title {
+/* 题面主视觉条：当前题号徽章 + 题面大字——游玩时的第一视觉焦点 */
+.stage-prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--accent-soft);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+}
+.stage-prompt-q {
+  flex: none;
+  font-size: var(--fs-0);
   font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-radius: var(--r-pill);
+  padding: 2px 10px;
+  white-space: nowrap;
 }
-.level-prompt {
-  color: var(--muted);
-  flex: 1;
+.stage-prompt-text {
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.45;
 }
 .level-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-0);
+}
+.level-progress-track {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--soft);
+  overflow: hidden;
+}
+.level-progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #ffffff));
+  transition: width var(--tr);
+}
+.level-progress-text {
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
 /* level-canvas-wrap 挂在 .stage-viewport 同一元素上（批次12 共享舞台），
    滚动行为统一由 .stage-viewport 管理（见文件尾部分享舞台段），此处不再重复声明 */
@@ -525,16 +563,46 @@ input::placeholder {
 }
 .level-foot {
   border-top: 1px solid var(--line);
-  padding: 10px 16px;
+  padding: var(--sp-2) var(--sp-3);
   display: flex;
   justify-content: flex-end;
-  font-size: 14px;
 }
-.level-foot .pass {
+/* 结算条：通过/未通过 + 得分徽章 + 重玩/回首页常驻（修复结算后无法重开） */
+.result-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  width: 100%;
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-1);
+  font-weight: 600;
+}
+.result-bar.pass {
+  background: var(--ok-soft);
   color: var(--ok);
 }
-.level-foot .nopass {
-  color: var(--warn);
+.result-bar.nopass {
+  background: var(--warn-soft);
+  color: var(--warn-ink-2);
+}
+.result-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.result-score {
+  color: var(--muted);
+}
+.result-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.result-actions button {
+  font-size: var(--fs-1);
+  padding: 6px 14px;
 }
 
 .comp-label {
@@ -653,10 +721,10 @@ input::placeholder {
 }
 
 .breadcrumb {
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
 }
 .json-view {
-  margin-top: 18px;
+  margin-top: var(--sp-4);
 }
 .json-view summary {
   cursor: pointer;
@@ -665,11 +733,11 @@ input::placeholder {
 .json-view pre {
   background: var(--code-bg);
   color: var(--code-ink);
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
   overflow: auto;
   max-height: 420px;
-  font-size: 12px;
+  font-size: var(--fs-0);
   line-height: 1.5;
 }
 
@@ -800,12 +868,17 @@ input::placeholder {
 .boundary-error {
   background: var(--panel);
   border: 1.5px solid var(--bad);
-  border-radius: 14px;
-  padding: 28px;
-  text-align: center;
+  border-radius: var(--r-lg);
+  padding: var(--sp-6);
+  text-align: left;
 }
 .boundary-error h2 {
   color: var(--bad);
+  margin-top: 0;
+}
+/* 运行出错兜底卡（ErrorBoundary）：居中呈现；校验失败列表（LevelPage）保持左对齐 */
+.boundary-runtime {
+  text-align: center;
 }
 
 /* ---------- 系列浏览 / 进度徽章 ---------- */
@@ -5053,12 +5126,29 @@ a.lib-title:hover {
   .page {
     font-size: 14px;
   }
-  .level-head {
-    gap: 8px;
-    font-size: 13px;
+  /* 游玩页（docs/37 R3）：theater 收窄、顶栏标题独占一行、题面条缩字号 */
+  .theater {
+    padding: var(--sp-2);
+    border-radius: var(--r-lg);
   }
-  .level-title {
-    font-size: 14px;
+  .theater-top {
+    flex-wrap: wrap;
+  }
+  .theater-title {
+    flex-basis: 100%;
+    order: -1;
+    text-align: left;
+    font-size: var(--fs-3);
+    white-space: normal;
+  }
+  .stage-prompt {
+    gap: var(--sp-2);
+  }
+  .stage-prompt-text {
+    font-size: var(--fs-2);
+  }
+  .result-bar {
+    font-size: var(--fs-0);
   }
   .lib-row {
     flex-wrap: wrap;
@@ -6098,38 +6188,58 @@ progress {
 .theater-top {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
-  padding: var(--sp-1) var(--sp-2);
+  gap: var(--sp-2);
+  padding: 0 var(--sp-1);
+}
+/* 顶部两钮：返回 / 逻辑图谱——安静的按钮化链接（docs/37 R3） */
+.theater-back,
+.theater-graph {
+  flex: none;
   font-size: var(--fs-1);
-}
-.theater-top a {
-  color: var(--muted);
-  text-decoration: none;
   font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: var(--r-md);
+  padding: 5px 12px;
+  transition: border-color var(--tr-fast), color var(--tr-fast);
 }
-.theater-top a:hover {
+.theater-back:hover,
+.theater-graph:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   color: var(--accent);
 }
 .theater-title {
   flex: 1;
   text-align: center;
   color: var(--ink);
-  font-size: var(--fs-2);
+  font-family: var(--user-font-display, var(--font-display));
+  font-size: var(--fs-4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .theater-note {
-  margin: 0 var(--sp-2);
+  margin: 0 var(--sp-1);
+  font-size: var(--fs-0);
 }
 .theater .json-view summary {
   color: var(--muted);
+  font-size: var(--fs-0);
 }
 .theater .level-runner {
   margin-top: 0;
   border-radius: var(--r-lg);
   overflow: hidden;
   box-shadow: var(--shadow-1);
+}
+/* 加载中/空态：剧场壳内居中提示（避免页面高度跳动） */
+.theater-empty {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ---------- 系列页（§2.4）：系列进度条 ---------- */

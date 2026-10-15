@@ -90,11 +90,20 @@ function RunnerCore({
   return (
     <div className="level-runner">
       <div className="level-head">
-        <span className="level-title">{String(doc.meta.title ?? '未命名关卡')}</span>
-        {promptText(row) && <span className="level-prompt">{promptText(row)}</span>}
-        <span className="level-progress">
-          第 {Math.min(progress.index + 1, progress.total)} / {progress.total} 题
-        </span>
+        {promptText(row) && (
+          <div className="stage-prompt">
+            <span className="stage-prompt-q">第 {Math.min(progress.index + 1, progress.total)} 题</span>
+            <span className="stage-prompt-text">{promptText(row)}</span>
+          </div>
+        )}
+        <div className="level-progress">
+          <span className="level-progress-track" aria-hidden="true">
+            <i style={{ width: `${progress.total > 0 ? (Math.min(progress.index + 1, progress.total) / progress.total) * 100 : 0}%` }} />
+          </span>
+          <span className="level-progress-text">
+            {Math.min(progress.index + 1, progress.total)} / {progress.total}
+          </span>
+        </div>
       </div>
       <LevelStage
         doc={doc}
@@ -106,12 +115,24 @@ function RunnerCore({
       />
       <div className="level-foot">
         {finished ? (
-          <span className={finished.passed ? 'pass' : 'nopass'}>
-            已完成 · 得分 {String(finished.score)} · {finished.passed ? '通过 🎉' : '未通过'}
-          </span>
+          <div className={`result-bar ${finished.passed ? 'pass' : 'nopass'}`}>
+            <span className="result-icon" aria-hidden="true">
+              {finished.passed ? '🎉' : '💪'}
+            </span>
+            <span className="result-text">{finished.passed ? '通过' : '未通过'}</span>
+            <span className="result-score">得分 {String(finished.score)}</span>
+            <span className="result-actions">
+              <button type="button" onClick={onRetry}>
+                ↻ 重玩
+              </button>
+              <a className="button-like" href="#/">
+                回首页
+              </a>
+            </span>
+          </div>
         ) : (
           <button type="button" className="link" onClick={onRetry}>
-            重开本关
+            ↻ 重开本关
           </button>
         )}
       </div>
