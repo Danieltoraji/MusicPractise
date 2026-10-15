@@ -625,6 +625,10 @@ input::placeholder {
   color: var(--bad);
   background: var(--bad-soft);
 }
+/* 空文本 label（等待 label.setText 的反馈位）：无字时软底会残留成色块，一并隐去 */
+.comp-label:empty {
+  background: transparent;
+}
 .comp-staff {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
