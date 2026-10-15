@@ -542,35 +542,40 @@ input::placeholder {
   align-items: center;
   font-size: 18px;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   padding: 4px 10px;
 }
 .comp-label.tone-info {
   color: var(--accent);
+  background: var(--accent-soft);
 }
 .comp-label.tone-success {
   color: var(--ok);
+  background: var(--ok-soft);
 }
 .comp-label.tone-error {
   color: var(--bad);
+  background: var(--bad-soft);
 }
 .comp-staff {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   background: var(--paper);
+  box-shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.04);
   overflow: hidden;
 }
 .comp-button {
   font-size: 16px;
   border: 1px solid var(--line);
-  background: #f4f5fa;
+  background: var(--soft);
   color: var(--ink);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   cursor: pointer;
-  transition: filter 0.12s;
+  transition: filter var(--tr-fast), border-color var(--tr-fast);
 }
 .comp-button:hover:not(.is-disabled) {
   filter: brightness(0.96);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
 .comp-button.is-disabled {
   opacity: 0.45;
@@ -586,8 +591,8 @@ input::placeholder {
   align-items: center;
   justify-content: center;
   border: 1.5px dashed var(--warn);
-  border-radius: 10px;
-  background: #fffbeb;
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
   color: var(--warn);
   font-size: 14px;
 }
@@ -598,12 +603,19 @@ input::placeholder {
   font-size: 17px;
   padding: 14px 16px;
   border: 1.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-md);
   background: var(--panel);
   cursor: pointer;
+  font-family: inherit;
+  transition: border-color var(--tr-fast), background-color var(--tr-fast),
+    box-shadow var(--tr-fast), transform var(--tr-fast);
 }
 .choice-item:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: 0 2px 8px rgba(var(--shadow-rgb), 0.08);
+}
+.choice-item:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .choice-item:disabled {
   cursor: default;
@@ -611,12 +623,12 @@ input::placeholder {
 }
 .choice-item.is-correct {
   border-color: var(--ok);
-  background: #f0fdf4;
+  background: var(--ok-soft);
   opacity: 1;
 }
 .choice-item.is-wrong {
   border-color: var(--bad);
-  background: #fef2f2;
+  background: var(--bad-soft);
 }
 .choice-index {
   width: 26px;
@@ -629,6 +641,15 @@ input::placeholder {
   justify-content: center;
   font-size: 13px;
   flex: none;
+  transition: background-color var(--tr-fast), color var(--tr-fast);
+}
+.choice-item.is-correct .choice-index {
+  background: var(--ok);
+  color: #ffffff;
+}
+.choice-item.is-wrong .choice-index {
+  background: var(--bad);
+  color: #ffffff;
 }
 
 .breadcrumb {
@@ -1431,7 +1452,7 @@ a.level-row:hover {
   gap: 18px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
 }
 .comp-rhythm .beat-row {
   display: flex;
@@ -1442,12 +1463,14 @@ a.level-row:hover {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--line);
-  transition: transform 0.08s;
+  background: var(--soft);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: transform 0.08s, background-color var(--tr-fast), box-shadow var(--tr-fast);
 }
 .comp-rhythm .beat-dot.active {
   background: var(--accent);
-  transform: scale(1.3);
+  transform: scale(1.35);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .comp-rhythm .tap-pad {
   width: 140px;
@@ -1464,16 +1487,27 @@ a.level-row:hover {
   cursor: pointer;
   user-select: none;
   touch-action: manipulation;
+  transition: border-color var(--tr-fast), color var(--tr-fast), box-shadow var(--tr-fast);
 }
 .comp-rhythm .tap-pad.live {
   border-color: var(--accent);
   color: var(--accent);
-  box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.12);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent);
+  animation: tap-breathe 1.2s ease-in-out infinite;
 }
 .comp-rhythm .tap-pad.hit {
   border-color: var(--ok);
   color: var(--ok);
-  box-shadow: 0 0 0 6px rgba(22, 163, 74, 0.15);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--ok) 15%, transparent);
+}
+@keyframes tap-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
 }
 .comp-tuner {
   display: flex;
@@ -1482,7 +1516,7 @@ a.level-row:hover {
   justify-content: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   text-align: center;
   padding: 12px;
 }
@@ -1560,7 +1594,7 @@ a.level-row:hover {
 .tap-pad.live {
   border-color: var(--accent);
   color: var(--accent);
-  box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.12);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 /* ---------- 滑块 / 输入框 / 键盘 ---------- */
 
@@ -1588,20 +1622,22 @@ a.level-row:hover {
   text-transform: uppercase;
   padding: 0 14px;
   border: 1.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   background: var(--panel);
   color: var(--ink);
   font-family: inherit;
+  transition: border-color var(--tr-fast), box-shadow var(--tr-fast);
 }
 .comp-input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 .comp-fingering {
   position: relative;
   border: 1.5px solid var(--line);
-  border-radius: 10px;
-  background: #f2f3f8;
+  border-radius: var(--r-md);
+  background: var(--st-keybed);
   overflow: hidden;
 }
 .comp-fingering .key {
@@ -1611,22 +1647,28 @@ a.level-row:hover {
   border: 1px solid var(--line);
   cursor: pointer;
   padding: 0;
+  transition: background-color var(--tr-fast);
 }
 .comp-fingering .key.white {
-  background: #ffffff;
+  background: var(--st-key-white);
+  box-shadow: inset 0 -4px 0 rgba(var(--shadow-rgb), 0.06);
 }
 .comp-fingering .key.white:hover {
   background: var(--accent-soft);
 }
+.comp-fingering .key.white:active {
+  box-shadow: inset 0 -2px 0 rgba(var(--shadow-rgb), 0.06);
+}
 .comp-fingering .key.black {
   height: 62%;
-  background: #2a2f3a;
-  border-color: #14181f;
+  background: var(--st-key-black);
+  border-color: var(--st-key-black-line);
   z-index: 2;
   border-radius: 0 0 4px 4px;
+  box-shadow: inset 0 -3px 0 rgba(255, 255, 255, 0.07);
 }
 .comp-fingering .key.black:hover {
-  background: #3d4453;
+  background: var(--st-key-black-hover);
 }
 .comp-fingering .key.correct {
   background: var(--ok) !important;
@@ -2923,9 +2965,9 @@ path.gedge-false {
   gap: 6px;
   padding: 10px 14px;
   border: 1.5px solid var(--line);
-  border-radius: 10px;
-  background: linear-gradient(160deg, #0f172a, #1e293b);
-  color: #e2e8f0;
+  border-radius: var(--r-md);
+  background: var(--st-device-synth-bg);
+  color: var(--st-device-synth-ink);
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -2966,7 +3008,7 @@ path.gedge-false {
 }
 .comp-synth .synth-meta {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--st-device-synth-muted);
 }
 
 /* ---------- 节点图 · 千星深色工作台主题（深色 = .graph-editor.ge-dark；浅色走基础规则） ---------- */
@@ -3504,9 +3546,9 @@ a.lib-title:hover {
   gap: 6px;
   padding: 10px 14px;
   border: 1.5px solid var(--line);
-  border-radius: 10px;
-  background: linear-gradient(160deg, #2b2417, #1f1c12);
-  color: #f3e8d0;
+  border-radius: var(--r-md);
+  background: var(--st-device-sound-bg);
+  color: var(--st-device-sound-ink);
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -3520,7 +3562,7 @@ a.lib-title:hover {
 }
 .comp-sound .sound-meta {
   font-size: 11px;
-  color: #bfa878;
+  color: var(--st-device-sound-muted);
 }
 .comp-sound.is-playing .sound-icon {
   animation: sound-pulse 0.7s ease;
@@ -5076,20 +5118,20 @@ a.lib-title:hover {
   padding: 0;
   touch-action: manipulation;
   border: 1px solid var(--line);
-  background: #fbfbfe;
+  background: var(--st-key-white-soft);
 }
 .synth-keys .key.white:hover {
-  background: #eef0fb;
+  background: var(--st-key-white-hover);
 }
 .synth-keys .key.black {
   height: 60%;
   z-index: 2;
-  background: #2a2f3a;
-  border-color: #14181f;
+  background: var(--st-key-black);
+  border-color: var(--st-key-black-line);
   border-radius: 0 0 4px 4px;
 }
 .synth-keys .key.black:hover {
-  background: #3a4150;
+  background: var(--st-key-black-hover);
 }
 
 /* 运行日志命令参数摘要（批次13）：路径后的小字 detail */
@@ -5902,10 +5944,11 @@ a.lib-title:hover {
   border-bottom-color: rgba(232, 196, 106, 0.35);
 }
 
-/* ---------- 内容层浅色岛（docs/35 验证轮修复）---------- */
+/* ---------- 内容层浅色岛（docs/35 验证轮修复，docs/37 R2 扩展全套钉值）---------- */
 /* 关卡舞台与编辑器画布里的组件是「内容」而非镶边：不随皮肤翻转。
    内容 token 在此钉回浅色原值——任意皮肤（含深色）下纸面与组件可读性不变，
-   同时让编辑器画布保持原工作台观感（编辑器不在换肤范围，docs/35 §1）。 */
+   同时让编辑器画布保持原工作台观感（编辑器不在换肤范围，docs/35 §1）。
+   --st-* 为内容层子令牌（docs/37 R2）：设备面板/钢琴键等内容原语，皮肤不达。 */
 .stage-canvas,
 .editor-canvas {
   --panel: #ffffff;
@@ -5916,10 +5959,37 @@ a.lib-title:hover {
   --muted: #667085;
   --accent: #4f46e5;
   --accent-ink: #ffffff;
+  --accent-soft: #eef1ff;
+  --accent-soft-strong: #dfe3ff;
+  --accent-soft-2: #fdf4ff;
   --ok: #16a34a;
+  --ok-soft: #f0fdf4;
+  --ok-soft-strong: #dcfce7;
   --bad: #dc2626;
+  --bad-soft: #fef2f2;
+  --bad-soft-strong: #fde3e3;
   --warn: #d97706;
+  --warn-soft: #fffbeb;
+  --warn-soft-strong: #fef3c7;
+  --warn-ink: #92400e;
+  --warn-ink-2: #b45309;
   --paper: #fcfcff;
+  --shadow-rgb: 30, 36, 48;
+  /* 钢琴键（指法键盘 + 合成器迷你键盘共用） */
+  --st-key-white: #ffffff;
+  --st-key-white-soft: #fbfbfe;
+  --st-key-white-hover: #eef0fb;
+  --st-key-black: #2a2f3a;
+  --st-key-black-line: #14181f;
+  --st-key-black-hover: #3d4453;
+  --st-keybed: #f2f3f8;
+  /* 「暗设备」面板（synth/synth-keys/sound）：内容层设备隐喻，恒定深色 */
+  --st-device-synth-bg: linear-gradient(160deg, #0f172a, #1e293b);
+  --st-device-synth-ink: #e2e8f0;
+  --st-device-synth-muted: #94a3b8;
+  --st-device-sound-bg: linear-gradient(160deg, #2b2417, #1f1c12);
+  --st-device-sound-ink: #f3e8d0;
+  --st-device-sound-muted: #bfa878;
 }
 /* 舞台给纸面底（挂在视口上：整块舞台连续铺满，横向滚动区也是纸面） */
 .stage-viewport {
