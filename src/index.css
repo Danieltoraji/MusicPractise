@@ -6002,64 +6002,67 @@ a.lib-title:hover {
   border-left-color: #82318e;
 }
 
-/* 皮肤三 · 堇庭流华（liuhua）：深蓝底，冰蓝提亮，金色点缀关键处；
+/* 皮肤三 · 堇庭流华（liuhua）：神里绫华印象——深靛夜幕 × 冰蓝辉光 × 金色点缀，
+   色板对齐 dsh-skin-kamisato 深色样式（金为唯一品牌色，primary 走纯令牌金底深字无渐变；
+   冰蓝退居辉光次强调：hero 渐变冷端 / 选区 / 状态软底）。
    正文默认字体栈，标题等文字量少的关键处用汉仪文黑85W（缺字体自动回退）。 */
 :root[data-skin='liuhua'] {
   color-scheme: dark;
-  --app-bg: linear-gradient(170deg, #121c3c 0%, #0d1530 60%, #0b1228 100%);
-  --panel: #16234a;
-  --panel-2: #1c2b57;
-  --soft: #22315f;
-  --line: #2b3c6e;
-  --ink: #e3ecff;
-  --muted: #93a6cf;
-  --accent: #7dd3fc;
-  --accent-ink: #0a2540;
-  --accent-soft: rgba(125, 211, 252, 0.12);
-  --accent-soft-strong: rgba(125, 211, 252, 0.24);
-  --accent-soft-2: rgba(232, 196, 106, 0.12);
-  --ok: #4ade80;
-  --ok-soft: rgba(74, 222, 128, 0.1);
-  --ok-soft-strong: rgba(74, 222, 128, 0.24);
-  --bad: #f87171;
-  --bad-soft: rgba(248, 113, 113, 0.1);
-  --bad-soft-strong: rgba(248, 113, 113, 0.26);
-  --warn: #fbbf24;
-  --warn-soft: rgba(251, 191, 36, 0.1);
-  --warn-soft-strong: rgba(251, 191, 36, 0.24);
-  --warn-ink: #fcd34d;
-  --warn-ink-2: #fbbf24;
-  --warn-banner-bg: rgba(251, 191, 36, 0.12);
-  --warn-banner-ink: #fcd34d;
-  --warn-banner-line: rgba(251, 191, 36, 0.4);
-  --shadow-rgb: 0, 0, 0;
-  --code-bg: #0b1228;
-  --code-ink: #c7d6f5;
+  --bg: #1e2449;
+  --app-bg: linear-gradient(180deg, #2e3466 0%, #242a52 45%, #1e2449 100%);
+  --panel: #2b3160;
+  --panel-2: #333a6e;
+  --soft: #3d4480;
+  --line: rgba(200, 202, 244, 0.16);
+  --ink: #ececfa;
+  --muted: #aeb2de;
+  --accent: #c8b080;
+  --accent-ink: #181d3a;
+  --accent-soft: rgba(200, 176, 128, 0.16);
+  --accent-soft-strong: rgba(200, 176, 128, 0.3);
+  --accent-soft-2: rgba(127, 171, 224, 0.18);
+  --ok: #3fd090;
+  --ok-soft: rgba(52, 196, 137, 0.14);
+  --ok-soft-strong: rgba(52, 196, 137, 0.26);
+  --bad: #e85d5d;
+  --bad-soft: rgba(224, 96, 96, 0.16);
+  --bad-soft-strong: rgba(224, 96, 96, 0.3);
+  --warn: #d8bd6a;
+  --warn-soft: rgba(216, 189, 106, 0.14);
+  --warn-soft-strong: rgba(216, 189, 106, 0.28);
+  --warn-ink: #e2cd82;
+  --warn-ink-2: #d8bd6a;
+  --warn-banner-bg: rgba(216, 189, 106, 0.12);
+  --warn-banner-ink: #e2cd82;
+  --warn-banner-line: rgba(216, 189, 106, 0.4);
+  --shadow-rgb: 10, 14, 32;
+  --code-bg: #23294f;
+  --code-ink: #e5e6f8;
+  --code-line: #343b68;
   --paper: #fcfcff;
   --font-display: '汉仪文黑85W', 'HYWenHei 85W', 'HYWenHei-85W', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
 }
-/* 点睛：侧边栏比内容面板更深一档，品牌与激活导航金色（深蓝上最亮的关键件） */
+/* 点睛：侧边栏比内容面板更深一档（kamisato sidebar），品牌与激活导航走金色体系 */
 :root[data-skin='liuhua'] {
-  --shell-bg: #0b1228;
-  --shell-line: rgba(232, 196, 106, 0.22);
+  --shell-bg: #1f2547;
+  --shell-line: rgba(200, 192, 128, 0.22);
 }
 :root[data-skin='liuhua'] .sidenav-brand {
-  color: #e8c46a;
+  color: #c8b070;
 }
 :root[data-skin='liuhua'] .sidenav-brand .brand-note {
-  color: #93a6cf;
+  color: #aeb2de;
 }
 :root[data-skin='liuhua'] .sidenav-item.active {
-  color: #e8c46a;
-  background: rgba(232, 196, 106, 0.1);
-  border-left-color: #e8c46a;
-}
-:root[data-skin='liuhua'] button.primary {
-  background: linear-gradient(135deg, #e8c46a, #c99a2e);
-  color: #1c1503;
+  color: #c8c080;
+  background: #333a6e;
+  border-left-color: #c8c080;
 }
 :root[data-skin='liuhua'] .docs-article h1 {
-  border-bottom-color: rgba(232, 196, 106, 0.35);
+  border-bottom-color: rgba(200, 192, 128, 0.35);
+}
+:root[data-skin='liuhua'] ::selection {
+  background: rgba(127, 171, 224, 0.35);
 }
 
 /* ---------- 内容层浅色岛（docs/35 验证轮修复，docs/37 R2 扩展全套钉值）---------- */

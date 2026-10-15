@@ -34,9 +34,9 @@ export const SKIN_CATALOG: { id: SkinId; name: string; desc: string; fontNote: s
   {
     id: 'liuhua',
     name: '堇庭流华',
-    desc: '深蓝底、冰蓝提亮、金色点缀关键处',
+    desc: '深靛夜幕、冰蓝辉光、金色点缀（神里绫华印象）',
     fontNote: '标题 · 汉仪文黑85W（缺字体自动回退）',
-    themeColor: '#0d1530',
+    themeColor: '#242a52',
   },
 ]
 
