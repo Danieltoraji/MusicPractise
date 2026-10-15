@@ -27,9 +27,9 @@ export const SKIN_CATALOG: { id: SkinId; name: string; desc: string; fontNote: s
   {
     id: 'violet',
     name: '紫色清春',
-    desc: '以白为主，紫色与多彩点缀，明快清爽',
+    desc: '清华紫为主色，淡紫铺底的雅致浅色',
     fontNote: '微软雅黑',
-    themeColor: '#6d28d9',
+    themeColor: '#660874',
   },
   {
     id: 'liuhua',

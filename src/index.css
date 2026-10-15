@@ -5956,21 +5956,22 @@ a.lib-title:hover {
   --paper: #fcfcff;
 }
 
-/* 皮肤二 · 紫色清春（violet）：白底为主，紫色与多彩点缀（清华视觉色板气质，
-   无任何校徽元素）；字体以微软雅黑为主。 */
+/* 皮肤二 · 紫色清春（violet）：清华紫 #660874 为主色（另取清华紫系 #82318e 做渐变亮端），
+   页面底/面板/软底/描边整体铺淡紫调——不再以纯白为底；无任何校徽元素；微软雅黑。 */
 :root[data-skin='violet'] {
   color-scheme: light;
-  --app-bg: #ffffff;
-  --panel: #ffffff;
-  --panel-2: #f7f4fb;
-  --soft: #f1ecf8;
-  --line: #e8e2f0;
-  --ink: #2b2333;
-  --muted: #7a6f8a;
-  --accent: #6d28d9;
+  --bg: #f2eaf6;
+  --app-bg: linear-gradient(180deg, #f7f1fa 0%, #efe5f4 100%);
+  --panel: #fdfbfe;
+  --panel-2: #f7f1fa;
+  --soft: #efe5f4;
+  --line: #e2d4ea;
+  --ink: #2f2438;
+  --muted: #756a85;
+  --accent: #660874;
   --accent-ink: #ffffff;
-  --accent-soft: #f5f0fc;
-  --accent-soft-strong: #eadcfb;
+  --accent-soft: #f6e9f8;
+  --accent-soft-strong: #eed7f2;
   --accent-soft-2: #fdf0fa;
   --ok: #15803d;
   --ok-soft: #f2fdf5;
@@ -5986,19 +5987,19 @@ a.lib-title:hover {
   --warn-banner-bg: #fdf6e3;
   --warn-banner-ink: #9a6700;
   --warn-banner-line: rgba(180, 83, 9, 0.35);
-  --shadow-rgb: 60, 45, 90;
+  --shadow-rgb: 80, 30, 92;
   --code-bg: #241b33;
   --code-ink: #e8e2f5;
-  --paper: #fdfdff;
+  --paper: #fdfcff;
   --font-ui: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
   --font-display: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
 }
-/* 点睛：主按钮与激活导航走紫渐变（紫 → 清华紫的过渡） */
+/* 点睛：主按钮与激活导航走清华紫双色调渐变 */
 :root[data-skin='violet'] button.primary {
-  background: linear-gradient(135deg, #7c3aed, #660874);
+  background: linear-gradient(135deg, #82318e, #660874);
 }
 :root[data-skin='violet'] .sidenav-item.active {
-  border-left-color: #9d3ff0;
+  border-left-color: #82318e;
 }
 
 /* 皮肤三 · 堇庭流华（liuhua）：深蓝底，冰蓝提亮，金色点缀关键处；
