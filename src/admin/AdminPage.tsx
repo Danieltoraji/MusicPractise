@@ -140,12 +140,25 @@ function AdminDashboard() {
 
   return (
     <div className="page">
-      <h1>管理后台</h1>
-      {stats && (
-        <p className="admin-stats">
-          用户 <b>{stats.users}</b> · 云盘关卡 <b>{stats.cloudLevels}</b> · 活跃会话 <b>{stats.activeSessions}</b>
-        </p>
-      )}
+      <header className="page-head">
+        <div>
+          <h1>管理后台</h1>
+          <p className="page-sub">用户、云盘关卡与审计的集中管理面；破坏性操作均有二次确认，真实门禁在服务端。</p>
+        </div>
+        {stats && (
+          <div className="admin-stats">
+            <span className="stat-chip">
+              <b>{stats.users}</b> 用户
+            </span>
+            <span className="stat-chip">
+              <b>{stats.cloudLevels}</b> 云盘关卡
+            </span>
+            <span className="stat-chip">
+              <b>{stats.activeSessions}</b> 活跃会话
+            </span>
+          </div>
+        )}
+      </header>
       {error && <p className="tone-error">{error}</p>}
       {notice && <p className="muted">{notice}</p>}
 

@@ -6227,3 +6227,183 @@ progress {
   margin-left: auto;
   margin-right: auto;
 }
+
+/* ================= docs/36 欠账批次：设置分节卡 / 管理后台 / 文档与皮肤中心令牌对齐 ================= */
+
+/* ---------- 设置页：分节卡 + 外观入口 ---------- */
+.settings-page .settings-section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  margin-bottom: var(--sp-4);
+}
+.settings-section-title {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-3);
+}
+.settings-page .settings-section .settings-form,
+.settings-page .settings-section .settings-audio {
+  max-width: none;
+  margin-bottom: 0;
+  border: none;
+  padding: 0;
+  background: none;
+}
+.settings-appearance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  font-size: var(--fs-1);
+}
+.settings-appearance-skin {
+  color: var(--accent);
+}
+.settings-page .settings-save {
+  max-width: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--sp-3) var(--sp-5);
+}
+
+/* ---------- 管理后台：统计 chips / 工具栏 / 行悬停 ---------- */
+.admin-stats {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
+  font-size: var(--fs-1);
+  color: var(--muted);
+}
+.stat-chip b {
+  color: var(--accent);
+  font-size: var(--fs-2);
+}
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.admin-toolbar input {
+  flex: 1;
+  max-width: 320px;
+}
+.admin-table {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--sp-1) var(--sp-4) var(--sp-3);
+}
+.admin-table .admin-row {
+  padding: var(--sp-2) 0;
+  border-radius: var(--r-sm);
+}
+.admin-table .admin-row:hover {
+  background: var(--soft);
+}
+.admin-row .id-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+  white-space: nowrap;
+}
+.admin-status {
+  font-size: var(--fs-0);
+  font-weight: 600;
+}
+
+/* ---------- 文档页排版对齐令牌 v3（视觉等值换算，不改结构） ---------- */
+.docs {
+  gap: var(--sp-6);
+}
+.docs-side {
+  gap: var(--sp-4);
+}
+.docs-search {
+  padding: 9px var(--sp-3);
+  border-radius: var(--r-md);
+  font-size: var(--fs-1);
+}
+.docs-nav {
+  gap: var(--sp-4);
+}
+.docs-link {
+  font-size: var(--fs-1);
+  padding: 6px var(--sp-3);
+  border-radius: var(--r-sm);
+}
+.docs-article {
+  border-radius: var(--r-lg);
+  padding: var(--sp-5) var(--sp-6) var(--sp-5);
+}
+.docs-article p,
+.docs-article li {
+  line-height: 1.75;
+}
+.docs-callout {
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--fs-1);
+}
+.docs-code {
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+  font-size: 12.5px;
+}
+.docs-table th,
+.docs-table td {
+  padding: 9px var(--sp-3);
+}
+.docs-table {
+  border-radius: var(--r-md);
+}
+.docs-pager {
+  gap: var(--sp-4);
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-4);
+}
+.docs-pager-link {
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+/* ---------- 皮肤中心排版对齐令牌 v3 ---------- */
+.skin-cards {
+  gap: var(--sp-4);
+}
+.skin-card {
+  border-radius: var(--r-lg);
+  padding: var(--sp-3);
+  gap: 6px;
+}
+.skin-panel {
+  border-radius: var(--r-lg);
+  padding: var(--sp-4) var(--sp-5);
+  gap: var(--sp-3);
+}
+.skin-field {
+  font-size: var(--fs-1);
+}
+.skin-field select,
+.skin-custom-row input {
+  border-radius: var(--r-sm);
+}
+.skin-note,
+.skin-note-top {
+  font-size: var(--fs-0);
+  line-height: 1.6;
+}

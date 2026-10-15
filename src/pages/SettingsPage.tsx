@@ -6,13 +6,15 @@
  * 「测试连接」用当前表单值（含未保存的修改）发一条最小对话。
  */
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { AiClientError, testConnection } from '../ai/client'
 import { PRESET_BY_ID, PROVIDER_PRESETS, isCustomProfileId, newCustomProfileId } from '../ai/providers'
 import { loadAiSettings, saveAiSettings, type AiProviderProfile, type AiSettings } from '../ai/settings'
 import { AccountSection } from '../account/AccountSection'
 import { CloudSection } from '../cloud/CloudSection'
 import { getMasterVolume, playNotes, setMasterVolume } from '../runtime/audio'
+import { SKIN_CATALOG } from '../skin/prefs'
+import { getSkinSnapshot, subscribeSkin } from '../skin/store'
 
 interface TestResult {
   ok: boolean
@@ -27,6 +29,8 @@ export function SettingsPage() {
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   // 音量即改即存（不混入 AI 设置的「保存设置」）；试听顺带验证钢琴发声链
   const [volume, setVolumeState] = useState(() => getMasterVolume())
+  // 当前皮肤名仅用于「外观」分节展示（docs/36 §2.4）；改皮肤在皮肤中心做，这里不提供写路径
+  const skin = useSyncExternalStore(subscribeSkin, getSkinSnapshot)
   const applyVolume = (v: number): void => {
     setVolumeState(v)
     setMasterVolume(v)
@@ -111,13 +115,18 @@ export function SettingsPage() {
         </div>
       </header>
 
-      <h2>账户</h2>
-      <AccountSection />
+      <section className="settings-section">
+        <h2 className="settings-section-title">账户</h2>
+        <AccountSection />
+      </section>
 
-      <h2>云盘</h2>
-      <CloudSection />
+      <section className="settings-section">
+        <h2 className="settings-section-title">云盘</h2>
+        <CloudSection />
+      </section>
 
-      <h2>AI 供应商</h2>
+      <section className="settings-section">
+      <h2 className="settings-section-title">AI 供应商</h2>
       <div className="provider-cards">
         {PROVIDER_PRESETS.map((p) => {
           const prof = settings.profiles[p.id]
@@ -230,8 +239,10 @@ export function SettingsPage() {
           </p>
         </div>
       )}
+      </section>
 
-      <h2>音频</h2>
+      <section className="settings-section">
+      <h2 className="settings-section-title">音频</h2>
       <div className="settings-audio">
         <label className="audio-volume">
           <span>主音量（影响钢琴 / 合成器 / 节拍点击）</span>
@@ -255,6 +266,22 @@ export function SettingsPage() {
         </label>
         <p className="muted">音量保存于本机浏览器（此设备所有关卡生效）。</p>
       </div>
+      </section>
+
+      <section className="settings-section">
+        <h2 className="settings-section-title">外观</h2>
+        <div className="settings-appearance">
+          <span className="muted">
+            当前皮肤：<b className="settings-appearance-skin">
+              {SKIN_CATALOG.find((s) => s.id === skin.skinId)?.name ?? skin.skinId}
+            </b>
+            （背景图、水印、字体在皮肤中心自定义，仅存本机）
+          </span>
+          <a className="button-like" href="#/skins">
+            🎨 打开皮肤中心 →
+          </a>
+        </div>
+      </section>
 
       <div className="settings-save">
         <button type="button" className="primary" onClick={save}>
