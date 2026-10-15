@@ -1,7 +1,9 @@
 /**
- * 我的云盘（docs/39 批次 H2，#/cloud）：私有云盘域的独立管理页。
+ * 我的云盘（docs/39 批次 H2/H3，#/cloud）：私有云盘域的独立管理页。
  * 关卡与系列文件夹两类槽位；「已用」为合并口径（关卡数 + Σ文件夹内含关卡数），上限 10。
  * 上传从本机资源库选择（点击即传）；下载走 importDocuments 既有管线（信封校验→闭包→冲突策略→事务）。
+ * H3 起支持「申请公开」：状态徽章（待审核/已公开/未通过）+ 留言与精选意愿 + 撤回；
+ * 源绑定锁定——pending/published 期间云盘删除会被服务端 409 拒绝，UI 提示先撤回。
  * 设置页 CloudSection 保留摘要与本页入口。
  */
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
@@ -10,6 +12,7 @@ import { getAccountSnapshot, subscribeAccount } from '../account/store'
 import { db, type LibraryRecord } from '../library/db'
 import { collectSeriesDocs } from '../library/manage'
 import { importDocuments, type ImportReport } from '../library/io'
+import { hubApi, type HubMineItem } from '../hub/api'
 import { cloudApi, CLOUD_LIMIT, uploadLibraryFolder, uploadLibraryLevel, type CloudFolder, type CloudSlot } from './api'
 
 const KIND_ICON: Record<string, string> = { series: '📚', topic: '📂', level: '🎯', instrument: '🎹' }
@@ -26,15 +29,23 @@ export function CloudPage() {
   const [report, setReport] = useState<ImportReport | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  // H3：我的公开申请（按 rootDocId 匹配槽位显示状态徽章）+ 申请公开弹窗
+  const [mine, setMine] = useState<HubMineItem[]>([])
+  const [publishDialog, setPublishDialog] = useState<{ kind: 'level' | 'series'; slotId: string; title: string } | null>(null)
+  const [publishNote, setPublishNote] = useState('')
+  const [publishWantFeatured, setPublishWantFeatured] = useState(false)
   // 本机资源库（上传选择器数据源）
   const localRows = useLiveQuery(() => db.resources.orderBy('importedAt').toArray(), [], undefined)
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      setData(await cloudApi.listSlots())
+      const [slots, mineRes] = await Promise.all([cloudApi.listSlots(), hubApi.mine()])
+      setData(slots)
+      setMine(mineRes.items)
     } catch (err) {
       setMsg({ ok: false, text: err instanceof Error ? err.message : String(err) })
       setData({ levels: [], folders: [], used: 0, limit: CLOUD_LIMIT })
+      setMine([])
     }
   }, [])
 
@@ -42,6 +53,7 @@ export function CloudPage() {
     if (signedIn) void refresh()
     else {
       setData(null)
+      setMine([])
       setMsg(null)
       setReport(null)
     }
@@ -163,6 +175,86 @@ export function CloudPage() {
   const candidates = (localRows ?? []).filter((r) => r.kind === 'series' || r.kind === 'level')
   const isEmpty = (data?.levels.length ?? 0) === 0 && (data?.folders.length ?? 0) === 0
 
+  // H3：按 rootDocId 索引我的申请；渲染行内发布状态徽章与操作
+  // （slotId 为云盘槽位 id（cld_/cldf_，发布端点寻址用）；rootDocId 为内容 id（hub 匹配用））
+  const mineByRoot = new Map(mine.map((m) => [m.rootDocId, m]))
+  const renderPublishControls = (rootDocId: string, slotId: string, kind: 'level' | 'series', title: string, slotUpdatedAt?: number): React.ReactNode => {
+    const item = mineByRoot.get(rootDocId)
+    if (item === undefined) {
+      return (
+        <button type="button" className="link" disabled={busyId !== null} onClick={() => publishTarget(kind, slotId, title)}>
+          申请公开
+        </button>
+      )
+    }
+    if (item.status === 'pending') {
+      return <span className="lib-badge" title="等待管理员审核；期间云盘源槽位锁定">⏳ 待审核</span>
+    }
+    if (item.status === 'published') {
+      const outdated = slotUpdatedAt !== undefined && slotUpdatedAt > item.updatedAt + 1000
+      return (
+        <>
+          <span className="lib-badge" title="已在公共关卡库展示">✅ 已公开</span>
+          {outdated && <span className="muted">有更新</span>}
+          <button type="button" className="link" disabled={busyId !== null} title={outdated ? '把云盘最新内容重新送审' : '重新送审（替换快照）'} onClick={() => publishTarget(kind, slotId, title)}>
+            更新发布
+          </button>
+          <button type="button" className="link danger" disabled={busyId !== null} onClick={() => void handleWithdraw(item)}>
+            撤回
+          </button>
+        </>
+      )
+    }
+    return (
+      <>
+        <span className="lib-badge" title={item.rejectReason ?? '未通过审核'}>❌ 未通过</span>
+        <button type="button" className="link" disabled={busyId !== null} onClick={() => publishTarget(kind, slotId, title)}>
+          重新申请
+        </button>
+      </>
+    )
+  }
+  // 打开申请弹窗（kind + 云盘槽位 id 由行内闭包提供）
+  const publishTarget = (kind: 'level' | 'series', slotId: string, title: string): void => {
+    setPublishNote('')
+    setPublishWantFeatured(false)
+    setPublishDialog({ kind, slotId, title })
+  }
+
+  async function handlePublishSubmit(): Promise<void> {
+    if (publishDialog === null) return
+    const { kind, slotId, title } = publishDialog
+    setBusyId(slotId)
+    setMsg(null)
+    try {
+      const body = { note: publishNote.trim() === '' ? null : publishNote.trim(), wantFeatured: publishWantFeatured }
+      const res = kind === 'series' ? await cloudApi.publishFolder(slotId, body) : await cloudApi.publishLevel(slotId, body)
+      setPublishDialog(null)
+      setMsg({ ok: true, text: `「${title}」已提交审核（当前待审 ${res.pendingCount} 条）——审核期间云盘源槽位锁定` })
+      await refresh()
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleWithdraw(item: HubMineItem): Promise<void> {
+    const what = item.status === 'published' ? `撤回后「${item.title}」将不再在公共关卡库展示` : `撤回「${item.title}」的公开申请`
+    if (!window.confirm(`${what}？确定继续？`)) return
+    setBusyId(item.id)
+    setMsg(null)
+    try {
+      await hubApi.withdraw(item.id)
+      setMsg({ ok: true, text: `已撤回「${item.title}」` })
+      await refresh()
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <div className="page">
       <header className="page-head">
@@ -227,6 +319,7 @@ export function CloudPage() {
                         {folder.levelCount} 个关卡 · {fmtKB(folder.bytes)} · {new Date(folder.updatedAt).toLocaleString()}
                       </span>
                       <span className="row-actions">
+                        {renderPublishControls(folder.folderId, folder.id, 'series', folder.title, folder.updatedAt)}
                         <button type="button" className="link" disabled={busyId !== null} onClick={() => void handleDownloadFolder(folder)}>
                           下载到本机
                         </button>
@@ -252,6 +345,7 @@ export function CloudPage() {
                         {fmtKB(slot.bytes)} · {new Date(slot.updatedAt).toLocaleString()}
                       </span>
                       <span className="row-actions">
+                        {renderPublishControls(slot.levelId, slot.id, 'level', slot.title || slot.levelId, slot.updatedAt)}
                         <button type="button" className="link" disabled={busyId !== null} onClick={() => void handleDownloadLevel(slot)}>
                           下载到本机
                         </button>
@@ -313,6 +407,43 @@ export function CloudPage() {
               {candidates.length === 0 && <span className="muted">本机资源库是空的——先到资源库新建或导入。</span>}
             </div>
             <span className="muted">系列将连同其专题与关卡整体上传；已在云端的同 id 内容覆盖更新、不重复占槽。</span>
+          </div>
+        </div>
+      )}
+
+      {publishDialog && (
+        <div
+          className="tjson-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPublishDialog(null)
+          }}
+        >
+          <div className="tjson-modal">
+            <div className="tjson-modal-head">
+              <b>
+                申请公开「{publishDialog.title}」
+              </b>
+              <button type="button" className="link" onClick={() => setPublishDialog(null)}>
+                取消
+              </button>
+            </div>
+            <p className="muted">
+              提交后进入审核队列；通过前内容不会公开展示。审核期间该云盘槽位锁定（不可删除）。当前内容会生成快照——之后在云盘更新关卡需「更新发布」重新送审。
+            </p>
+            <textarea
+              rows={3}
+              placeholder="给审核员的留言（可选，≤200 字）：如关卡设计思路、难度依据…"
+              value={publishNote}
+              onChange={(e) => setPublishNote(e.target.value)}
+            />
+            <label className="muted">
+              <input type="checkbox" checked={publishWantFeatured} onChange={(e) => setPublishWantFeatured(e.target.checked)} /> 一并申请进入「精选」（管理员审核时决定）
+            </label>
+            <div>
+              <button type="button" className="primary" disabled={busyId !== null} onClick={() => void handlePublishSubmit()}>
+                {busyId !== null ? '提交中…' : '提交申请'}
+              </button>
+            </div>
           </div>
         </div>
       )}

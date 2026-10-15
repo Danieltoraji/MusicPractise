@@ -21,6 +21,7 @@ const AdminPage = lazy(() => import('./admin/AdminPage').then((m) => ({ default:
 const DocsPage = lazy(() => import('./pages/DocsPage').then((m) => ({ default: m.DocsPage })))
 const SkinCenterPage = lazy(() => import('./skin/SkinCenterPage').then((m) => ({ default: m.SkinCenterPage })))
 const CloudPage = lazy(() => import('./cloud/CloudPage').then((m) => ({ default: m.CloudPage })))
+const HubPage = lazy(() => import('./hub/HubPage').then((m) => ({ default: m.HubPage })))
 
 const PageLoading = (
   <p className="muted" style={{ padding: 24 }}>
@@ -116,6 +117,12 @@ export default function App() {
         <CloudPage />
       </Suspense>
     )
+  } else if (hash === '#/hub') {
+    page = (
+      <Suspense fallback={PageLoading}>
+        <HubPage />
+      </Suspense>
+    )
   } else if (hash === '#/docs' || hash.startsWith('#/docs/')) {
     page = (
       <Suspense fallback={PageLoading}>
@@ -159,6 +166,7 @@ export default function App() {
     { href: '#/', ico: '🏠', label: '首页', active: isHome },
     { href: '#/library', ico: '📚', label: '资源库', active: hash === '#/library' },
     { href: '#/cloud', ico: '☁️', label: '我的云盘', active: hash === '#/cloud' },
+    { href: '#/hub', ico: '🎼', label: '关卡库', active: hash === '#/hub' },
     { href: '#/docs', ico: '📄', label: '文档', active: hash.startsWith('#/docs') },
     { href: '#/tuner', ico: '🎯', label: '校音器', active: hash === '#/tuner' },
     { href: '#/rhythm', ico: '🥁', label: '节奏', active: hash === '#/rhythm' },

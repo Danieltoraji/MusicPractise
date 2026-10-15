@@ -239,6 +239,14 @@ export async function deleteFolder({ req, env, params }: RouteContext): Promise<
     throw new HttpError(429, 'rate_limited', `操作过于频繁，请 ${Math.max(1, Math.ceil(lockedSeconds / 60))} 分钟后再试`)
   }
   const row = await loadOwnedFolder(env.DB, params.id ?? '', session.user.id)
+  // 源绑定锁定（docs/39 §3）：pending/published 期间不可删源；rejected 不锁
+  const lock = await env.DB
+    .prepare("SELECT id, status, submitter_id FROM hub_items WHERE scope = 'public' AND root_doc_id = ?")
+    .bind(row.folder_id)
+    .first<{ status: string }>()
+  if (lock && (lock.status === 'pending' || lock.status === 'published')) {
+    throw new HttpError(409, 'publish_locked', '该系列有进行中的公开申请或已公开——请先撤回，再删除')
+  }
   await env.DB.batch([
     env.DB.prepare('DELETE FROM cloud_folder_docs WHERE folder_id = ?').bind(row.id),
     env.DB.prepare('DELETE FROM cloud_folders WHERE id = ? AND user_id = ?').bind(row.id, session.user.id),

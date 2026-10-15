@@ -152,11 +152,18 @@ describe('我的云盘页（docs/39 H2）', () => {
 
   it('列表：文件夹与关卡分区渲染，合并口径已用', async () => {
     await probeSignedIn()
-    routes.push({
-      method: 'GET',
-      path: '/api/cloud/levels',
-      respond: () => new Response(JSON.stringify({ levels: [SLOT], folders: [FOLDER], used: 3, limit: 10 })),
-    })
+    routes.push(
+      {
+        method: 'GET',
+        path: '/api/hub/mine',
+        respond: () => new Response(JSON.stringify({ items: [] })),
+      },
+      {
+        method: 'GET',
+        path: '/api/cloud/levels',
+        respond: () => new Response(JSON.stringify({ levels: [SLOT], folders: [FOLDER], used: 3, limit: 10 })),
+      },
+    )
     const c = renderEl(<CloudPage />)
     await flushUntil(() => c.querySelector('.cloud-row') !== null)
     expect(c.textContent).toContain('已用')
@@ -172,6 +179,11 @@ describe('我的云盘页（docs/39 H2）', () => {
     await seedLocalSeries()
     await probeSignedIn()
     routes.push(
+      {
+        method: 'GET',
+        path: '/api/hub/mine',
+        respond: () => new Response(JSON.stringify({ items: [] })),
+      },
       {
         method: 'GET',
         path: '/api/cloud/levels',
@@ -206,6 +218,11 @@ describe('我的云盘页（docs/39 H2）', () => {
   it('下载文件夹：docs 写入本机库并显示导入报告', async () => {
     await probeSignedIn()
     routes.push(
+      {
+        method: 'GET',
+        path: '/api/hub/mine',
+        respond: () => new Response(JSON.stringify({ items: [] })),
+      },
       {
         method: 'GET',
         path: '/api/cloud/levels',
@@ -249,6 +266,11 @@ describe('我的云盘页（docs/39 H2）', () => {
     routes.push(
       {
         method: 'GET',
+        path: '/api/hub/mine',
+        respond: () => new Response(JSON.stringify({ items: [] })),
+      },
+      {
+        method: 'GET',
         path: '/api/cloud/levels',
         respond: () => new Response(JSON.stringify({ levels: [], folders: deleted === 0 ? [FOLDER] : [], used: deleted === 0 ? 2 : 0, limit: 10 })),
       },
@@ -268,5 +290,142 @@ describe('我的云盘页（docs/39 H2）', () => {
     await flushUntil(() => c.textContent!.includes('释放 2 个槽位'))
     expect(deleted).toBe(1)
     await flushUntil(() => c.textContent!.includes('云盘还是空的'))
+  })
+
+  it('申请公开：弹窗提交 → POST publish（note/精选意愿）→ 徽章转待审核', async () => {
+    await probeSignedIn()
+    let published = 0
+    routes.push(
+      {
+        method: 'GET',
+        path: '/api/cloud/levels',
+        respond: () => new Response(JSON.stringify({ levels: [SLOT], folders: [], used: 1, limit: 10 })),
+      },
+      {
+        method: 'GET',
+        path: '/api/hub/mine',
+        respond: () =>
+          new Response(
+            JSON.stringify({
+              items:
+                published === 0
+                  ? []
+                  : [
+                      {
+                        id: 'hub_X',
+                        scope: 'public',
+                        itemKind: 'level',
+                        rootDocId: SLOT.levelId,
+                        title: SLOT.title,
+                        levelCount: 1,
+                        bytes: SLOT.bytes,
+                        authorName: '阿明',
+                        featured: false,
+                        downloads: 0,
+                        publishedAt: null,
+                        submitterNote: '请审核',
+                        wantFeatured: true,
+                        status: 'pending',
+                        rejectReason: null,
+                        createdAt: 1,
+                        updatedAt: 2,
+                      },
+                    ],
+            }),
+          ),
+      },
+      {
+        method: 'POST',
+        path: `/api/cloud/levels/${SLOT.id}/publish`,
+        respond: () => {
+          published++
+          return new Response(JSON.stringify({ item: { id: 'hub_X', status: 'pending' }, pendingCount: 1 }), { status: 201 })
+        },
+      },
+    )
+    const c = renderEl(<CloudPage />)
+    await flushUntil(() => c.querySelector('.cloud-row') !== null)
+    // 未申请前显示「申请公开」按钮
+    await act(async () => buttonByText(c, '申请公开').click())
+    await flushUntil(() => c.querySelector('.tjson-backdrop') !== null)
+    const textarea = c.querySelector('.tjson-modal textarea') as HTMLTextAreaElement
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+      setter.call(textarea, '请审核')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => {
+      const checkbox = c.querySelector('.tjson-modal input[type="checkbox"]') as HTMLInputElement
+      checkbox.click()
+    })
+    await act(async () => buttonByText(c, '提交申请').click())
+    await flushUntil(() => c.textContent!.includes('已提交审核'))
+    const calls = (vi.mocked(fetch) as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls
+    const post = calls.find(([, init]) => init?.method === 'POST')!
+    expect(post[0]).toBe(`/api/cloud/levels/${SLOT.id}/publish`)
+    expect(JSON.parse(post[1].body as string)).toEqual({ note: '请审核', wantFeatured: true })
+    // 刷新后徽章转待审核（申请按钮消失）
+    await flushUntil(() => c.textContent!.includes('⏳ 待审核'))
+    expect([...c.querySelectorAll('.row-actions button')].some((b) => b.textContent === '申请公开')).toBe(false)
+  })
+
+  it('已公开徽章与撤回：确认后 DELETE hub 条目', async () => {
+    await probeSignedIn()
+    let withdrawn = 0
+    routes.push(
+      {
+        method: 'GET',
+        path: '/api/cloud/levels',
+        respond: () => new Response(JSON.stringify({ levels: [SLOT], folders: [], used: 1, limit: 10 })),
+      },
+      {
+        method: 'GET',
+        path: '/api/hub/mine',
+        respond: () =>
+          new Response(
+            JSON.stringify({
+              items: withdrawn === 0
+                ? [
+                    {
+                      id: 'hub_X',
+                      scope: 'public',
+                      itemKind: 'level',
+                      rootDocId: SLOT.levelId,
+                      title: SLOT.title,
+                      levelCount: 1,
+                      bytes: SLOT.bytes,
+                      authorName: '阿明',
+                      featured: false,
+                      downloads: 3,
+                      publishedAt: 1,
+                      submitterNote: null,
+                      wantFeatured: false,
+                      status: 'published',
+                      rejectReason: null,
+                      createdAt: 1,
+                      updatedAt: 2,
+                    },
+                  ]
+                : [],
+            }),
+          ),
+      },
+      {
+        method: 'DELETE',
+        path: '/api/hub/items/hub_X',
+        respond: () => {
+          withdrawn++
+          return new Response(JSON.stringify({ ok: true }))
+        },
+      },
+    )
+    const c = renderEl(<CloudPage />)
+    await flushUntil(() => c.textContent!.includes('✅ 已公开'))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await act(async () => buttonByText(c, '撤回').click())
+    await flushUntil(() => c.textContent!.includes('已撤回'))
+    expect(withdrawn).toBe(1)
+    // 撤回后恢复「申请公开」入口
+    await flushUntil(() => [...c.querySelectorAll('.row-actions button')].some((b) => b.textContent === '申请公开'))
   })
 })

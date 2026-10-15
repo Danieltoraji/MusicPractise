@@ -177,3 +177,111 @@ export async function adminListAudit({ req, env }: RouteContext): Promise<Respon
   }))
   return jsonResponse({ entries, total: Number(total?.n ?? 0), limit, offset })
 }
+
+// ---------------------------------------------------------------------------
+// 关卡库审核（docs/39 §5.2，批次 H3）：队列 / 批准 / 驳回；逐操作写审计。
+// ---------------------------------------------------------------------------
+
+interface HubItemRow {
+  id: string
+  scope: string
+  item_kind: string
+  root_doc_id: string
+  title: string
+  level_count: number
+  bytes: number
+  submitter_name: string
+  submitter_note: string | null
+  want_featured: number
+  status: string
+  featured: number
+  reject_reason: string | null
+  created_at: number
+  updated_at: number
+}
+
+function toHubAdminMeta(r: HubItemRow) {
+  return {
+    id: r.id,
+    scope: r.scope,
+    itemKind: r.item_kind,
+    rootDocId: r.root_doc_id,
+    title: r.title,
+    levelCount: Number(r.level_count),
+    bytes: Number(r.bytes),
+    submitterName: r.submitter_name,
+    submitterNote: r.submitter_note,
+    wantFeatured: Number(r.want_featured) === 1,
+    status: r.status,
+    featured: Number(r.featured) === 1,
+    rejectReason: r.reject_reason,
+    createdAt: Number(r.created_at),
+    updatedAt: Number(r.updated_at),
+  }
+}
+
+const HUB_COLS =
+  'id, scope, item_kind, root_doc_id, title, level_count, bytes, submitter_name, submitter_note, want_featured, status, featured, reject_reason, created_at, updated_at'
+
+const HUB_STATUSES = ['pending', 'published', 'rejected']
+
+/** GET /api/admin/hub?status=&query=&limit=&offset=：审核队列（默认 pending） */
+export async function adminListHub({ req, env }: RouteContext): Promise<Response> {
+  await requireAdmin(env.DB, req, nowMs())
+  const url = new URL(req.url)
+  const { limit, offset, query } = paging(url)
+  const statusParam = (url.searchParams.get('status') ?? 'pending').trim()
+  if (!HUB_STATUSES.includes(statusParam)) throw new HttpError(400, 'bad_request', 'status 必须是 pending/published/rejected')
+  const pattern = `%${query}%`
+  const hasQuery = query !== ''
+  const list = hasQuery
+    ? await env.DB
+        .prepare(`SELECT ${HUB_COLS} FROM hub_items WHERE status = ? AND title LIKE ? ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
+        .bind(statusParam, pattern, limit, offset)
+        .all<HubItemRow>()
+    : await env.DB.prepare(`SELECT ${HUB_COLS} FROM hub_items WHERE status = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?`).bind(statusParam, limit, offset).all<HubItemRow>()
+  const total = hasQuery
+    ? await env.DB.prepare('SELECT COUNT(*) AS n FROM hub_items WHERE status = ? AND title LIKE ?').bind(statusParam, pattern).first<{ n: number }>()
+    : await env.DB.prepare('SELECT COUNT(*) AS n FROM hub_items WHERE status = ?').bind(statusParam).first<{ n: number }>()
+  return jsonResponse({ items: (list.results ?? []).map(toHubAdminMeta), total: Number(total?.n ?? 0), limit, offset })
+}
+
+/** POST /api/admin/hub/:id/approve {featured?}：批准公开（可同时授予精选） */
+export async function adminApproveHub({ req, env, params }: RouteContext): Promise<Response> {
+  const now = nowMs()
+  const session = await requireAdmin(env.DB, req, now)
+  const body = await readJsonBody(req, 16 * 1024).catch(() => ({}) as Record<string, unknown>)
+  const featured = (body as Record<string, unknown>).featured === true
+  const db = env.DB
+  const row = await db.prepare('SELECT id, submitter_id, status FROM hub_items WHERE id = ?').bind(params.id ?? '').first<{ id: string; status: string }>()
+  if (!row) throw new HttpError(404, 'not_found', '条目不存在')
+  if (row.status !== 'pending') throw new HttpError(409, 'not_pending', '该条目不在待审核状态')
+  await db
+    .prepare("UPDATE hub_items SET status = 'published', featured = ?, reviewed_by = ?, reviewed_at = ?, published_at = ?, updated_at = ? WHERE id = ?")
+    .bind(featured ? 1 : 0, session.user.id, now, now, now, row.id)
+    .run()
+  const item = await db.prepare('SELECT title, submitter_name FROM hub_items WHERE id = ?').bind(row.id).first<{ title: string; submitter_name: string }>()
+  await writeAudit(db, { actorId: session.user.id, action: 'hub.approve', targetType: 'hub_item', targetId: row.id, detail: { title: item?.title, submitter: item?.submitter_name, featured } }, now)
+  return jsonResponse({ ok: true, status: 'published', featured })
+}
+
+/** POST /api/admin/hub/:id/reject {reason}：驳回（附理由；驳回即解锁源槽位） */
+export async function adminRejectHub({ req, env, params }: RouteContext): Promise<Response> {
+  const now = nowMs()
+  const session = await requireAdmin(env.DB, req, now)
+  const body = (await readJsonBody(req, 16 * 1024)) as Record<string, unknown>
+  const reason = readField(body, 'reason', (v) =>
+    typeof v === 'string' && v.normalize('NFC').trim() !== '' ? { ok: true, value: v.normalize('NFC').trim().slice(0, 200) } : { ok: false, message: 'reason 必须是非空字符串（≤200 字）' },
+  )
+  const db = env.DB
+  const row = await db.prepare('SELECT id, submitter_id, status FROM hub_items WHERE id = ?').bind(params.id ?? '').first<{ id: string; status: string }>()
+  if (!row) throw new HttpError(404, 'not_found', '条目不存在')
+  if (row.status !== 'pending') throw new HttpError(409, 'not_pending', '该条目不在待审核状态')
+  await db
+    .prepare("UPDATE hub_items SET status = 'rejected', reject_reason = ?, reviewed_by = ?, reviewed_at = ?, updated_at = ? WHERE id = ?")
+    .bind(reason, session.user.id, now, now, row.id)
+    .run()
+  const item = await db.prepare('SELECT title, submitter_name FROM hub_items WHERE id = ?').bind(row.id).first<{ title: string; submitter_name: string }>()
+  await writeAudit(db, { actorId: session.user.id, action: 'hub.reject', targetType: 'hub_item', targetId: row.id, detail: { title: item?.title, submitter: item?.submitter_name, reason } }, now)
+  return jsonResponse({ ok: true, status: 'rejected' })
+}

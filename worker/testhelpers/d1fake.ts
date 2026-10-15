@@ -67,6 +67,37 @@ export interface CloudFolderDocRow {
   bytes: number
 }
 
+export interface HubItemRow {
+  id: string
+  scope: string
+  item_kind: string
+  root_doc_id: string
+  title: string
+  level_count: number
+  bytes: number
+  submitter_id: string | null
+  submitter_name: string
+  submitter_note: string | null
+  want_featured: number
+  status: string
+  featured: number
+  reject_reason: string | null
+  reviewed_by: string | null
+  reviewed_at: number | null
+  published_at: number | null
+  downloads: number
+  created_at: number
+  updated_at: number
+}
+
+export interface HubItemDocRow {
+  item_id: string
+  doc_id: string
+  kind: string
+  payload: string
+  bytes: number
+}
+
 /** LIKE '%x%' → 大小写不敏感子串匹配（SQLite LIKE 的 ASCII 不敏感语义近似） */
 function likeMatch(value: string, pattern: string): boolean {
   return value.toLowerCase().includes(pattern.replace(/^%/, '').replace(/%$/, '').toLowerCase())
@@ -89,6 +120,8 @@ export class D1Fake implements D1Database {
   cloud_levels: CloudLevelRow[] = []
   cloud_folders: CloudFolderRow[] = []
   cloud_folder_docs: CloudFolderDocRow[] = []
+  hub_items: HubItemRow[] = []
+  hub_item_docs: HubItemDocRow[] = []
   progress: ProgressRow[] = []
   audit_log: AuditRow[] = []
   /** 已执行的规范化 SQL（断言/排查用） */
@@ -122,6 +155,15 @@ export class D1Fake implements D1Database {
   /** 便捷播种：直接构造用户行（绕过 SQL 校验路径） */
   seedUser(row: Row): void {
     this.users.push(row)
+  }
+
+  /** 列投影：按逗号分隔的裸列名从行中取字段（hub 列表语句共用，不支持表前缀/别名） */
+  private pick(row: Row, cols: string): Row {
+    const out: Row = {}
+    for (const c of cols.split(',').map((s) => s.trim())) {
+      if (c in row) out[c] = row[c]
+    }
+    return out
   }
 
   private async exec(sql: string, p: unknown[]): Promise<{ results: Row[]; changes: number }> {
@@ -414,6 +456,189 @@ export class D1Fake implements D1Database {
       }
       this.cloud_folder_docs.push({
         folder_id: String(p[0]),
+        doc_id: String(p[1]),
+        kind: String(p[2]),
+        payload: String(p[3]),
+        bytes: Number(p[4]),
+      })
+      return { results: [], changes: 1 }
+    }
+
+    // ---- hub_items（docs/39 H3）----
+    m = /^INSERT INTO hub_items \(.+\) VALUES \((\?, ){19}\?\)$/.exec(sql)
+    if (m) {
+      if (this.hub_items.some((r) => r.id === p[0])) {
+        throw new Error('UNIQUE constraint failed: hub_items.id')
+      }
+      if ((String(p[1]) === 'public' || String(p[1]) === 'official') && this.hub_items.some((r) => r.scope === p[1] && r.root_doc_id === p[3])) {
+        // 部分唯一索引 idx_hub_root_public 近似
+        throw new Error('UNIQUE constraint failed: hub_items.root_doc_id')
+      }
+      this.hub_items.push({
+        id: String(p[0]),
+        scope: String(p[1]),
+        item_kind: String(p[2]),
+        root_doc_id: String(p[3]),
+        title: String(p[4]),
+        level_count: Number(p[5]),
+        bytes: Number(p[6]),
+        submitter_id: p[7] === null ? null : String(p[7]),
+        submitter_name: String(p[8]),
+        submitter_note: p[9] === null ? null : String(p[9]),
+        want_featured: Number(p[10]),
+        status: String(p[11]),
+        featured: Number(p[12]),
+        reject_reason: p[13] === null ? null : String(p[13]),
+        reviewed_by: p[14] === null ? null : String(p[14]),
+        reviewed_at: p[15] === null ? null : Number(p[15]),
+        published_at: p[16] === null ? null : Number(p[16]),
+        downloads: Number(p[17]),
+        created_at: Number(p[18]),
+        updated_at: Number(p[19]),
+      })
+      return { results: [], changes: 1 }
+    }
+
+    m = /^SELECT id, status, submitter_id FROM hub_items WHERE scope = 'public' AND root_doc_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => r.scope === 'public' && r.root_doc_id === p[0])
+      return { results: row ? [row as unknown as Row] : [], changes: 0 }
+    }
+
+    m = /^SELECT COUNT\(\*\) AS n FROM hub_items WHERE submitter_id = \? AND status = 'pending'$/.exec(sql)
+    if (m) {
+      return { results: [{ n: this.hub_items.filter((r) => r.submitter_id === p[0] && r.status === 'pending').length }], changes: 0 }
+    }
+
+    m = /^SELECT id, submitter_id, status FROM hub_items WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => r.id === p[0])
+      return { results: row ? [row as unknown as Row] : [], changes: 0 }
+    }
+
+    m = /^SELECT (.+) FROM hub_items WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => r.id === p[0])
+      return { results: row ? [this.pick(row as unknown as Row, m![1])] : [], changes: 0 }
+    }
+
+    m = /^UPDATE hub_items SET downloads = downloads \+ 1 WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => r.id === p[0])
+      if (!row) return { results: [], changes: 0 }
+      row.downloads += 1
+      return { results: [], changes: 1 }
+    }
+
+    m = /^UPDATE hub_items SET status = 'published', featured = \?, reviewed_by = \?, reviewed_at = \?, published_at = \?, updated_at = \? WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => r.id === p[5])
+      if (!row) return { results: [], changes: 0 }
+      row.status = 'published'
+      row.featured = Number(p[0])
+      row.reviewed_by = p[1] === null ? null : String(p[1])
+      row.reviewed_at = Number(p[2])
+      row.published_at = Number(p[3])
+      row.updated_at = Number(p[4])
+      return { results: [], changes: 1 }
+    }
+
+    m = /^UPDATE hub_items SET status = 'rejected', reject_reason = \?, reviewed_by = \?, reviewed_at = \?, updated_at = \? WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => r.id === p[4])
+      if (!row) return { results: [], changes: 0 }
+      row.status = 'rejected'
+      row.reject_reason = p[0] === null ? null : String(p[0])
+      row.reviewed_by = p[1] === null ? null : String(p[1])
+      row.reviewed_at = Number(p[2])
+      row.updated_at = Number(p[3])
+      return { results: [], changes: 1 }
+    }
+
+    m = /^DELETE FROM hub_items WHERE id = \?$/.exec(sql)
+    if (m) {
+      const before = this.hub_items.length
+      this.hub_items = this.hub_items.filter((r) => r.id !== p[0])
+      return { results: [], changes: before - this.hub_items.length }
+    }
+
+    // hub_items 列表：公共（published，可选 featured/LIKE）
+    {
+      const listRe = /^SELECT (.+) FROM hub_items WHERE scope = \? AND status = 'published'( AND featured = 1)?( AND title LIKE \?)? ORDER BY published_at DESC LIMIT \? OFFSET \?$/.exec(sql)
+      if (listRe) {
+        let rows = this.hub_items.filter((r) => r.scope === p[0] && r.status === 'published')
+        if (listRe[2]) rows = rows.filter((r) => r.featured === 1)
+        if (listRe[3]) rows = rows.filter((r) => likeMatch(r.title, String(p[1])))
+        const limitIdx = listRe[2] && listRe[3] ? 3 : listRe[2] || listRe[3] ? 2 : 1
+        rows = rows
+          .slice()
+          .sort((a, b) => Number(b.published_at ?? 0) - Number(a.published_at ?? 0))
+          .slice(Number(p[limitIdx + 1]), Number(p[limitIdx + 1]) + Number(p[limitIdx]))
+        return { results: rows.map((r) => this.pick(r as unknown as Row, listRe[1])) , changes: 0 }
+      }
+      const countRe = /^SELECT COUNT\(\*\) AS n FROM hub_items WHERE scope = \? AND status = 'published'( AND featured = 1)?( AND title LIKE \?)?$/.exec(sql)
+      if (countRe) {
+        let rows = this.hub_items.filter((r) => r.scope === p[0] && r.status === 'published')
+        if (countRe[2]) rows = rows.filter((r) => r.featured === 1)
+        if (countRe[3]) rows = rows.filter((r) => likeMatch(r.title, String(p[1])))
+        return { results: [{ n: rows.length }], changes: 0 }
+      }
+    }
+
+    m = /^SELECT (.+) FROM hub_items WHERE submitter_id = \? ORDER BY updated_at DESC$/.exec(sql)
+    if (m) {
+      const rows = this.hub_items
+        .filter((r) => r.submitter_id === p[0])
+        .slice()
+        .sort((a, b) => b.updated_at - a.updated_at)
+      return { results: rows.map((r) => this.pick(r as unknown as Row, m![1])), changes: 0 }
+    }
+
+    // hub_items 管理队列：按 status（可选 LIKE）
+    {
+      const adminRe = /^SELECT (.+) FROM hub_items WHERE status = \?( AND title LIKE \?)? ORDER BY updated_at DESC LIMIT \? OFFSET \?$/.exec(sql)
+      if (adminRe) {
+        let rows = this.hub_items.filter((r) => r.status === p[0])
+        if (adminRe[2]) rows = rows.filter((r) => likeMatch(r.title, String(p[1])))
+        const limitIdx = adminRe[2] ? 2 : 1
+        rows = rows
+          .slice()
+          .sort((a, b) => b.updated_at - a.updated_at)
+          .slice(Number(p[limitIdx + 1]), Number(p[limitIdx + 1]) + Number(p[limitIdx]))
+        return { results: rows.map((r) => this.pick(r as unknown as Row, adminRe[1])), changes: 0 }
+      }
+      const adminCountRe = /^SELECT COUNT\(\*\) AS n FROM hub_items WHERE status = \?( AND title LIKE \?)?$/.exec(sql)
+      if (adminCountRe) {
+        let rows = this.hub_items.filter((r) => r.status === p[0])
+        if (adminCountRe[1]) rows = rows.filter((r) => likeMatch(r.title, String(p[1])))
+        return { results: [{ n: rows.length }], changes: 0 }
+      }
+    }
+
+    // ---- hub_item_docs（docs/39 H3）----
+    m = /^SELECT doc_id, kind, payload, bytes FROM hub_item_docs WHERE item_id = \? ORDER BY doc_id$/.exec(sql)
+    if (m) {
+      const rows = this.hub_item_docs
+        .filter((r) => r.item_id === p[0])
+        .slice()
+        .sort((a, b) => (a.doc_id < b.doc_id ? -1 : 1))
+      return { results: rows as unknown as Row[], changes: 0 }
+    }
+
+    m = /^DELETE FROM hub_item_docs WHERE item_id = \?$/.exec(sql)
+    if (m) {
+      const before = this.hub_item_docs.length
+      this.hub_item_docs = this.hub_item_docs.filter((r) => r.item_id !== p[0])
+      return { results: [], changes: before - this.hub_item_docs.length }
+    }
+
+    m = /^INSERT INTO hub_item_docs \(.+\) VALUES \((\?, ){4}\?\)$/.exec(sql)
+    if (m) {
+      if (this.hub_item_docs.some((r) => r.item_id === p[0] && r.doc_id === p[1])) {
+        throw new Error('UNIQUE constraint failed: hub_item_docs.item_id, hub_item_docs.doc_id')
+      }
+      this.hub_item_docs.push({
+        item_id: String(p[0]),
         doc_id: String(p[1]),
         kind: String(p[2]),
         payload: String(p[3]),

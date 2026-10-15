@@ -39,6 +39,11 @@ export const cloudApi = {
   getFolder: (id: string): Promise<{ folder: CloudFolder; docs: { id: string; kind: string; payload: unknown }[] }> =>
     apiFetch(`/api/cloud/folders/${id}`, { timeoutMs: 30_000 }),
   deleteFolder: (id: string): Promise<{ ok: boolean }> => apiFetch(`/api/cloud/folders/${id}`, { method: 'DELETE' }),
+  /** 申请公开（docs/39 H3）：单关与系列共用体 {note?, wantFeatured?}；重复调用 = 更新发布 */
+  publishLevel: (slotId: string, body: { note?: string | null; wantFeatured?: boolean }): Promise<{ item: { id: string; status: string }; pendingCount: number }> =>
+    apiFetch(`/api/cloud/levels/${slotId}/publish`, { method: 'POST', body, timeoutMs: 30_000 }),
+  publishFolder: (slotId: string, body: { note?: string | null; wantFeatured?: boolean }): Promise<{ item: { id: string; status: string }; pendingCount: number }> =>
+    apiFetch(`/api/cloud/folders/${slotId}/publish`, { method: 'POST', body, timeoutMs: 30_000 }),
 }
 
 /** 从资源库记录上传关卡：levelId = rec.id，payload = rec.doc（服务端校验两者一致） */

@@ -234,6 +234,14 @@ export async function deleteLevel({ req, env, params }: RouteContext): Promise<R
     throw new HttpError(429, 'rate_limited', `操作过于频繁，请 ${Math.max(1, Math.ceil(lockedSeconds / 60))} 分钟后再试`)
   }
   const existing = await loadOwnedSlot(env.DB, params.id ?? '', session.user.id)
+  // 源绑定锁定（docs/39 §3）：pending/published 期间不可删源；rejected 不锁
+  const lock = await env.DB
+    .prepare("SELECT id, status, submitter_id FROM hub_items WHERE scope = 'public' AND root_doc_id = ?")
+    .bind(existing.level_id)
+    .first<{ status: string }>()
+  if (lock && (lock.status === 'pending' || lock.status === 'published')) {
+    throw new HttpError(409, 'publish_locked', '该关卡有进行中的公开申请或已公开——请先撤回，再删除')
+  }
   await env.DB.prepare('DELETE FROM cloud_levels WHERE id = ? AND user_id = ?').bind(existing.id, session.user.id).run()
   return jsonResponse({ ok: true })
 }

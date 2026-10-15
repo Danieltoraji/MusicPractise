@@ -3569,6 +3569,14 @@ a.lib-title:hover {
   cursor: not-allowed;
 }
 
+/* 关卡库 Tab 行（docs/39 H3） */
+.hub-tabs {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
 /* 节点图工作台全屏态（工具条「⛶ 全屏」切换）。
    :fullscreen 伪类跟随原生全屏状态——内嵌 webview 不派发 fullscreenchange 事件，
    依赖 JS 挂类在部分环境永远不生效；伪类与 state 类双保险。 */

@@ -15,6 +15,10 @@ export const REGISTER_WINDOW_MS = 3_600_000
 /** 云盘写操作（上传/覆盖/删除）：30 次/小时/用户（docs/31 §5.2） */
 export const CLOUD_WRITE_MAX = 30
 export const CLOUD_WINDOW_MS = 3_600_000
+/** 公开申请（发布/更新发布）：10 次/小时/用户（docs/39 §5.4） */
+export const PUBLISH_MAX = 10
+/** 关卡库详情下载（匿名可访问）：30 次/小时/IP（docs/39 §5.4） */
+export const HUB_READ_MAX = 30
 
 const encoder = new TextEncoder()
 
@@ -30,6 +34,8 @@ export async function ipHashOf(req: Request, env: Env): Promise<string> {
 const loginKey = (ipHash: string, nickname: string): string => `login:${ipHash}:${nickname}`
 const registerKey = (ipHash: string): string => `register:${ipHash}`
 const cloudKey = (userId: string): string => `cloud:${userId}`
+const publishKey = (userId: string): string => `publish:${userId}`
+const hubReadKey = (ipHash: string): string => `hubread:${ipHash}`
 
 interface AttemptRow {
   fail_count: number
@@ -103,6 +109,16 @@ export async function hitRegisterLimit(db: D1Database, ipHash: string, now: numb
 /** 云盘写限流（按尝试计数）：返回 0 = 放行，>0 = 剩余锁定秒数 */
 export async function hitCloudWriteLimit(db: D1Database, userId: string, now: number): Promise<number> {
   return hitAttempt(db, cloudKey(userId), CLOUD_WRITE_MAX, CLOUD_WINDOW_MS, now)
+}
+
+/** 公开申请限流（按尝试计数）：返回 0 = 放行，>0 = 剩余锁定秒数 */
+export async function hitPublishLimit(db: D1Database, userId: string, now: number): Promise<number> {
+  return hitAttempt(db, publishKey(userId), PUBLISH_MAX, CLOUD_WINDOW_MS, now)
+}
+
+/** 关卡库详情下载限流（匿名+登录统一按 IP 计数）：返回 0 = 放行，>0 = 剩余锁定秒数 */
+export async function hitHubReadLimit(db: D1Database, ipHash: string, now: number): Promise<number> {
+  return hitAttempt(db, hubReadKey(ipHash), HUB_READ_MAX, CLOUD_WINDOW_MS, now)
 }
 
 /** 概率性清理过期限流行（挂在登录/注册路径） */

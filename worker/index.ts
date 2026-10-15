@@ -8,14 +8,18 @@ import { Router } from './router'
 import { changePassword, login, logout, me, register, updateNickname } from './handlers/auth'
 import { deleteLevel, getLevel, listLevels, replaceLevel, uploadLevel } from './handlers/cloud'
 import { deleteFolder, getFolder, listFolders, uploadFolder } from './handlers/cloud_folders'
+import { getHubItem, listMine, listPublic, publishFolder, publishLevel, withdrawItem } from './handlers/hub'
 import { listProgress, putProgress } from './handlers/progress'
 import {
+  adminApproveHub,
   adminDeleteLevel,
   adminDeleteUser,
   adminListAudit,
+  adminListHub,
   adminListLevels,
   adminListUsers,
   adminPatchUser,
+  adminRejectHub,
   adminStats,
 } from './handlers/admin'
 import type { Env, ExecutionContext } from './types'
@@ -42,6 +46,14 @@ api.add('POST', '/api/cloud/folders', uploadFolder)
 api.add('GET', '/api/cloud/folders/:id', getFolder)
 api.add('DELETE', '/api/cloud/folders/:id', deleteFolder)
 
+api.add('POST', '/api/cloud/levels/:id/publish', publishLevel)
+api.add('POST', '/api/cloud/folders/:id/publish', publishFolder)
+
+api.add('GET', '/api/hub/items', listPublic)
+api.add('GET', '/api/hub/items/:id', getHubItem)
+api.add('GET', '/api/hub/mine', listMine)
+api.add('DELETE', '/api/hub/items/:id', withdrawItem)
+
 api.add('GET', '/api/progress', listProgress)
 api.add('PUT', '/api/progress', putProgress)
 
@@ -52,6 +64,10 @@ api.add('DELETE', '/api/admin/users/:id', adminDeleteUser)
 api.add('GET', '/api/admin/levels', adminListLevels)
 api.add('DELETE', '/api/admin/levels/:id', adminDeleteLevel)
 api.add('GET', '/api/admin/audit', adminListAudit)
+
+api.add('GET', '/api/admin/hub', adminListHub)
+api.add('POST', '/api/admin/hub/:id/approve', adminApproveHub)
+api.add('POST', '/api/admin/hub/:id/reject', adminRejectHub)
 
 export default {
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
