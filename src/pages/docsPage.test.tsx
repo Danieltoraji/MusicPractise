@@ -50,6 +50,15 @@ describe('DocsPage', () => {
     expect(c.querySelector('.docs-link.active')!.getAttribute('href')).toBe('#/docs/expr')
   })
 
+  it('更新日志：#/docs/changelog 渲染且日期倒序', async () => {
+    const c = await renderDocs('changelog')
+    expect(c.querySelector('.docs-article h1')!.textContent).toBe('更新日志')
+    const dates = [...c.querySelectorAll('.docs-article h2')].map((el) => el.textContent)
+    expect(dates.length).toBeGreaterThan(0)
+    expect(dates[0]).toBe('2026-10-15')
+    expect([...dates].sort().reverse()).toEqual(dates)
+  })
+
   it('搜索过滤目录并显示空态', async () => {
     const c = await renderDocs()
     const input = c.querySelector('.docs-search') as HTMLInputElement

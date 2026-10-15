@@ -4,6 +4,7 @@
  * 关卡文档 v3 约束等均与 src/engine、src/runtime 同源核对），后续随功能演进维护。
  */
 import type { ReactNode } from 'react'
+import { ChangelogBody } from './docsChangelog'
 
 export interface DocItem {
   id: string
@@ -753,6 +754,12 @@ on app:next {
             <p>外观自定义仅存本机（设计如此，不同步云端），换设备需重新设置。</p>
           </>
         ),
+      },
+      {
+        id: 'changelog',
+        title: '更新日志',
+        keywords: 'changelog 更新 版本 历史 release',
+        body: <ChangelogBody />,
       },
     ],
   },
