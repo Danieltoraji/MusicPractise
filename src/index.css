@@ -1810,28 +1810,28 @@ a.level-row:hover {
 .graph-editor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-2);
   flex: 1;
   min-height: 0;
 }
 .graph-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-2);
   flex-wrap: wrap;
 }
 .graph-toolbar-hint {
-  font-size: 12px;
+  font-size: var(--fs-0);
 }
 .graph-lint-count {
   margin-left: auto;
   color: var(--warn);
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-1);
 }
 .graph-layout {
   display: flex;
-  gap: 10px;
+  gap: var(--sp-2);
   align-items: stretch;
   min-height: 620px;
   flex: 1;
@@ -1840,7 +1840,7 @@ a.level-row:hover {
   flex: none; /* 宽度由内联 style 驱动（docs/29 追加：面板自由调换） */
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-2);
   min-height: 0;
   min-width: 0;
   /* 面板堆叠超过列高时列内滚动（不撑破工作台高度链） */
@@ -1872,25 +1872,25 @@ a.level-row:hover {
   flex: 1;
   min-height: 0;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   background: var(--panel);
-  padding: 10px;
+  padding: var(--sp-3);
   overflow-y: auto;
   max-height: 720px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 .glib-title,
 .ginsp .glib-title {
   font-weight: 700;
-  font-size: 13px;
+  font-size: var(--fs-1);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 .glib-group-head {
-  font-size: 12px;
+  font-size: var(--fs-0);
   color: var(--muted);
   font-weight: 600;
   margin-top: 4px;
@@ -1898,22 +1898,23 @@ a.level-row:hover {
   padding-bottom: 2px;
 }
 .glib-empty {
-  font-size: 12px;
+  font-size: var(--fs-0);
 }
 .glib-item {
   display: block;
   width: 100%;
   text-align: left;
-  font-size: 12.5px;
+  font-size: var(--fs-1);
   padding: 5px 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
   color: var(--ink);
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: border-color var(--tr-fast), color var(--tr-fast);
 }
 .glib-item:hover {
   border-color: var(--accent);
@@ -1935,22 +1936,22 @@ a.level-row:hover {
 /* 节点信息卡 */
 .gnode {
   position: relative;
-  background: #fff;
+  background: var(--panel);
   border: 1.5px solid var(--line);
   border-radius: 9px;
   min-width: 200px;
   max-width: 280px;
   padding: 6px 12px 7px 16px;
-  font-size: 12px;
-  box-shadow: 0 1px 3px rgb(15 23 42 / 0.08);
+  font-size: var(--fs-0);
+  box-shadow: var(--shadow-1);
 }
 .gnode.is-selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgb(79 70 229 / 0.25);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .gnode.has-error {
   border-color: var(--bad);
-  box-shadow: 0 0 0 2px rgb(220 38 38 / 0.18);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 18%, transparent);
 }
 .gnode-band {
   position: absolute;
@@ -1965,7 +1966,7 @@ a.level-row:hover {
   align-items: center;
   gap: 6px;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-0);
   letter-spacing: 0.04em;
 }
 .gnode-kind {
@@ -1982,7 +1983,7 @@ a.level-row:hover {
   margin-top: 2px;
 }
 .gnode-line {
-  font-family: Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
@@ -1994,16 +1995,16 @@ a.level-row:hover {
   width: 10px;
   height: 12px;
   border-radius: 3px;
-  border: 1.5px solid #475569;
-  background: #f8fafc;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 55%, var(--line));
+  background: var(--panel-2);
 }
 .gport-true {
   background: var(--ok) !important;
-  border-color: #15803d !important;
+  border-color: var(--ok) !important;
 }
 .gport-false {
   background: var(--bad) !important;
-  border-color: #b91c1c !important;
+  border-color: var(--bad) !important;
 }
 .gport-label {
   position: absolute;
@@ -2016,7 +2017,7 @@ a.level-row:hover {
 /* 执行边（RF 内置规则直接作用于 path，选择器下沉并以更高特异性覆盖） */
 .gedge .react-flow__edge-path,
 path.gedge {
-  stroke: #64748b;
+  stroke: color-mix(in srgb, var(--muted) 75%, var(--ink));
   stroke-width: 1.6;
 }
 .gedge-true .react-flow__edge-path,
@@ -2042,20 +2043,19 @@ path.gedge-false {
   width: 250px;
   max-height: 420px;
   overflow-y: auto;
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgb(15 23 42 / 0.16);
-  padding: 8px;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+  padding: var(--sp-2);
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 .gmenu-filter {
   padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  font-size: 12.5px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-1);
   color: var(--ink);
 }
 
@@ -2064,31 +2064,30 @@ path.gedge-false {
   width: 300px;
   flex: none;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   background: var(--panel);
-  padding: 10px;
+  padding: var(--sp-3);
   overflow-y: auto;
   max-height: none; /* 高度由布局行拉伸决定，内部滚动 */
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 13px;
+  gap: var(--sp-2);
+  font-size: var(--fs-1);
 }
 .ginsp-row {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12.5px;
+  font-size: var(--fs-1);
   color: var(--muted);
 }
 .ginsp-row input,
 .ginsp-row select,
 .ginsp-row textarea {
   padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--fs-1);
   color: var(--ink);
 }
 .ginsp-expr {
@@ -2105,26 +2104,23 @@ path.gedge-false {
 .tfp select,
 .tfp input {
   padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--fs-1);
   color: var(--ink);
-  background: var(--panel, #fff);
 }
 .tfp button {
   align-self: flex-start;
   padding: 3px 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: var(--fs-0);
   cursor: pointer;
 }
 .tfp-warn {
-  font-size: 11.5px;
-  color: #b45309;
+  font-size: var(--fs-0);
+  color: var(--warn-ink-2);
 }
 .ginsp-argline {
   display: flex;
@@ -2137,8 +2133,8 @@ path.gedge-false {
 }
 .ginsp-argdel {
   border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 6px;
+  background: var(--panel-2);
+  border-radius: var(--r-sm);
   width: 26px;
   height: 26px;
   cursor: pointer;
@@ -2150,11 +2146,11 @@ path.gedge-false {
 }
 .ginsp-modes button {
   border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 6px;
+  background: var(--panel-2);
+  border-radius: var(--r-sm);
   padding: 3px 10px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-0);
 }
 .ginsp-modes button.active {
   border-color: var(--accent);
@@ -2164,10 +2160,10 @@ path.gedge-false {
 .ginsp-issues {
   margin: 0;
   padding-left: 18px;
-  font-size: 12px;
+  font-size: var(--fs-0);
 }
 .ginsp-meta {
-  font-size: 11.5px;
+  font-size: var(--fs-0);
 }
 
 /* ---------- 节点结构化控件（3-5 友好化） ---------- */
@@ -2223,8 +2219,8 @@ path.gedge-false {
   gap: 4px;
 }
 .call-args-doc {
-  font-size: 11px;
-  font-family: Consolas, monospace;
+  font-size: var(--fs-0);
+  font-family: var(--font-mono);
 }
 .call-args-actions {
   display: flex;
@@ -2233,11 +2229,11 @@ path.gedge-false {
 }
 .call-args-actions button {
   border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 6px;
+  background: var(--panel-2);
+  border-radius: var(--r-sm);
   padding: 3px 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-0);
 }
 .query-call {
   display: flex;
@@ -2262,13 +2258,13 @@ path.gedge-false {
   width: 240px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  padding: 8px;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+  padding: var(--sp-2);
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--fs-0);
 }
 .canvas-map-head {
   display: flex;
@@ -2286,7 +2282,7 @@ path.gedge-false {
 .canvas-map-body {
   position: relative;
   border: 1px dashed var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
 }
 .canvas-map-box {
   position: absolute;
@@ -2294,9 +2290,9 @@ path.gedge-false {
   align-items: center;
   justify-content: center;
   padding: 0 2px;
-  border: 1.5px solid #94a3b8;
+  border: 1.5px solid color-mix(in srgb, var(--muted) 70%, var(--line));
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.85);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
   cursor: pointer;
   overflow: hidden;
 }
@@ -2314,12 +2310,12 @@ path.gedge-false {
 }
 .canvas-map-box.is-focus {
   outline: 2px solid var(--accent);
-  background: #e0f2fe;
+  background: var(--accent-soft);
 }
 .canvas-map-empty {
   padding: 12px 6px;
   text-align: center;
-  font-size: 11.5px;
+  font-size: var(--fs-0);
 }
 .canvas-map-tip {
   font-size: 10.5px;
@@ -2327,9 +2323,9 @@ path.gedge-false {
 
 /* 画布对照点击后的相关节点高亮 */
 .gnode.is-related {
-  outline: 2px dashed #0ea5e9;
+  outline: 2px dashed var(--accent);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.18);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* ---------- 视图管理条 + 数据表（v3） ---------- */
@@ -2770,13 +2766,13 @@ path.gedge-false {
 
 .gvars {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   background: var(--panel);
-  padding: 10px;
+  padding: var(--sp-3);
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-1);
 }
 .gvar-row {
   display: flex;
@@ -2786,9 +2782,7 @@ path.gedge-false {
 .gvar-row input {
   min-width: 0;
   padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--fs-0);
   color: var(--ink);
 }
 .gvar-name {
@@ -2797,7 +2791,7 @@ path.gedge-false {
 }
 .gvar-value {
   flex: 1;
-  font-family: Consolas, monospace;
+  font-family: var(--font-mono);
 }
 .gvar-add {
   display: flex;
@@ -2807,9 +2801,7 @@ path.gedge-false {
   flex: 1;
   min-width: 0;
   padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--fs-0);
   color: var(--ink);
 }
 
@@ -2820,30 +2812,30 @@ path.gedge-false {
   max-height: 160px;
   overflow-y: auto;
   border: 1px solid var(--warn);
-  border-radius: 10px;
-  background: #fffbeb;
-  padding: 8px;
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  padding: var(--sp-2);
 }
 .graph-issue {
   display: flex;
   gap: 8px;
   align-items: baseline;
   text-align: left;
-  font-size: 12.5px;
+  font-size: var(--fs-1);
   border: none;
   background: none;
   cursor: pointer;
   color: var(--ink);
   padding: 2px 4px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
 }
 .graph-issue:hover {
-  background: #fef3c7;
+  background: var(--warn-soft-strong);
 }
 .graph-issue-code {
   flex: none;
-  font-family: Consolas, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-0);
   color: var(--warn);
   font-weight: 700;
 }
@@ -2887,24 +2879,24 @@ path.gedge-false {
 
 .graph-log {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   background: var(--panel);
-  padding: 10px;
+  padding: var(--sp-3);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 .graph-log-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
+  gap: var(--sp-2);
+  font-size: var(--fs-1);
 }
 .graph-log-head button {
   margin-left: 0;
 }
 .graph-log-empty {
-  font-size: 12.5px;
+  font-size: var(--fs-1);
 }
 .graph-log-list {
   display: flex;
@@ -2918,14 +2910,14 @@ path.gedge-false {
   gap: 10px;
   align-items: baseline;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--fs-0);
   border: 1px solid transparent;
   background: none;
   cursor: default;
   color: var(--ink);
   padding: 2px 6px;
-  border-radius: 6px;
-  font-family: Consolas, monospace;
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
 }
 .graph-log-entry.has-node {
   cursor: pointer;
