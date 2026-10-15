@@ -3101,7 +3101,8 @@ path.gedge-false {
 /* ---------- 节点图 · 千星深色工作台主题（深色 = .graph-editor.ge-dark；浅色走基础规则） ---------- */
 
 .graph-editor.ge-dark {
-  /* 深色工作台色板：深海蓝底 + 青色选中 + 金色模板（千星奇域风格） */
+  /* 深色工作台色板：深海蓝底 + 青色选中 + 金色模板（千星奇域风格）。
+     docs/38 E5 裁决：深色板固定、跨皮肤一致；体系内衍生色全部走变量/color-mix。 */
   --ge-bg0: #0b1120;
   --ge-bg1: #131e36;
   --ge-panel: #141e34;
@@ -3109,16 +3110,36 @@ path.gedge-false {
   --ge-line: #26355a;
   --ge-line-soft: #223050;
   --ge-ink: #dce5f5;
+  --ge-ink-soft: #c9d6ef;
+  --ge-ink-faint: #9fb0d0;
   --ge-muted: #8fa1c2;
+  --ge-placeholder: #7286ad;
   --ge-accent: #38bdf8;
+  --ge-accent-ink: #0b1622;
+  --ge-cap: #818cf8;
+  --ge-cap-ink: #a5b4fc;
   --ge-gold: #f5c66b;
+  --ge-warn: #fbbf24;
   --ge-ok: #34d399;
   --ge-bad: #f87171;
+  --ge-bad-ink: #fca5a5;
+  --ge-related: #22d3ee;
+  --ge-node-bg: linear-gradient(165deg, #26355c 0%, #1b2745 100%);
+  --ge-node-line: #41598c;
+  --ge-node-link: #7cc7f7;
+  --ge-handle-bg: #22304f;
+  --ge-handle-line: #55688f;
+  --ge-edge: #5b6f96;
+  --ge-input-bg: #0f1830;
+  --ge-minimap-bg: #101a30;
+  --ge-controls-bg: #16213a;
+  --ge-controls-bg-hover: #1d2a47;
+  --ge-shadow-rgb: 3, 8, 20;
 
   color: var(--ge-ink); /* 子树默认文字色：未显式设色的面板标题/菜单分组全部可读 */
   background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0)); /* 工作台深底（P0：问题列表等根级元素不可透出浅色 body） */
-  border-radius: 12px;
-  padding: 8px;
+  border-radius: var(--r-md);
+  padding: var(--sp-2);
 }
 
 /* 深色面板拉伸语义与基础规则一致（高度链见 .graph-canvas），此处只覆写配色 */
@@ -3136,7 +3157,7 @@ path.gedge-false {
 .ge-dark .graph-toolbar {
   background: linear-gradient(180deg, var(--ge-panel-2), var(--ge-panel));
   border: 1px solid var(--ge-line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   padding: 6px 10px;
 }
 .ge-dark button {
@@ -3152,7 +3173,7 @@ path.gedge-false {
   background: var(--ge-panel-2);
   border: 1px solid var(--ge-line);
   color: var(--ge-ink);
-  border-radius: 7px;
+  border-radius: var(--r-sm);
 }
 .ge-dark .graph-toolbar button:hover,
 .ge-dark .graph-log-head button:hover,
@@ -3165,19 +3186,19 @@ path.gedge-false {
 .ge-dark .ginsp-modes button.active {
   border-color: var(--ge-accent);
   color: var(--ge-accent);
-  background: rgba(56, 189, 248, 0.1);
+  background: color-mix(in srgb, var(--ge-accent) 10%, transparent);
 }
 /* 特异性补齐：:not(x):not(y) 通用规则 (0,4,1) 压过模式选中态——此处在其后以同级特异性夺回（评审 P1-1） */
 .ge-dark .ginsp .ginsp-modes button.active {
   border-color: var(--ge-accent);
   color: var(--ge-accent);
-  background: rgba(56, 189, 248, 0.12);
+  background: color-mix(in srgb, var(--ge-accent) 12%, transparent);
 }
 .ge-dark .graph-toolbar button.danger,
 .ge-dark .ginsp button.danger {
   color: var(--ge-bad);
-  border-color: rgba(248, 113, 113, 0.4);
-  background: rgba(248, 113, 113, 0.06);
+  border-color: color-mix(in srgb, var(--ge-bad) 40%, transparent);
+  background: color-mix(in srgb, var(--ge-bad) 6%, transparent);
 }
 .ge-dark .ginsp-argdel {
   background: var(--ge-panel-2);
@@ -3189,25 +3210,25 @@ path.gedge-false {
   color: var(--ge-muted);
 }
 .ge-dark .graph-lint-count {
-  color: var(--ge-warn, #fbbf24);
+  color: var(--ge-warn);
 }
 .ge-dark .graph-toolbar button.graph-lint-count {
-  color: var(--ge-warn, #fbbf24);
-  border-color: rgba(251, 191, 36, 0.45);
-  background: rgba(251, 191, 36, 0.07);
+  color: var(--ge-warn);
+  border-color: color-mix(in srgb, var(--ge-warn) 45%, transparent);
+  background: color-mix(in srgb, var(--ge-warn) 7%, transparent);
 }
 
 /* 输入控件 */
 .ge-dark input,
 .ge-dark select,
 .ge-dark textarea {
-  background: #0f1830;
+  background: var(--ge-input-bg);
   border: 1px solid var(--ge-line);
   color: var(--ge-ink);
 }
 .ge-dark input::placeholder,
 .ge-dark textarea::placeholder {
-  color: #7286ad;
+  color: var(--ge-placeholder);
 }
 .ge-dark label {
   color: var(--ge-muted);
@@ -3224,12 +3245,12 @@ path.gedge-false {
 .ge-dark .glib-item {
   background: var(--ge-panel-2);
   border-color: var(--ge-line);
-  color: #c9d6ef;
+  color: var(--ge-ink-soft);
 }
 .ge-dark .glib-item:hover {
   border-color: var(--ge-accent);
   color: var(--ge-accent);
-  background: rgba(56, 189, 248, 0.08);
+  background: color-mix(in srgb, var(--ge-accent) 8%, transparent);
 }
 .ge-dark .glib-item-tpl {
   color: var(--ge-gold);
@@ -3237,32 +3258,32 @@ path.gedge-false {
 
 /* 节点信息卡：深空卡片 + 分类色带 + 选中辉光 */
 .ge-dark .gnode {
-  background: linear-gradient(165deg, #26355c 0%, #1b2745 100%);
-  border: 1px solid #41598c;
-  border-radius: 12px;
+  background: var(--ge-node-bg);
+  border: 1px solid var(--ge-node-line);
+  border-radius: var(--r-md);
   color: var(--ge-ink);
-  box-shadow: 0 4px 16px rgb(3 8 20 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.05);
+  box-shadow: 0 4px 16px rgba(var(--ge-shadow-rgb), 0.5), inset 0 1px 0 rgb(255 255 255 / 0.05);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .ge-dark .gnode-line {
-  color: #c6d4ee;
+  color: var(--ge-ink-soft);
 }
 .ge-dark .gnode.is-selected {
   border-color: var(--ge-accent);
   box-shadow:
-    0 0 0 2px rgb(56 189 248 / 0.35),
-    0 0 22px rgb(56 189 248 / 0.28),
-    0 4px 16px rgb(3 8 20 / 0.5);
+    0 0 0 2px color-mix(in srgb, var(--ge-accent) 35%, transparent),
+    0 0 22px color-mix(in srgb, var(--ge-accent) 28%, transparent),
+    0 4px 16px rgba(var(--ge-shadow-rgb), 0.5);
 }
 .ge-dark .gnode.has-error {
   border-color: var(--ge-bad);
   box-shadow:
-    0 0 0 2px rgb(248 113 113 / 0.3),
-    0 0 18px rgb(248 113 113 / 0.22);
+    0 0 0 2px color-mix(in srgb, var(--ge-bad) 30%, transparent),
+    0 0 18px color-mix(in srgb, var(--ge-bad) 22%, transparent);
 }
 .ge-dark .gnode.is-related {
-  outline: 2px dashed #22d3ee;
-  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.16);
+  outline: 2px dashed var(--ge-related);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ge-related) 16%, transparent);
 }
 
 /* 端口：圆形彩色触点 */
@@ -3270,17 +3291,17 @@ path.gedge-false {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: #22304f;
-  border: 2px solid #55688f;
+  background: var(--ge-handle-bg);
+  border: 2px solid var(--ge-handle-line);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 .ge-dark .graph-canvas .gport-true {
   background: var(--ge-ok) !important;
-  border-color: #0b1120 !important;
+  border-color: var(--ge-bg0) !important;
 }
 .ge-dark .graph-canvas .gport-false {
   background: var(--ge-bad) !important;
-  border-color: #0b1120 !important;
+  border-color: var(--ge-bg0) !important;
 }
 .ge-dark .graph-canvas .gport-label {
   color: var(--ge-muted);
@@ -3289,7 +3310,7 @@ path.gedge-false {
 /* 执行边：深底高亮描线 + 选中辉光 */
 .ge-dark .graph-canvas .gedge .react-flow__edge-path,
 .ge-dark .graph-canvas path.gedge {
-  stroke: #5b6f96;
+  stroke: var(--ge-edge);
   stroke-width: 2;
 }
 .ge-dark .graph-canvas .gedge-true .react-flow__edge-path,
@@ -3302,15 +3323,15 @@ path.gedge-false {
 }
 .ge-dark .graph-canvas .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--ge-accent);
-  filter: drop-shadow(0 0 4px rgb(56 189 248 / 0.65));
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--ge-accent) 65%, transparent));
 }
 .ge-dark .graph-canvas .react-flow__minimap {
-  background: #101a30;
+  background: var(--ge-minimap-bg);
   border: 1px solid var(--ge-line);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
 }
 .ge-dark .graph-canvas .react-flow__controls {
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   overflow: hidden;
   border: 1px solid var(--ge-line);
 }
@@ -3319,14 +3340,14 @@ path.gedge-false {
 .ge-dark .gmenu {
   background: var(--ge-panel);
   border-color: var(--ge-line);
-  box-shadow: 0 12px 32px rgb(3 8 20 / 0.6);
+  box-shadow: 0 12px 32px rgba(var(--ge-shadow-rgb), 0.6);
 }
 .ge-dark .graph-issues {
-  background: rgba(251, 191, 36, 0.06);
-  border-color: rgba(251, 191, 36, 0.45);
+  background: color-mix(in srgb, var(--ge-warn) 6%, transparent);
+  border-color: color-mix(in srgb, var(--ge-warn) 45%, transparent);
 }
 .ge-dark .graph-issue:hover {
-  background: rgba(251, 191, 36, 0.1);
+  background: color-mix(in srgb, var(--ge-warn) 10%, transparent);
 }
 .ge-dark .graph-issue {
   color: var(--ge-ink);
@@ -3338,33 +3359,33 @@ path.gedge-false {
   border-color: var(--ge-line);
 }
 .ge-dark .graph-log-entry {
-  color: #c6d4ee;
+  color: var(--ge-ink-soft);
 }
 .ge-dark .graph-log-entry:hover {
-  background: rgba(56, 189, 248, 0.07);
+  background: color-mix(in srgb, var(--ge-accent) 7%, transparent);
 }
 .ge-dark .graph-script-head button {
   background: var(--ge-panel-2);
   border: 1px solid var(--ge-line);
   color: var(--ge-ink);
-  border-radius: 7px;
+  border-radius: var(--r-sm);
 }
 .ge-dark .editor-errors {
-  background: rgba(248, 113, 113, 0.08);
-  border-color: rgba(248, 113, 113, 0.4);
-  color: #fca5a5;
+  background: color-mix(in srgb, var(--ge-bad) 8%, transparent);
+  border-color: color-mix(in srgb, var(--ge-bad) 40%, transparent);
+  color: var(--ge-bad-ink);
 }
 .ge-dark .graph-log-entry.has-node:hover {
   border-color: var(--ge-accent);
 }
 .ge-dark .graph-log-kind.command {
-  color: #9fb0d0;
+  color: var(--ge-ink-faint);
 }
 .ge-dark .graph-log-node {
-  color: #7cc7f7;
+  color: var(--ge-node-link);
 }
 .ge-dark .graph-issue-code {
-  color: var(--ge-warn, #fbbf24);
+  color: var(--ge-warn);
 }
 .ge-dark .canvas-map {
   background: rgba(16, 26, 48, 0.94);
@@ -3382,16 +3403,16 @@ path.gedge-false {
 }
 .ge-dark .canvas-map-box.is-focus {
   outline-color: var(--ge-accent);
-  background: rgba(56, 189, 248, 0.22);
+  background: color-mix(in srgb, var(--ge-accent) 22%, transparent);
 }
 
 .ge-dark .graph-canvas .react-flow__controls-button {
-  background: #16213a;
+  background: var(--ge-controls-bg);
   border-color: var(--ge-line);
   color: var(--ge-ink);
 }
 .ge-dark .graph-canvas .react-flow__controls-button:hover {
-  background: #1d2a47;
+  background: var(--ge-controls-bg-hover);
 }
 
 /* ---------- 资源库：文件夹树（系列 ▸ 专题 ▸ 关卡） ---------- */
@@ -3415,7 +3436,7 @@ path.gedge-false {
   font-size: 13.5px;
 }
 .lib-row:hover {
-  background: rgba(37, 99, 235, 0.06);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 .lib-row.is-container > .lib-title {
   font-weight: 600;
@@ -3435,7 +3456,7 @@ path.gedge-false {
   border-radius: 5px;
 }
 .lib-twist:hover {
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
 .lib-leaf {
@@ -3477,9 +3498,9 @@ a.lib-title:hover {
   font-size: 10.5px;
   padding: 1px 6px;
   border-radius: 99px;
-  border: 1px solid rgba(217, 119, 6, 0.45);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
   color: var(--warn-ink-2);
-  background: rgba(251, 191, 36, 0.12);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
 }
 .lib-row .id-hint {
   font-size: 10.5px;
@@ -3538,7 +3559,7 @@ a.lib-title:hover {
   height: 100vh;
   padding: 10px;
   border-radius: 0;
-  background: #fff;
+  background: var(--panel);
 }
 .ge-dark:fullscreen,
 .ge-dark.is-fullscreen {
@@ -3687,7 +3708,7 @@ a.lib-title:hover {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 3px 6px;
-  background: rgba(37, 99, 235, 0.05);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 .play-note select {
   padding: 2px 4px;
@@ -3695,7 +3716,7 @@ a.lib-title:hover {
   border-radius: 5px;
   font-size: 12px;
   color: var(--ink);
-  background: #fff;
+  background: var(--panel-2);
   max-width: 110px;
 }
 .play-note-del {
@@ -3716,7 +3737,7 @@ a.lib-title:hover {
 }
 .play-note-freq button {
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel-2);
   border-radius: 5px;
   padding: 2px 6px;
   cursor: pointer;
@@ -3742,7 +3763,7 @@ a.lib-title:hover {
   border-radius: 6px;
   font-size: 12.5px;
   color: var(--ink);
-  background: #fff;
+  background: var(--panel-2);
 }
 
 /* ---------- 设置页（AI 接入） ---------- */
@@ -3981,7 +4002,7 @@ a.lib-title:hover {
   height: 0;
   border-top: 2px solid var(--accent);
   border-radius: 2px;
-  box-shadow: 0 0 6px rgba(79, 70, 229, 0.5);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .drag-src {
   opacity: 0.45;
@@ -4170,11 +4191,11 @@ a.lib-title:hover {
   color: var(--ge-ink);
 }
 .ge-dark .ai-panel-cap-run {
-  border-color: rgba(129, 140, 248, 0.6);
-  color: #a5b4fc;
+  border-color: color-mix(in srgb, var(--ge-cap) 60%, transparent);
+  color: var(--ge-cap-ink);
 }
 .ge-dark .ai-panel-cap-run:hover:not(:disabled) {
-  background: rgba(99, 102, 241, 0.2);
+  background: color-mix(in srgb, var(--ge-cap) 20%, transparent);
 }
 .ge-dark .ai-panel-form {
   border-top-color: var(--ge-line);
@@ -4197,7 +4218,7 @@ a.lib-title:hover {
 .ge-dark .ai-panel-form button.primary {
   background: var(--ge-accent);
   border-color: var(--ge-accent);
-  color: #0b1622;
+  color: var(--ge-accent-ink);
   font-weight: 600;
 }
 
@@ -4232,7 +4253,7 @@ a.lib-title:hover {
 }
 .ge-dark .gdock-insert {
   border-top-color: var(--ge-accent);
-  box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ge-accent) 50%, transparent);
 }
 .ge-dark .graph-dock-col.drop-target {
   outline-color: var(--ge-accent);
@@ -4283,13 +4304,13 @@ a.lib-title:hover {
 }
 .ge-dark .ai-mode-tab.active {
   background: var(--ge-accent);
-  color: #0b1622;
+  color: var(--ge-accent-ink);
   font-weight: 600;
 }
 .ge-dark .ai-panel-rollback {
-  border-color: rgba(217, 119, 6, 0.6);
-  color: var(--warn);
-  background: rgba(217, 119, 6, 0.08);
+  border-color: color-mix(in srgb, var(--ge-warn) 60%, transparent);
+  color: var(--ge-warn);
+  background: color-mix(in srgb, var(--ge-warn) 8%, transparent);
 }
 
 /* plan 模式执行计划确认条（批次2b） */
@@ -4403,7 +4424,7 @@ a.lib-title:hover {
 .gnode-bp.on {
   background: var(--bad);
   opacity: 1;
-  box-shadow: 0 0 6px rgba(220, 38, 38, 0.6);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--bad) 60%, transparent);
 }
 /* 调试暂停中的节点：琥珀描边呼吸 */
 .gnode.is-paused {
@@ -4414,10 +4435,10 @@ a.lib-title:hover {
 @keyframes gdb-pulse {
   0%,
   100% {
-    outline-color: rgba(217, 119, 6, 0.9);
+    outline-color: color-mix(in srgb, var(--warn) 90%, transparent);
   }
   50% {
-    outline-color: rgba(217, 119, 6, 0.25);
+    outline-color: color-mix(in srgb, var(--warn) 25%, transparent);
   }
 }
 
@@ -4547,10 +4568,10 @@ a.lib-title:hover {
 }
 .gdb-log-row.error .gdb-log-kind,
 .gdb-log-row.error .gdb-log-text {
-  color: #f87171;
+  color: var(--bad);
 }
 .gdb-log-row.command .gdb-log-kind {
-  color: #6b7280;
+  color: var(--muted);
 }
 
 /* 调试面板深色（ge-dark） */
@@ -4566,8 +4587,8 @@ a.lib-title:hover {
 }
 .ge-dark .gdb button.danger {
   color: var(--ge-bad);
-  border-color: rgba(248, 113, 113, 0.4);
-  background: rgba(248, 113, 113, 0.06);
+  border-color: color-mix(in srgb, var(--ge-bad) 40%, transparent);
+  background: color-mix(in srgb, var(--ge-bad) 6%, transparent);
 }
 .ge-dark .gdb-var-row input,
 .ge-dark .gdb-payload,
@@ -4577,6 +4598,13 @@ a.lib-title:hover {
   color: var(--ge-ink);
 }
 .ge-dark .gdb-var-name {
+  color: var(--ge-muted);
+}
+.ge-dark .gdb-log-row.error .gdb-log-kind,
+.ge-dark .gdb-log-row.error .gdb-log-text {
+  color: var(--ge-bad);
+}
+.ge-dark .gdb-log-row.command .gdb-log-kind {
   color: var(--ge-muted);
 }
 .ge-dark .gdb-preset,
@@ -4593,11 +4621,11 @@ a.lib-title:hover {
 .gnode.is-aihl {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  box-shadow: 0 0 14px rgba(79, 70, 229, 0.55);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .ge-dark .gnode.is-aihl {
   outline-color: var(--ge-accent);
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--ge-accent) 50%, transparent);
 }
 
 /* AI 消息截图 */
@@ -4695,7 +4723,7 @@ a.lib-title:hover {
 }
 .ge-dark .ai-plan-card {
   border-color: var(--ge-accent);
-  background: rgba(56, 189, 248, 0.08);
+  background: color-mix(in srgb, var(--ge-accent) 8%, transparent);
   color: var(--ge-ink);
 }
 .ge-dark .ai-plan-head {
@@ -4918,9 +4946,9 @@ a.lib-title:hover {
   max-width: 40%;
 }
 .gdb-stage-badge {
-  color: #b45309;
-  background: #fef3c7;
-  border: 1px solid #f59e0b66;
+  color: var(--warn-ink-2);
+  background: var(--warn-soft-strong);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
   border-radius: 999px;
   padding: 1px 10px;
   font-size: 12px;
@@ -4951,11 +4979,11 @@ a.lib-title:hover {
   min-height: 24px;
 }
 .gdb-stage-foot .pass {
-  color: var(--ok, #16a34a);
+  color: var(--ok);
   font-weight: 600;
 }
 .gdb-stage-foot .nopass {
-  color: var(--bad, #dc2626);
+  color: var(--bad);
   font-weight: 600;
 }
 .gdb-stage-empty {
@@ -4974,14 +5002,14 @@ a.lib-title:hover {
   color: var(--ge-ink);
 }
 .ge-dark .gdb-stage-badge {
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--ge-warn);
+  background: color-mix(in srgb, var(--ge-warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ge-warn) 40%, transparent);
 }
 .ge-dark .gdb-live {
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--ge-warn);
+  background: color-mix(in srgb, var(--ge-warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ge-warn) 40%, transparent);
 }
 
 /* ---------------------------------------------------------------------------
