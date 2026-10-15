@@ -4251,26 +4251,30 @@ a.lib-title:hover {
 /* 资源库 AI 新建表单（批次4） */
 .ai-new-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: flex-start;
   margin: 10px 0;
   padding: 12px;
-  border: 1px solid var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
   background: var(--accent-soft);
-  border-radius: 12px;
+  border-radius: var(--r-md);
 }
 .ai-new-form textarea {
-  flex: 1;
+  /* basis 320px：提示语 basis 100% 换行后不再把 basis 0 的输入区挤成一条缝 */
+  flex: 1 1 320px;
+  min-height: 76px;
   resize: vertical;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: var(--fs-1);
+  line-height: 1.6;
 }
 .ai-new-form .muted {
-  flex-basis: 100%;
-  font-size: 12px;
+  flex: 1 1 100%;
+  font-size: var(--fs-0);
 }
 
 /* ---------- 调试模式（docs/30）：断点圆点 / 暂停高亮 / 调试面板 ---------- */
@@ -6040,33 +6044,10 @@ progress {
 
 /* ---------- 游玩页剧场（§2.4）：固定深幕 + 剧场自有展示体系（不随皮肤翻转） ---------- */
 .theater {
-  /* 剧场钉色：游玩是内容呈现，各皮肤下都是同一座「深色剧场」 */
-  --ink: #e6ecfa;
-  --muted: #93a1c0;
-  --panel: #151d33;
-  --panel-2: #1a2440;
-  --soft: #1e2a4a;
-  --line: rgba(150, 165, 200, 0.22);
-  --accent: #7dd3fc;
-  --accent-ink: #0a2540;
-  --accent-soft: rgba(125, 211, 252, 0.1);
-  --accent-soft-strong: rgba(125, 211, 252, 0.22);
-  --ok: #4ade80;
-  --ok-soft: rgba(74, 222, 128, 0.1);
-  --ok-soft-strong: rgba(74, 222, 128, 0.24);
-  --bad: #f87171;
-  --bad-soft: rgba(248, 113, 113, 0.1);
-  --bad-soft-strong: rgba(248, 113, 113, 0.26);
-  --warn: #fbbf24;
-  --warn-soft: rgba(251, 191, 36, 0.1);
-  --warn-soft-strong: rgba(251, 191, 36, 0.24);
-  --warn-ink: #fcd34d;
-  --warn-ink-2: #fbbf24;
-  --code-bg: #0b1120;
-  --code-ink: #c7d6f5;
-  --shadow-rgb: 0, 0, 0;
-  background: linear-gradient(180deg, #111a30, #0b1120);
-  border: 1px solid rgba(120, 140, 190, 0.18);
+  /* 跟随皮肤（用户裁决：浅色皮肤下游玩页不应是固定深幕）——容器用次级面板底，
+     舞台纸面仍是浅色岛（.stage-viewport 钉 --paper），深色皮肤下自然呈深底 */
+  background: var(--panel-2);
+  border: 1px solid var(--line);
   border-radius: var(--r-xl);
   padding: var(--sp-3);
   display: flex;
