@@ -1,6 +1,6 @@
 # AGENTS.md — MusicPractise（音乐练习 UGC 平台）
 
-> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；同日由 ZCode 会话修订（同步 docs/37 运行时 UI 改造、docs/38 编辑器界面改造落地后状态）。
+> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）。
 
 ## 项目定位
 
@@ -9,7 +9,7 @@
 ## 命令与工程基线
 
 - `npm run dev` 纯前端（5173，`/api` 代理到 wrangler 8787）；`npm run dev:worker` 全栈（先 `npm run build`）；`npm run db:migrate:local` 本地 D1 迁移；`npm test`（Vitest）；`npm run build` = `tsc --noEmit && vite build`。
-- 质量门禁：全量测试全绿（现行基线 **723 项**）+ `tsc`/`build` 干净 + 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环。
+- 质量门禁：全量测试全绿（现行基线 **805 项**）+ `tsc`/`build` 干净 + 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环。
 - 设计/评审/落地记录按编号归档 `docs/`（如 docs/02 数据结构契约、docs/27 数据表 2.0、docs/31 后端、docs/36 UI 全量重设计、docs/37 运行时 UI 改造、docs/38 编辑器界面改造）；数据模型或接口变更须同步对应文档与契约表。
 
 ## 目录与架构要点
@@ -18,9 +18,9 @@
 - `src/runtime/`：`levelSession.ts` 完全解耦 DOM/React（无头可驱动、`session.dispatch` 注入事件、`SessionHost.budgets` 限步）；`LevelStage.tsx` 800×470 fit-scale 共享舞台（玩家页与编辑器调试画面单一真源，`viewportClassName`/`canvasClassName` 是被测试钩住的契约）；`LevelRunner.tsx` 渲染薄壳（题面 `.stage-prompt` 主视觉条 / 进度条 / 结算 `.result-bar`，重玩常驻）；`audio.ts` `scheduleNoteEvents` 统一调度；`audioHost.ts` 共享音频；`store.ts` ComponentStore（useSyncExternalStore + effect sink）；`componentDef.ts` 组件为纯函数 reducer，统一 `events/commands/state` 契约。
 - `src/editor/`：`EditorPage.tsx`（`#/edit/:id`）五 Tab = 画布/节点图/伪代码/数据表/JSON；`docState.ts` 唯一权威数据源（纯函数）；`graph/` 节点图编辑器与 Dock 五面板（组件库/事件管理/变量/属性/AI，第 6 个 DebugPanel）；`TableGrid.tsx` 数据表（一行 = 一题）；`StaffEditor.tsx` 五线谱弹窗；`ListEditor.tsx` 字符串列表弹窗。
 - `src/ai/` 编辑器内 AI 助手：`providers/settings/client/agent/tools/tools-write/tools-debug/tools-plan/plan/runHarness/session/vision/checkpoint`。ask/plan/agent 三模式；写七件套 `write_script/edit_table/edit_components/edit_meta/edit_views/edit_flow/set_variable` 全走 `applyAndCheck` 管线（mutate → `loadLevelDoc` 校验 → `applyDoc`；被拒回喂自纠）+ 检查点回滚。
-- `src/library/` Dexie 资源库（db / io 导入导出 / browse 文件夹树 / validate）；`src/components/` 组件与视图；`src/skin/` 皮肤系统（`#/skins`）；`src/admin/` 管理后台页（`#/admin` lazy）。
+- `src/library/` Dexie 资源库（db / io 导入导出 / browse 文件夹树 / validate / manage 文件管理器与 bundle 收集纯函数）；`src/cloud/` 云盘（api 客户端 / `#/cloud` 我的云盘页 / 设置页摘要）；`src/hub/` 关卡库（`#/hub` 四 Tab：公共/精选/官方/群组 + GroupPanel 群组面板）；`src/components/` 组件与视图；`src/skin/` 皮肤系统（`#/skins`）；`src/admin/` 管理后台页（`#/admin` lazy）。
 - `worker/` 单通道 API：http/router/session/ratelimit/admin（stats、用户 PATCH、关卡管理、审计分页）/password(pbkdf2)/`withSecurityHeaders`。`migrations/` 编号 SQL（0004 = audit_log）。`schemas/v1/` JSON Schema。`public/_headers` 静态安全头。
-- 路由（hash）：`#/` 首页、`#/series/:id`、`#/library`、`#/level/:id`、`#/edit/:id`、`#/graph/:id`、`#/settings`、`#/admin`、`#/docs`（含 `#/docs/changelog` 更新日志）、`#/skins`、`#/tuner`、`#/rhythm`。
+- 路由（hash）：`#/` 首页、`#/series/:id`、`#/library`、`#/cloud` 我的云盘、`#/hub` 关卡库（公共/精选/官方/群组）、`#/level/:id`、`#/edit/:id`、`#/graph/:id`、`#/settings`、`#/admin`、`#/docs`（含 `#/docs/changelog` 更新日志）、`#/skins`、`#/tuner`、`#/rhythm`。
 
 ## 硬性约定
 
@@ -32,6 +32,8 @@
 - 内置种子标 `builtIn` 禁删；就地编辑保存自动另存副本（新 ID，标题加「（副本）」，重复保存不叠加）；`ensureSeeded` 只补缺失、不覆写。导入导出冲突：**同 id 同版本跳过、异版本覆盖更新**；zip 条目 ≤50MB、整包 ≤100MB；产出 added/updated/skipped/rejected 报告。
 - 样式走设计令牌：内容层旧 token 全部保留 + 语义扩展层（`--panel-2`/`--soft`/`--accent-soft` 系/状态软底两档/`--code-bg|--code-ink|--code-line` 等）+ v3 刻度令牌（`--sp-1..7`/`--r-sm..xl,pill`/`--fs-0..6`/`--shadow-1..3`/`--tr`）+ `--shell-bg`/`--shell-line`；换肤用 `documentElement.dataset.skin` + `:root[data-skin]` 整组覆盖。**主题裁决（docs/37/38）**：游玩页剧场 `.theater` 跟随皮肤（早期钉色深幕已撤）；舞台/画布内容层是浅色岛——`.stage-canvas`/`.editor-canvas` 钉全套内容 token + `--st-*` 子令牌（琴键/暗设备面板），乐谱可读性不随皮肤翻转；编辑器半独立主题——浅色模式走全局令牌随皮肤，深色模式 `--ge-*` 固定千星色板跨皮肤一致（☀/🌙 切换，localStorage `graph-theme` 默认深色）。测试契约类名 `.stage-viewport`/`.stage-canvas`/`comp-*`/`[data-midi]`/`.choice-item`/`.key`/`.tap-pad` 与组件文案（TAP/未开始等）、编辑器钩子（`.tlist-modal` 是 ListEditor 聚焦逻辑的 JS 依赖）不得随意改名。
 - 面向用户的报错一律映射为可读中文（`client.ts` 七类错误映射），禁止裸抛；校验错误须带「行：列 + 消息」。
+- 云盘共享契约（docs/39）：槽位合并口径 = 关卡槽位数 + Σ文件夹内含关卡数（上限 10）；系列/关卡同为可发布单元，发布为**快照制**（审核通过复制内容，更新需「更新发布」重审）；同 root_doc_id 在 public+official 视作同一命名空间（部分唯一索引，重复公开 409）；**源绑定锁定**——hub 条目 pending/published 期间云盘源删除 409 `publish_locked`（驳回/撤回/admin 移除解锁）；官方直传遇公共同内容 409 `already_in_public`，官方上限 200 条。
+- 群组契约（docs/39 §5.3）：暗号必填全局唯一（NOCASE）+ 密码可选 pbkdf2；建群 ≤3/人、群库 ≤100 关、单成员 ≤30 关、单条目 ≤20 关（不占个人云盘额度）；群库条目 = hub_items scope='group'，群主或审核员批准/驳回；封禁群对外 404、成员访问 403 `group_banned`；解散显式级联（群库 docs/条目/成员）。`worker/handlers/groups.ts` 的 `deleteGroupCascade` 是群删除的唯一入口。
 - React 纪律：Hooks 禁止放在条件早退之后（直接 URL 访问整页白屏）；高频交互以 ref 为真源 + 统一 commit 写入；全局快捷键用 window 级原生监听（Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y，历史栈 cap 50，手动与 AI 修改同栈）；嵌套状态变更必须 `patchSession` 整对象替换、禁原地 mutation。
 
 ## 关键决策与理由
@@ -58,10 +60,15 @@
 - CSS 同特异性「后者胜」两次实案：旧按钮基块写在组件层之后覆盖全站（已删，勿再在文件尾部补按钮基样式）；媒体查询里的规则会被文件尾同名区块覆盖——**媒体查询必须放在被覆盖区块之后**（theater 移动端规则实测踩坑）。
 - 内容层浅色岛必须钉**全套**语义 token：只钉旧 10 token 不够，语义扩展层（`--accent-soft` 系等）同样会漂移进舞台（深色皮肤下琴键 hover 曾漂移）。空文本组件注意残留观感：`.comp-label:empty` 已透明化（反馈位初始空串 + tone 软底曾渲染成无字色块）。
 - `--ge-*` 只在 `.graph-editor.ge-dark` 上定义：gdb-stage 区 `var(--ge-*, var(--*))` 双写是明暗双主题取值机制（浅色回落全局 token），**勿当冗余清理**。
-- 浏览器实测（IAB/playwright）：transform 缩放容器（舞台）内 click 会卡 actionability，用 `locator.evaluate(el => el.click())`；localStorage 改皮肤后 hash 导航不重载页面，必须 `reload()`；`goto` 同 URL 是 no-op。notes 列示例只在 synth-lab 关（其余示例关 data 列是 json），测五线谱弹窗别找错关。
+- 浏览器实测（IAB/playwright）：transform 缩放容器（舞台）内 click 会卡 actionability，用 `locator.evaluate(el => el.click())`；localStorage 改皮肤后 hash 导航不重载页面，必须 `reload()`；`goto` 同 URL 是 no-op——**换构建后旧文档继续跑旧 bundle，必须显式 `reload()`**（H3 曾据此误判「新代码不生效」）。notes 列示例只在 synth-lab 关（其余示例关 data 列是 json），测五线谱弹窗别找错关。
+- IAB 原生 JS 对话框（prompt/confirm）会被自动吞掉，`getJsDialog` 轮询不可靠——浏览器实测统一在页面内 stub `window.prompt/confirm`；Playwright `evaluate` 传**字符串按表达式求值**（箭头函数串不会自动调用，须 IIFE 或传真实函数）；React 受控 input 直改 `.value` 不生效（需 native setter 或派发 input 事件后由 React value tracker 放行）。
+- 测试中 `{ ...sampleDoc }` 浅拷贝后改其 `content`/`meta` 会毒化模块级共享样本文档（import 是单例）——改 payload 必须 `JSON.parse(JSON.stringify())` 深拷贝；该坑曾致同文件用例顺序依赖的连环误报（docs/39 H2）。
+- wrangler dev 的 TaskStop 杀不净子进程：8787 被热重载的旧实例占用时新实例被挤到 8789 且因本地 D1 SQLite 锁竞争崩溃，旧实例还可能在编辑中间态构建失败后带病服务——处置：`netstat -ano` 找 PID taskkill 清端口后重启（docs/39 H4）。
+- 对返回 Promise 的校验函数（如 `verifyPassword`，签名 (password, stored)）必须 await 且勿颠倒参数序——布尔语境漏 await 不报错、只会恒真放行（docs/39 H5 曾致加入密码校验被绕过，单测抓住）。
 
-## 待办与搁置（2026-10-15 修订）
+## 待办与搁置（2026-10-16 修订）
 
+- **云盘共享与关卡库已全部落地（docs/39，H1–H6）**：资源库文件管理器、云盘文件夹化、公共/精选/官方/群组关卡库、申请公开审核、admin 审核队列与官方/群组管理。后续候选：下载排行榜/排序参数、通知系统、拖拽整理、移动端适配（延续 docs/38 口径）。
 - Bundle 瘦身已部分落地（vexflow/smplr/pitchy/fflate 惰性或动态 import、react vendor chunk，见 vite.config.ts；主包峰值曾 1.83MB/gzip ~906KB，目标 gzip ~450–550KB）；MusicXML 导入未启动。
 - 移动端适配：游玩舞台已适配（批次12 fit-scale + 触屏），**编辑器等重交互表面的移动端适配未启动**（docs/38 裁决不纳入，当前为 0）。
 - 编辑器 AI 遗留候选（有意搁置）：复合工具 `edit_level`、maxTurns 设置页配置化（现行固定 agent 32 / ask·plan 8）。

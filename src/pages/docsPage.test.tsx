@@ -55,7 +55,7 @@ describe('DocsPage', () => {
     expect(c.querySelector('.docs-article h1')!.textContent).toBe('更新日志')
     const dates = [...c.querySelectorAll('.docs-article h2')].map((el) => el.textContent)
     expect(dates.length).toBeGreaterThan(0)
-    expect(dates[0]).toBe('2026-10-15')
+    expect(dates[0]).toBe('2026-10-16')
     expect([...dates].sort().reverse()).toEqual(dates)
   })
 
