@@ -116,7 +116,8 @@ describe('migrateDocToV3', () => {
               appendRules: [
                 {
                   id: 'p1',
-                  on: 'x.ping',
+                  // 前缀用现有组件（btn1）：悬空组件事件前缀会被 lint 报 dangling-ref（事件名本身仍验证原样透传）
+                  on: 'btn1.ping',
                   when: ['v.score >= 0'],
                   do: [{ set: 'score', expr: 'v.score + 1' }],
                   else: [{ set: 'score', expr: 'v.score - 1' }],
@@ -130,7 +131,7 @@ describe('migrateDocToV3', () => {
     const nodes = doc.content.logic.nodes
     const edges = doc.content.logic.edges
     // 片段节点已前缀；on 入口原样保留（事件不变）
-    expect(nodes.find((n) => n.id === 'q1_p1_on')).toMatchObject({ kind: 'on', event: 'x.ping' })
+    expect(nodes.find((n) => n.id === 'q1_p1_on')).toMatchObject({ kind: 'on', event: 'btn1.ping' })
     // on 的唯一出边改为指向行门控（无端口），门控 true 出口接原 when 条件分支——when/else 端口边不受影响
     expect(nodes.find((n) => n.id === 'q1_p1_on_rowgate')).toMatchObject({ kind: 'branch', cond: 'v.__row == 1' })
     expect(edges.find((e) => e.from === 'q1_p1_on')).toMatchObject({ to: 'q1_p1_on_rowgate' })
