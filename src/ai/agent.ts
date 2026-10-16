@@ -7,6 +7,7 @@
 import { AiClientError, chatCompleteRaw, type AiProfileConfig, type AiToolSpec, type ChatMessage } from './client'
 import { addSessionUsage, appendMessage, beginStreamingMessage, getSession, patchSession, replaceLastMessage, streamAppendToLast } from './session'
 import type { AiTool, ToolContext } from './tools'
+import type { LevelDoc } from '../engine/level'
 
 const controllers = new Map<string, AbortController>()
 
@@ -94,8 +95,17 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     const specs = toSpecs(opts.tools)
     // 工具产生的图像（如 debug_screenshot）缓冲；一轮工具结果消费完后以带图 user 消息发给多模态模型
     const imageBuffer: string[] = []
+    // 运行内写通道：applyDoc 经编辑器 React state 异步提交（getDoc 的外部引用要等渲染期才更新），
+    // 同轮多写入时后一个工具会读到旧快照互相覆盖；面板实例中途重挂（dock 拖拽/tab 切换/调试布局/
+    // HMR）后其引用更是永久停摆。runDoc 让本轮读写始终基于最新已应用结果，不依赖外部引用的存活与提交时序。
+    let runDoc: LevelDoc | null = null
     const ctx: ToolContext = {
       ...opts.ctx,
+      getDoc: () => runDoc ?? opts.ctx.getDoc(),
+      applyDoc: (next) => {
+        runDoc = next
+        opts.ctx.applyDoc(next)
+      },
       emitImages: (imgs) => imageBuffer.push(...imgs),
     }
 

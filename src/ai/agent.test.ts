@@ -165,6 +165,79 @@ describe('轮数预算与撞限续跑', () => {
   })
 })
 
+describe('运行内写通道（读写链路修复）', () => {
+  /** 夹具：getDoc 恒返回旧引用、applyDoc 只记录不回写——模拟 React state 异步提交/面板实例重挂后 ref 停摆 */
+  function markTools() {
+    const applied: string[] = []
+    const base = { id: 'L' } as LevelDoc
+    const staleCtx: ToolContext = {
+      getDoc: () => base,
+      applyDoc: (next) => {
+        applied.push(String((next as { tag?: unknown }).tag))
+      },
+      levelId: 'L',
+    }
+    const write: AiTool = {
+      name: 'write_mark',
+      description: '',
+      parameters: { type: 'object', properties: { tag: { type: 'string' } } },
+      exec: (args, c) => {
+        c.applyDoc({ ...c.getDoc(), tag: String(args.tag) } as LevelDoc)
+        return `applied=${String(args.tag)}`
+      },
+    }
+    const read: AiTool = {
+      name: 'read_mark',
+      description: '',
+      parameters: { type: 'object', properties: {} },
+      exec: (_a, c) => `tag=${String((c.getDoc() as { tag?: unknown }).tag ?? 'none')}`,
+    }
+    return { staleCtx, applied, tools: [write, read] }
+  }
+
+  it('同轮多写入：后一个工具基于前一个写入后的 doc，而非旧快照', async () => {
+    clearSession('res_agent_wt')
+    const { staleCtx, applied, tools } = markTools()
+    scriptFetch([
+      {
+        choices: [
+          {
+            message: {
+              content: '',
+              tool_calls: [
+                { id: 'c1', type: 'function', function: { name: 'write_mark', arguments: '{"tag":"a"}' } },
+                { id: 'c2', type: 'function', function: { name: 'write_mark', arguments: '{"tag":"b"}' } },
+                { id: 'c3', type: 'function', function: { name: 'read_mark', arguments: '{}' } },
+              ],
+            },
+          },
+        ],
+      },
+      { choices: [{ message: { content: '完成' } }] },
+    ])
+    await runAgentTurn({ docId: 'res_agent_wt', profile, systemPrompt: 'S', userText: 'go', tools, ctx: staleCtx })
+    const msgs = getSession('res_agent_wt').messages
+    expect(msgs[3]).toMatchObject({ role: 'tool', content: 'applied=b' })
+    // 修复前这里读到 tag=none（旧快照）——读写链路丢失更新的直接复现
+    expect(msgs[4]).toMatchObject({ role: 'tool', content: 'tag=b' })
+    // 外部写路径（编辑器）两笔都收到，最终以最后一笔为准
+    expect(applied).toEqual(['a', 'b'])
+  })
+
+  it('跨轮保持：同一运行内下一轮读取仍见本轮写入结果', async () => {
+    clearSession('res_agent_wt2')
+    const { staleCtx, tools } = markTools()
+    scriptFetch([
+      { choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'write_mark', arguments: '{"tag":"x"}' } }] } }] },
+      { choices: [{ message: { content: '', tool_calls: [{ id: 'c2', type: 'function', function: { name: 'read_mark', arguments: '{}' } }] } }] },
+      { choices: [{ message: { content: '完成' } }] },
+    ])
+    await runAgentTurn({ docId: 'res_agent_wt2', profile, systemPrompt: 'S', userText: 'go', tools, ctx: staleCtx })
+    const msgs = getSession('res_agent_wt2').messages
+    expect(msgs[4]).toMatchObject({ role: 'tool', content: 'tag=x' })
+  })
+})
+
 describe('agent 图像消息（批次5）', () => {
   it('工具 emitImages → 带图 user 消息追加（面板与多模态模型可见）', async () => {
     clearSession('res_agent_img')
