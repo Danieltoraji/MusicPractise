@@ -467,6 +467,7 @@ describe('精选开关与官方库（docs/39 H4）', () => {
     const adminCookie = await registerAdmin('管理员')
     for (let i = 0; i < 200; i++) {
       db.hub_items.push({
+        group_id: null,
         id: `hub_${String(i).padStart(26, '0')}`,
         scope: 'official',
         item_kind: 'level',

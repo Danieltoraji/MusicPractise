@@ -9,17 +9,36 @@ import { changePassword, login, logout, me, register, updateNickname } from './h
 import { deleteLevel, getLevel, listLevels, replaceLevel, uploadLevel } from './handlers/cloud'
 import { deleteFolder, getFolder, listFolders, uploadFolder } from './handlers/cloud_folders'
 import { getHubItem, listMine, listPublic, publishFolder, publishLevel, withdrawItem } from './handlers/hub'
+import {
+  approveGroupItem,
+  createGroup,
+  disbandGroup,
+  groupDetail,
+  joinGroup,
+  leaveGroup,
+  listGroupItems,
+  lookupGroup,
+  myGroups,
+  rejectGroupItem,
+  removeMember,
+  setMemberRole,
+  updateGroup,
+  uploadGroupItem,
+} from './handlers/groups'
 import { listProgress, putProgress } from './handlers/progress'
 import {
   adminApproveHub,
   adminCreateOfficial,
+  adminDeleteGroup,
   adminDeleteHub,
   adminDeleteLevel,
   adminDeleteUser,
   adminListAudit,
+  adminListGroups,
   adminListHub,
   adminListLevels,
   adminListUsers,
+  adminPatchGroup,
   adminPatchHubFeatured,
   adminPatchUser,
   adminRejectHub,
@@ -57,6 +76,21 @@ api.add('GET', '/api/hub/items/:id', getHubItem)
 api.add('GET', '/api/hub/mine', listMine)
 api.add('DELETE', '/api/hub/items/:id', withdrawItem)
 
+api.add('POST', '/api/groups', createGroup)
+api.add('GET', '/api/groups/mine', myGroups)
+api.add('GET', '/api/groups/lookup', lookupGroup)
+api.add('GET', '/api/groups/:id', groupDetail)
+api.add('PATCH', '/api/groups/:id', updateGroup)
+api.add('DELETE', '/api/groups/:id', disbandGroup)
+api.add('POST', '/api/groups/:id/join', joinGroup)
+api.add('POST', '/api/groups/:id/leave', leaveGroup)
+api.add('GET', '/api/groups/:id/items', listGroupItems)
+api.add('POST', '/api/groups/:id/items', uploadGroupItem)
+api.add('POST', '/api/groups/:id/items/:itemId/approve', approveGroupItem)
+api.add('POST', '/api/groups/:id/items/:itemId/reject', rejectGroupItem)
+api.add('PATCH', '/api/groups/:id/members/:uid', setMemberRole)
+api.add('DELETE', '/api/groups/:id/members/:uid', removeMember)
+
 api.add('GET', '/api/progress', listProgress)
 api.add('PUT', '/api/progress', putProgress)
 
@@ -68,6 +102,9 @@ api.add('GET', '/api/admin/levels', adminListLevels)
 api.add('DELETE', '/api/admin/levels/:id', adminDeleteLevel)
 api.add('GET', '/api/admin/audit', adminListAudit)
 
+api.add('GET', '/api/admin/groups', adminListGroups)
+api.add('PATCH', '/api/admin/groups/:id', adminPatchGroup)
+api.add('DELETE', '/api/admin/groups/:id', adminDeleteGroup)
 api.add('GET', '/api/admin/hub', adminListHub)
 api.add('POST', '/api/admin/hub/official', adminCreateOfficial)
 api.add('PATCH', '/api/admin/hub/:id', adminPatchHubFeatured)

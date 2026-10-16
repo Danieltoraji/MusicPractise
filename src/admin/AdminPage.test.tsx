@@ -63,6 +63,17 @@ const HUB_PENDING = {
   updatedAt: 2,
 }
 const HUB_PUBLISHED = { ...HUB_PENDING, id: 'hub_TEST000000000000000000002', status: 'published', submitterNote: null, wantFeatured: false, updatedAt: 3 }
+const GROUP_ROW = {
+  id: 'grp_TEST000000000000000000001',
+  name: '练耳小组',
+  joinCode: 'lianer2026',
+  intro: null,
+  status: 'active',
+  ownerNickname: '用户甲',
+  memberCount: 2,
+  itemCount: 1,
+  createdAt: 1,
+}
 
 /** 按方法+路径前缀路由的可变 fetch 桩 */
 const routes: Array<{ method: string; prefix: string; respond: (path: string) => Response }> = []
@@ -115,6 +126,7 @@ function stubAdminData(): void {
     { method: 'GET', prefix: '/api/admin/users?', respond: () => new Response(JSON.stringify({ users: [USER_ROW], total: 1, limit: 20, offset: 0 })) },
     { method: 'GET', prefix: '/api/admin/levels?', respond: () => new Response(JSON.stringify({ levels: [LEVEL_ROW], total: 1, limit: 20, offset: 0 })) },
     { method: 'GET', prefix: '/api/admin/audit?', respond: () => new Response(JSON.stringify({ entries: [AUDIT_ROW], total: 1, limit: 20, offset: 0 })) },
+    { method: 'GET', prefix: '/api/admin/groups?', respond: () => new Response(JSON.stringify({ groups: [GROUP_ROW], total: 1, limit: 20, offset: 0 })) },
     { method: 'GET', prefix: '/api/admin/hub?', respond: (path) => {
         const items = path.includes('status=published') ? [HUB_PUBLISHED] : [HUB_PENDING]
         return new Response(JSON.stringify({ items, total: items.length, limit: 20, offset: 0 }))
@@ -258,6 +270,27 @@ describe('管理后台页（批次 B4，#/admin）', () => {
     await flushUntil(() => c.textContent!.includes('已设置精选'))
     const patch = calls.find((x) => x.method === 'PATCH' && x.path.includes('/api/admin/hub/'))
     expect(patch?.body).toEqual({ featured: true })
+  })
+
+  it('群组管理：列表渲染 + 封禁 PATCH {status:banned} + 强制解散 DELETE', async () => {
+    stubAdminData()
+    routes.push(
+      { method: 'PATCH', prefix: '/api/admin/groups/grp_TEST000000000000000000001', respond: () => new Response(JSON.stringify({ ok: true, status: 'banned' })) },
+      { method: 'DELETE', prefix: '/api/admin/groups/grp_TEST000000000000000000001', respond: () => new Response(JSON.stringify({ ok: true })) },
+    )
+    const c = await renderAfterProbe(ADMIN)
+    await flushUntil(() => c.textContent!.includes('群组管理'))
+    await flushUntil(() => c.textContent!.includes('练耳小组'))
+    expect(c.textContent).toContain('群主：用户甲')
+    expect(c.textContent).toContain('2 名成员')
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await act(async () => buttonByText(c, '封禁').click())
+    await flushUntil(() => c.textContent!.includes('已封禁群组「练耳小组」'))
+    const patch = calls.find((x) => x.method === 'PATCH' && x.path.includes('/api/admin/groups/'))
+    expect(patch?.body).toEqual({ status: 'banned' })
+    await act(async () => buttonByText(c, '强制解散').click())
+    await flushUntil(() => c.textContent!.includes('已强制解散群组「练耳小组」'))
+    expect(calls.some((x) => x.method === 'DELETE' && x.path.includes('/api/admin/groups/'))).toBe(true)
   })
 
   it('官方直传：单关 JSON 文件上传 → POST official', async () => {

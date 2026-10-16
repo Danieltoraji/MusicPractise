@@ -68,6 +68,7 @@ export interface CloudFolderDocRow {
 }
 
 export interface HubItemRow {
+  group_id: string | null
   id: string
   scope: string
   item_kind: string
@@ -98,6 +99,25 @@ export interface HubItemDocRow {
   bytes: number
 }
 
+export interface GroupRow {
+  id: string
+  name: string
+  join_code: string
+  join_pw_hash: string | null
+  intro: string | null
+  owner_id: string
+  status: string
+  created_at: number
+  updated_at: number
+}
+
+export interface GroupMemberRow {
+  group_id: string
+  user_id: string
+  role: string
+  joined_at: number
+}
+
 /** LIKE '%x%' → 大小写不敏感子串匹配（SQLite LIKE 的 ASCII 不敏感语义近似） */
 function likeMatch(value: string, pattern: string): boolean {
   return value.toLowerCase().includes(pattern.replace(/^%/, '').replace(/%$/, '').toLowerCase())
@@ -122,6 +142,8 @@ export class D1Fake implements D1Database {
   cloud_folder_docs: CloudFolderDocRow[] = []
   hub_items: HubItemRow[] = []
   hub_item_docs: HubItemDocRow[] = []
+  groups: GroupRow[] = []
+  group_members: GroupMemberRow[] = []
   progress: ProgressRow[] = []
   audit_log: AuditRow[] = []
   /** 已执行的规范化 SQL（断言/排查用） */
@@ -465,7 +487,7 @@ export class D1Fake implements D1Database {
     }
 
     // ---- hub_items（docs/39 H3）----
-    m = /^INSERT INTO hub_items \(.+\) VALUES \((\?, ){19}\?\)$/.exec(sql)
+    m = /^INSERT INTO hub_items \(.+\) VALUES \((\?, ){20}\?\)$/.exec(sql)
     if (m) {
       if (this.hub_items.some((r) => r.id === p[0])) {
         throw new Error('UNIQUE constraint failed: hub_items.id')
@@ -474,7 +496,12 @@ export class D1Fake implements D1Database {
         // 部分唯一索引 idx_hub_root_public 近似
         throw new Error('UNIQUE constraint failed: hub_items.root_doc_id')
       }
+      if (String(p[1]) === 'group' && this.hub_items.some((r) => r.scope === 'group' && r.group_id === String(p[20]) && r.root_doc_id === String(p[3]))) {
+        // UNIQUE(group_id, root_doc_id) 近似
+        throw new Error('UNIQUE constraint failed: hub_items.group_id, hub_items.root_doc_id')
+      }
       this.hub_items.push({
+        group_id: p[20] === null ? null : String(p[20]),
         id: String(p[0]),
         scope: String(p[1]),
         item_kind: String(p[2]),
@@ -510,7 +537,7 @@ export class D1Fake implements D1Database {
       return { results: [{ n: this.hub_items.filter((r) => r.submitter_id === p[0] && r.status === 'pending').length }], changes: 0 }
     }
 
-    m = /^SELECT id, submitter_id, status FROM hub_items WHERE id = \?$/.exec(sql)
+    m = /^SELECT id, submitter_id, status, group_id FROM hub_items WHERE id = \?$/.exec(sql)
     if (m) {
       const row = this.hub_items.find((r) => r.id === p[0])
       return { results: row ? [row as unknown as Row] : [], changes: 0 }
@@ -671,6 +698,204 @@ export class D1Fake implements D1Database {
         bytes: Number(p[4]),
       })
       return { results: [], changes: 1 }
+    }
+
+    // ---- hub 群组条目（docs/39 H5）----
+    m = /^SELECT id FROM hub_items WHERE scope = 'group' AND group_id = \? AND root_doc_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => r.scope === 'group' && r.group_id === p[0] && r.root_doc_id === p[1])
+      return { results: row ? [{ id: row.id }] : [], changes: 0 }
+    }
+
+    m = /^SELECT id FROM hub_items WHERE group_id = \?$/.exec(sql)
+    if (m) {
+      const rows = this.hub_items.filter((r) => r.group_id === p[0]).map((r) => ({ id: r.id }))
+      return { results: rows, changes: 0 }
+    }
+
+    m = /^SELECT COALESCE\(SUM\(level_count\), 0\) AS n FROM hub_items WHERE group_id = \?$/.exec(sql)
+    if (m) {
+      const n = this.hub_items.filter((r) => r.group_id === p[0]).reduce((acc, r) => acc + Number(r.level_count), 0)
+      return { results: [{ n }], changes: 0 }
+    }
+
+    m = /^SELECT COALESCE\(SUM\(level_count\), 0\) AS n FROM hub_items WHERE group_id = \? AND submitter_id = \?$/.exec(sql)
+    if (m) {
+      const n = this.hub_items.filter((r) => r.group_id === p[0] && r.submitter_id === p[1]).reduce((acc, r) => acc + Number(r.level_count), 0)
+      return { results: [{ n }], changes: 0 }
+    }
+
+    {
+      const groupListRe = /^SELECT (.+) FROM hub_items WHERE group_id = \? ORDER BY updated_at DESC$/.exec(sql)
+      if (groupListRe) {
+        const rows = this.hub_items
+          .filter((r) => r.group_id === p[0])
+          .slice()
+          .sort((a, b) => b.updated_at - a.updated_at)
+        return { results: rows.map((r) => this.pick(r as unknown as Row, groupListRe[1])), changes: 0 }
+      }
+    }
+
+    // ---- groups / group_members（docs/39 H5）----
+    m = /^INSERT INTO groups \(.+\) VALUES \((\?, ){8}\?\)$/.exec(sql)
+    if (m) {
+      if (this.groups.some((r) => r.id === p[0])) {
+        throw new Error('UNIQUE constraint failed: groups.id')
+      }
+      if (this.groups.some((r) => r.join_code.toLowerCase() === String(p[2]).toLowerCase())) {
+        // UNIQUE COLLATE NOCASE 近似
+        throw new Error('UNIQUE constraint failed: groups.join_code')
+      }
+      this.groups.push({
+        id: String(p[0]),
+        name: String(p[1]),
+        join_code: String(p[2]),
+        join_pw_hash: p[3] === null ? null : String(p[3]),
+        intro: p[4] === null ? null : String(p[4]),
+        owner_id: String(p[5]),
+        status: String(p[6]),
+        created_at: Number(p[7]),
+        updated_at: Number(p[8]),
+      })
+      return { results: [], changes: 1 }
+    }
+
+    m = /^SELECT id, name, join_code, join_pw_hash, intro, owner_id, status, created_at, updated_at FROM groups WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.groups.find((r) => r.id === p[0])
+      return { results: row ? [row as unknown as Row] : [], changes: 0 }
+    }
+
+    m = /^SELECT id FROM groups WHERE join_code = \?$/.exec(sql)
+    if (m) {
+      const target = String(p[0]).toLowerCase()
+      const row = this.groups.find((r) => r.join_code.toLowerCase() === target)
+      return { results: row ? [{ id: row.id }] : [], changes: 0 }
+    }
+
+    m = /^SELECT (.+) FROM groups WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.groups.find((r) => r.id === p[0])
+      return { results: row ? [this.pick(row as unknown as Row, m![1])] : [], changes: 0 }
+    }
+    if (m) {
+      const target = String(p[0]).toLowerCase()
+      const row = this.groups.find((r) => r.join_code.toLowerCase() === target)
+      return { results: row ? [{ id: row.id }] : [], changes: 0 }
+    }
+
+    m = /^SELECT COUNT\(\*\) AS n FROM groups WHERE owner_id = \?$/.exec(sql)
+    if (m) {
+      return { results: [{ n: this.groups.filter((r) => r.owner_id === p[0]).length }], changes: 0 }
+    }
+
+    m = /^UPDATE groups SET name = \?, join_code = \?, join_pw_hash = \?, intro = \?, updated_at = \? WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.groups.find((r) => r.id === p[5])
+      if (!row) return { results: [], changes: 0 }
+      if (this.groups.some((r) => r.id !== row.id && r.join_code.toLowerCase() === String(p[1]).toLowerCase())) {
+        throw new Error('UNIQUE constraint failed: groups.join_code')
+      }
+      row.name = String(p[0])
+      row.join_code = String(p[1])
+      row.join_pw_hash = p[2] === null ? null : String(p[2])
+      row.intro = p[3] === null ? null : String(p[3])
+      row.updated_at = Number(p[4])
+      return { results: [], changes: 1 }
+    }
+
+    m = /^UPDATE groups SET status = \?, updated_at = \? WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.groups.find((r) => r.id === p[2])
+      if (!row) return { results: [], changes: 0 }
+      row.status = String(p[0])
+      row.updated_at = Number(p[1])
+      return { results: [], changes: 1 }
+    }
+
+    m = /^DELETE FROM groups WHERE id = \?$/.exec(sql)
+    if (m) {
+      const before = this.groups.length
+      this.groups = this.groups.filter((r) => r.id !== p[0])
+      // FK CASCADE 近似：成员与群库条目一并清除
+      this.group_members = this.group_members.filter((r) => r.group_id !== p[0])
+      this.hub_items = this.hub_items.filter((r) => r.group_id !== p[0])
+      this.hub_item_docs = this.hub_item_docs.filter((d) => this.hub_items.some((h) => h.id === d.item_id))
+      return { results: [], changes: before - this.groups.length }
+    }
+
+    m = /^INSERT INTO group_members \(.+\) VALUES \((\?, ){3}\?\)$/.exec(sql)
+    if (m) {
+      if (this.group_members.some((r) => r.group_id === p[0] && r.user_id === p[1])) {
+        throw new Error('UNIQUE constraint failed: group_members.group_id, group_members.user_id')
+      }
+      this.group_members.push({
+        group_id: String(p[0]),
+        user_id: String(p[1]),
+        role: String(p[2]),
+        joined_at: Number(p[3]),
+      })
+      return { results: [], changes: 1 }
+    }
+
+    m = /^SELECT group_id, user_id, role FROM group_members WHERE group_id = \? AND user_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.group_members.find((r) => r.group_id === p[0] && r.user_id === p[1])
+      return { results: row ? [row as unknown as Row] : [], changes: 0 }
+    }
+
+    m = /^SELECT group_id, user_id, role, joined_at FROM group_members WHERE group_id = \? ORDER BY joined_at$/.exec(sql)
+    if (m) {
+      const rows = this.group_members
+        .filter((r) => r.group_id === p[0])
+        .slice()
+        .sort((a, b) => a.joined_at - b.joined_at)
+      return { results: rows as unknown as Row[], changes: 0 }
+    }
+
+    m = /^SELECT group_id, role FROM group_members WHERE user_id = \?$/.exec(sql)
+    if (m) {
+      const rows = this.group_members.filter((r) => r.user_id === p[0])
+      return { results: rows as unknown as Row[], changes: 0 }
+    }
+
+    m = /^UPDATE group_members SET role = \? WHERE group_id = \? AND user_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.group_members.find((r) => r.group_id === p[1] && r.user_id === p[2])
+      if (!row) return { results: [], changes: 0 }
+      row.role = String(p[0])
+      return { results: [], changes: 1 }
+    }
+
+    m = /^DELETE FROM group_members WHERE group_id = \?$/.exec(sql)
+    if (m) {
+      const before = this.group_members.length
+      this.group_members = this.group_members.filter((r) => r.group_id !== p[0])
+      return { results: [], changes: before - this.group_members.length }
+    }
+
+    m = /^DELETE FROM group_members WHERE group_id = \? AND user_id = \?$/.exec(sql)
+    if (m) {
+      const before = this.group_members.length
+      this.group_members = this.group_members.filter((r) => !(r.group_id === p[0] && r.user_id === p[1]))
+      return { results: [], changes: before - this.group_members.length }
+    }
+
+    // ---- admin：群组列表 ----
+    {
+      const adminGroupRe = /^SELECT (.+) FROM groups WHERE name LIKE \? ORDER BY created_at DESC LIMIT \? OFFSET \?$/.exec(sql)
+      if (adminGroupRe) {
+        const rows = this.groups
+          .filter((r) => likeMatch(r.name, String(p[0])))
+          .slice()
+          .sort((a, b) => b.created_at - a.created_at)
+          .slice(Number(p[2]), Number(p[2]) + Number(p[1]))
+        return { results: rows.map((r) => this.pick(r as unknown as Row, adminGroupRe[1])), changes: 0 }
+      }
+      const adminGroupCountRe = /^SELECT COUNT\(\*\) AS n FROM groups WHERE name LIKE \?\)?$/.exec(sql)
+      if (adminGroupCountRe) {
+        return { results: [{ n: this.groups.filter((r) => likeMatch(r.name, String(p[0]))).length }], changes: 0 }
+      }
     }
 
     // ---- progress ----

@@ -19,7 +19,7 @@ export async function requireAdmin(db: D1Database, req: Request, now: number): P
 export interface AuditInput {
   actorId: string
   action: string
-  targetType: 'user' | 'cloud_level' | 'hub_item'
+  targetType: 'user' | 'cloud_level' | 'hub_item' | 'group'
   targetId: string
   detail?: Record<string, unknown>
 }

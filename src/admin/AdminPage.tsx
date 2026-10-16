@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { getAccountSnapshot, subscribeAccount } from '../account/store'
-import { adminApi, type AdminHubItem, type AdminLevel, type AdminUser, type AuditEntry, type AdminStats } from './api'
+import { adminApi, type AdminGroup, type AdminHubItem, type AdminLevel, type AdminUser, type AuditEntry, type AdminStats } from './api'
 import { hubApi } from '../hub/api'
+import { bundleFromParsedDocs } from '../library/manage'
 import { importDocuments, type ImportReport } from '../library/io'
 
 /**
@@ -59,6 +60,9 @@ function AdminDashboard() {
   const [hubTotal, setHubTotal] = useState(0)
   const [hubQuery, setHubQuery] = useState('')
   const [officialItems, setOfficialItems] = useState<AdminHubItem[]>([])
+  const [adminGroups, setAdminGroups] = useState<AdminGroup[]>([])
+  const [groupsTotal, setGroupsTotal] = useState(0)
+  const [groupQuery, setGroupQuery] = useState('')
   const [report, setReport] = useState<ImportReport | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -104,12 +108,17 @@ function AdminDashboard() {
     const all = first.total > first.items.length ? [...first.items, ...(await adminApi.listHub('published', '', first.items.length, 100)).items] : first.items
     setOfficialItems(all.filter((i) => i.scope === 'official'))
   }, [])
+  const loadGroups = useCallback(async (query: string): Promise<void> => {
+    const res = await adminApi.listGroups(query)
+    setAdminGroups(res.groups)
+    setGroupsTotal(res.total)
+  }, [])
 
   useEffect(() => {
     void run(async () => {
-      await Promise.all([loadStats(), loadUsers(''), loadLevels(''), loadAuditFirstPage(), loadHub('pending', ''), loadOfficial()])
+      await Promise.all([loadStats(), loadUsers(''), loadLevels(''), loadAuditFirstPage(), loadHub('pending', ''), loadOfficial(), loadGroups('')])
     })
-  }, [run, loadStats, loadUsers, loadLevels, loadAuditFirstPage, loadHub, loadOfficial])
+  }, [run, loadStats, loadUsers, loadLevels, loadAuditFirstPage, loadHub, loadOfficial, loadGroups])
 
   const patchUser = (user: AdminUser, patch: Parameters<typeof adminApi.patchUser>[1], okText: string): void => {
     void run(async () => {
@@ -221,28 +230,8 @@ function AdminDashboard() {
         if (doc.kind !== 'level') throw new Error('请选择关卡 JSON 文档（kind=level）')
         await adminApi.createOfficialLevel(String(doc.id), String(doc.meta?.title ?? doc.id), doc)
       } else {
-        const series = docs.find((d) => d.kind === 'series') as { id: string; meta?: { title?: string }; content?: { topicIds?: string[] } } | undefined
-        if (!series) throw new Error('所选文件中没有系列文档（kind=series）')
-        const byId = new Map(docs.filter((d) => typeof d.id === 'string').map((d) => [String(d.id), d]))
-        const bundle: { id: string; kind: string; payload: unknown }[] = [{ id: series.id, kind: 'series', payload: series }]
-        const seen = new Set<string>([series.id])
-        for (const tid of series.content?.topicIds ?? []) {
-          const t = byId.get(tid) as { content?: { levelIds?: string[] } } | undefined
-          if (!t) throw new Error(`缺件：专题 ${tid} 不在所选文件中`)
-          if (!seen.has(tid)) {
-            seen.add(tid)
-            bundle.push({ id: tid, kind: 'topic', payload: t })
-          }
-          for (const lid of t.content?.levelIds ?? []) {
-            const l = byId.get(lid)
-            if (!l) throw new Error(`缺件：关卡 ${lid} 不在所选文件中`)
-            if (!seen.has(lid)) {
-              seen.add(lid)
-              bundle.push({ id: lid, kind: 'level', payload: l })
-            }
-          }
-        }
-        await adminApi.createOfficialSeries(series.id, String(series.meta?.title ?? series.id), bundle)
+        const bundle = bundleFromParsedDocs(docs)
+        await adminApi.createOfficialSeries(bundle.folderId, bundle.title, bundle.docs)
       }
       setNotice('官方条目已上传并发布')
       await reloadHub()
@@ -514,6 +503,88 @@ function AdminDashboard() {
                 </button>
                 <button type="button" className="link danger" disabled={busy} onClick={() => removeHub(item)}>
                   移除
+                </button>
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+
+      <h2>群组管理</h2>
+      <div className="admin-toolbar">
+        <input
+          value={groupQuery}
+          placeholder="🔍 按群名搜索…"
+          onChange={(e) => setGroupQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void run(() => loadGroups(groupQuery))
+          }}
+        />
+        <button type="button" className="link" disabled={busy} onClick={() => void run(() => loadGroups(groupQuery))}>
+          搜索
+        </button>
+        <span className="muted">共 {groupsTotal} 个</span>
+      </div>
+      <div className="admin-table">
+        {adminGroups.length === 0 ? (
+          <p className="muted">没有匹配的群组。</p>
+        ) : (
+          adminGroups.map((g) => (
+            <div key={g.id} className="admin-row">
+              <b>{g.name}</b>
+              <span className={`admin-status ${g.status === 'active' ? 'is-ok' : 'is-bad'}`}>{g.status === 'active' ? '正常' : '已封禁'}</span>
+              <span className="muted">群主：{g.ownerNickname}</span>
+              <span className="muted">
+                {g.memberCount} 名成员 · 群库 {g.itemCount} 关 · 暗号：{g.joinCode}
+              </span>
+              <span className="row-actions">
+                {g.status === 'active' ? (
+                  <button
+                    type="button"
+                    className="link danger"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!window.confirm(`封禁群组「${g.name}」？封禁后成员将无法访问，加入与展示全部停止。`)) return
+                      void run(async () => {
+                        await adminApi.patchGroup(g.id, 'banned')
+                        setNotice(`已封禁群组「${g.name}」`)
+                        await Promise.all([loadGroups(groupQuery), loadAuditFirstPage()])
+                      })
+                    }}
+                  >
+                    封禁
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="link"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!window.confirm(`解封群组「${g.name}」？成员访问将恢复。`)) return
+                      void run(async () => {
+                        await adminApi.patchGroup(g.id, 'active')
+                        setNotice(`已解封群组「${g.name}」`)
+                        await Promise.all([loadGroups(groupQuery), loadAuditFirstPage()])
+                      })
+                    }}
+                  >
+                    解封
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="link danger"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!window.confirm(`强制解散群组「${g.name}」？成员与群库条目将一并清除，不可恢复。`)) return
+                    void run(async () => {
+                      await adminApi.deleteGroup(g.id)
+                      setNotice(`已强制解散群组「${g.name}」`)
+                      await Promise.all([loadGroups(groupQuery), loadAuditFirstPage()])
+                    })
+                  }}
+                >
+                  强制解散
                 </button>
               </span>
             </div>

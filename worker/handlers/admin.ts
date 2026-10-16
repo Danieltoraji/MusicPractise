@@ -6,6 +6,7 @@ import { findUserById, findUserByNickname, updateUserNickname, updateUserPasswor
 import { checkNickname, checkPassword } from '../validate'
 import { readLevelId, readTitle, serializePayload, readPayload } from './cloud'
 import { parseFolderBody, checkClosure } from './cloud_folders'
+import { deleteGroupCascade } from './groups'
 import type { RouteContext } from '../router'
 
 /**
@@ -378,13 +379,88 @@ export async function adminCreateOfficial({ req, env }: RouteContext): Promise<R
     ...(existing ? [db.prepare('DELETE FROM hub_items WHERE id = ?').bind(id)] : []),
     db
       .prepare(
-        'INSERT INTO hub_items (id, scope, item_kind, root_doc_id, title, level_count, bytes, submitter_id, submitter_name, submitter_note, want_featured, status, featured, reject_reason, reviewed_by, reviewed_at, published_at, downloads, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO hub_items (id, scope, item_kind, root_doc_id, title, level_count, bytes, submitter_id, submitter_name, submitter_note, want_featured, status, featured, reject_reason, reviewed_by, reviewed_at, published_at, downloads, created_at, updated_at, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .bind(id, 'official', itemKind, rootDocId, title, levelCount, bytes, null, '官方', null, 0, 'published', 0, null, null, null, now, 0, now, now),
+      .bind(id, 'official', itemKind, rootDocId, title, levelCount, bytes, null, '官方', null, 0, 'published', 0, null, null, null, now, 0, now, now, null),
     ...docs.map((d) =>
       db.prepare('INSERT INTO hub_item_docs (item_id, doc_id, kind, payload, bytes) VALUES (?, ?, ?, ?, ?)').bind(id, d.doc_id, d.kind, d.payload, d.bytes),
     ),
   ])
   await writeAudit(db, { actorId: session.user.id, action: 'hub.official_add', targetType: 'hub_item', targetId: id, detail: { title, itemKind, rootDocId, replaced: existing !== undefined } }, now)
   return jsonResponse({ ok: true, item: { id, itemKind, rootDocId, title, levelCount, status: 'published' } }, existing ? 200 : 201)
+}
+
+// ---------------------------------------------------------------------------
+// 群组管理（docs/39 §5.3，批次 H5）：列表 / 封禁·解封 / 强制解散；逐操作写审计。
+// ---------------------------------------------------------------------------
+
+interface AdminGroupRow {
+  id: string
+  name: string
+  join_code: string
+  intro: string | null
+  owner_id: string
+  status: string
+  created_at: number
+}
+
+/** GET /api/admin/groups?query=&limit=&offset=：群组列表（含属主昵称与成员数） */
+export async function adminListGroups({ req, env }: RouteContext): Promise<Response> {
+  await requireAdmin(env.DB, req, nowMs())
+  const { limit, offset, query } = paging(new URL(req.url))
+  const pattern = `%${query}%`
+  const list = await env.DB
+    .prepare('SELECT id, name, join_code, intro, owner_id, status, created_at FROM groups WHERE name LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?')
+    .bind(pattern, limit, offset)
+    .all<AdminGroupRow>()
+  const groups = []
+  for (const row of list.results ?? []) {
+    const members = await env.DB
+      .prepare('SELECT group_id, user_id, role, joined_at FROM group_members WHERE group_id = ? ORDER BY joined_at')
+      .bind(row.id)
+      .all<{ user_id: string; role: string }>()
+    const owner = await env.DB.prepare('SELECT id, nickname FROM users WHERE id = ?').bind(row.owner_id).first<{ nickname: string }>()
+    groups.push({
+      id: row.id,
+      name: row.name,
+      joinCode: row.join_code,
+      intro: row.intro,
+      status: row.status,
+      ownerNickname: owner?.nickname ?? '（已注销）',
+      memberCount: (members.results ?? []).length,
+      itemCount: (await env.DB.prepare('SELECT COALESCE(SUM(level_count), 0) AS n FROM hub_items WHERE group_id = ?').bind(row.id).first<{ n: number }>())?.n ?? 0,
+      createdAt: Number(row.created_at),
+    })
+  }
+  const total = await env.DB.prepare('SELECT COUNT(*) AS n FROM groups WHERE name LIKE ?').bind(pattern).first<{ n: number }>()
+  return jsonResponse({ groups, total: Number(total?.n ?? 0), limit, offset })
+}
+
+/** PATCH /api/admin/groups/:id {status}：封禁（banned）与解封（active）；封禁后群端点全 403 */
+export async function adminPatchGroup({ req, env, params }: RouteContext): Promise<Response> {
+  const now = nowMs()
+  const session = await requireAdmin(env.DB, req, now)
+  const body = (await readJsonBody(req, 16 * 1024)) as Record<string, unknown>
+  const status = body.status
+  if (status !== 'active' && status !== 'banned') throw new HttpError(400, 'bad_request', 'status 必须是 active/banned')
+  const db = env.DB
+  const row = await db.prepare('SELECT id FROM groups WHERE id = ?').bind(params.id ?? '').first<{ id: string }>()
+  if (!row) throw new HttpError(404, 'not_found', '群组不存在')
+  const group = await db.prepare('SELECT name FROM groups WHERE id = ?').bind(row.id).first<{ name: string }>()
+  await db.prepare('UPDATE groups SET status = ?, updated_at = ? WHERE id = ?').bind(status, now, row.id).run()
+  await writeAudit(db, { actorId: session.user.id, action: status === 'banned' ? 'group.ban' : 'group.unban', targetType: 'group', targetId: row.id, detail: { name: group?.name } }, now)
+  return jsonResponse({ ok: true, status })
+}
+
+/** DELETE /api/admin/groups/:id：强制解散（成员与群库条目级联清除） */
+export async function adminDeleteGroup({ req, env, params }: RouteContext): Promise<Response> {
+  const now = nowMs()
+  const session = await requireAdmin(env.DB, req, now)
+  const db = env.DB
+  const row = await db.prepare('SELECT id FROM groups WHERE id = ?').bind(params.id ?? '').first<{ id: string }>()
+  if (!row) throw new HttpError(404, 'not_found', '群组不存在')
+  const group = await db.prepare('SELECT name, join_code FROM groups WHERE id = ?').bind(row.id).first<{ name: string; join_code: string }>()
+  await deleteGroupCascade(db, row.id)
+  await writeAudit(db, { actorId: session.user.id, action: 'group.disband', targetType: 'group', targetId: row.id, detail: { name: group?.name, joinCode: group?.join_code } }, now)
+  return jsonResponse({ ok: true })
 }

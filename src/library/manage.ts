@@ -237,3 +237,35 @@ export function collectSeriesDocs(seriesRec: LibraryRecord, all: LibraryRecord[]
   }
   return { docs, levelCount }
 }
+
+/**
+ * 从已解析的 JSON 文档集合中收集系列 bundle（官方直传/群组上传共用）：
+ * 找到 kind=series 的文档，按 topicIds/levelIds 闭包收集，缺件抛可读错误。
+ */
+export function bundleFromParsedDocs(docs: Record<string, unknown>[]): { folderId: string; title: string; docs: { id: string; kind: string; payload: unknown }[] } {
+  const series = docs.find((d) => d.kind === 'series') as { id?: unknown; meta?: { title?: unknown }; content?: { topicIds?: unknown } } | undefined
+  if (!series || typeof series.id !== 'string') throw new Error('所选文件中没有系列文档（kind=series）')
+  const byId = new Map(docs.filter((d) => typeof d.id === 'string').map((d) => [String(d.id), d]))
+  const bundle: { id: string; kind: string; payload: unknown }[] = [{ id: series.id, kind: 'series', payload: series }]
+  const seen = new Set<string>([series.id])
+  const topicIds = Array.isArray(series.content?.topicIds) ? (series.content?.topicIds as string[]) : []
+  for (const tid of topicIds) {
+    const t = byId.get(tid) as { content?: { levelIds?: unknown } } | undefined
+    if (!t) throw new Error(`缺件：专题 ${tid} 不在所选文件中`)
+    if (!seen.has(tid)) {
+      seen.add(tid)
+      bundle.push({ id: tid, kind: 'topic', payload: t })
+    }
+    const levelIds = Array.isArray(t.content?.levelIds) ? (t.content?.levelIds as string[]) : []
+    for (const lid of levelIds) {
+      const l = byId.get(lid)
+      if (!l) throw new Error(`缺件：关卡 ${lid} 不在所选文件中`)
+      if (!seen.has(lid)) {
+        seen.add(lid)
+        bundle.push({ id: lid, kind: 'level', payload: l })
+      }
+    }
+  }
+  const title = typeof series.meta?.title === 'string' ? series.meta.title : series.id
+  return { folderId: series.id, title, docs: bundle }
+}

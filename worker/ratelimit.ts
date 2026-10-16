@@ -19,6 +19,9 @@ export const CLOUD_WINDOW_MS = 3_600_000
 export const PUBLISH_MAX = 10
 /** 关卡库详情下载（匿名可访问）：30 次/小时/IP（docs/39 §5.4） */
 export const HUB_READ_MAX = 30
+/** 群组加入密码试错：5 次失败/15 分钟/(用户+群组)（docs/39 §5.3） */
+export const GROUP_JOIN_MAX_FAILS = 5
+export const GROUP_JOIN_WINDOW_MS = 15 * 60_000
 
 const encoder = new TextEncoder()
 
@@ -36,6 +39,7 @@ const registerKey = (ipHash: string): string => `register:${ipHash}`
 const cloudKey = (userId: string): string => `cloud:${userId}`
 const publishKey = (userId: string): string => `publish:${userId}`
 const hubReadKey = (ipHash: string): string => `hubread:${ipHash}`
+const groupJoinKey = (userId: string, groupId: string): string => `groupjoin:${userId}:${groupId}`
 
 interface AttemptRow {
   fail_count: number
@@ -119,6 +123,26 @@ export async function hitPublishLimit(db: D1Database, userId: string, now: numbe
 /** 关卡库详情下载限流（匿名+登录统一按 IP 计数）：返回 0 = 放行，>0 = 剩余锁定秒数 */
 export async function hitHubReadLimit(db: D1Database, ipHash: string, now: number): Promise<number> {
   return hitAttempt(db, hubReadKey(ipHash), HUB_READ_MAX, CLOUD_WINDOW_MS, now)
+}
+
+/** 群组加入是否被锁（只计密码失败）：返回 0 = 放行，>0 = 剩余锁定秒数 */
+export async function groupJoinLockedSeconds(db: D1Database, userId: string, groupId: string, now: number): Promise<number> {
+  const row = await getAttempt(db, groupJoinKey(userId, groupId))
+  if (!row) return 0
+  if (now - row.window_start >= GROUP_JOIN_WINDOW_MS) return 0
+  if (row.fail_count < GROUP_JOIN_MAX_FAILS) return 0
+  return Math.ceil((row.window_start + GROUP_JOIN_WINDOW_MS - now) / 1000)
+}
+
+/** 记一次群组加入密码失败；窗口已过期则重开窗口 */
+export async function recordGroupJoinFail(db: D1Database, userId: string, groupId: string, now: number): Promise<void> {
+  const key = groupJoinKey(userId, groupId)
+  const row = await getAttempt(db, key)
+  if (!row || now - row.window_start >= GROUP_JOIN_WINDOW_MS) {
+    await putAttempt(db, key, 1, now, now)
+  } else {
+    await putAttempt(db, key, row.fail_count + 1, row.window_start, now)
+  }
 }
 
 /** 概率性清理过期限流行（挂在登录/注册路径） */

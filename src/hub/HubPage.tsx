@@ -3,9 +3,11 @@
  * 公共/精选两 Tab 走公共域（精选 = featured 过滤）；官方/群组两 Tab H4/H5 落地。
  * 下载 = 取条目快照 → importDocuments 既有管线（信封校验→闭包→冲突策略→事务）。
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { getAccountSnapshot, subscribeAccount } from '../account/store'
 import { importDocuments, type ImportReport } from '../library/io'
 import { hubApi, type HubItemMeta } from './api'
+import { GroupPanel } from './GroupPanel'
 
 type HubTab = 'public' | 'featured' | 'official' | 'group'
 
@@ -23,6 +25,8 @@ function fmtKB(bytes: number): string {
 }
 
 export function HubPage() {
+  const account = useSyncExternalStore(subscribeAccount, getAccountSnapshot)
+  const signedIn = account.phase === 'available' && account.user !== null
   const [tab, setTab] = useState<HubTab>('public')
   const [queryInput, setQueryInput] = useState('')
   const [query, setQuery] = useState('')
@@ -134,7 +138,7 @@ export function HubPage() {
       )}
 
       {!visible ? (
-        <p className="muted">群组关卡库即将上线——创建/加入群组功能随群组版本开放。</p>
+        <GroupPanel signedIn={signedIn} />
       ) : items === null ? (
         <p className="muted">加载中…</p>
       ) : items.length === 0 ? (

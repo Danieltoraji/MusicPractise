@@ -2,6 +2,7 @@ import { jsonResponse, HttpError, readJsonBody, assertSameOrigin } from '../http
 import { randomId } from '../id'
 import { hitPublishLimit, hitHubReadLimit, ipHashOf } from '../ratelimit'
 import { requireUser, resolveSession, type ResolvedSession } from '../session'
+import { getMembership } from './groups'
 import type { RouteContext } from '../router'
 import type { D1Database } from '../types'
 import { toFolderMeta, type CloudFolderMetaRow } from './cloud'
@@ -23,7 +24,8 @@ export const HUB_PAGE_MAX = 50
 const NOTE_MAX = 200
 const PUBLISH_BODY_MAX_BYTES = 16 * 1024
 
-interface HubItemRow {
+export interface HubItemRow {
+  group_id: string | null
   id: string
   scope: string
   item_kind: string
@@ -71,6 +73,7 @@ export function toPublicMeta(row: HubItemRow) {
 export function toOwnMeta(row: HubItemRow) {
   return {
     ...toPublicMeta(row),
+    groupId: row.group_id,
     submitterNote: row.submitter_note,
     wantFeatured: Number(row.want_featured) === 1,
     status: row.status,
@@ -186,7 +189,7 @@ async function applyPublish(ctx: RouteContext, loadSource: (db: D1Database, slot
     ...(existing ? [db.prepare('DELETE FROM hub_items WHERE id = ?').bind(id)] : []),
     db
       .prepare(
-        'INSERT INTO hub_items (id, scope, item_kind, root_doc_id, title, level_count, bytes, submitter_id, submitter_name, submitter_note, want_featured, status, featured, reject_reason, reviewed_by, reviewed_at, published_at, downloads, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO hub_items (id, scope, item_kind, root_doc_id, title, level_count, bytes, submitter_id, submitter_name, submitter_note, want_featured, status, featured, reject_reason, reviewed_by, reviewed_at, published_at, downloads, created_at, updated_at, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .bind(
         id,
@@ -209,6 +212,7 @@ async function applyPublish(ctx: RouteContext, loadSource: (db: D1Database, slot
         0,
         now,
         now,
+        null,
       ),
     ...source.docs.map((d) =>
       db.prepare('INSERT INTO hub_item_docs (item_id, doc_id, kind, payload, bytes) VALUES (?, ?, ?, ?, ?)').bind(id, d.doc_id, d.kind, d.payload, d.bytes),
@@ -258,7 +262,7 @@ export async function getHubItem(ctx: RouteContext): Promise<Response> {
   await assertHubReadAllowed(ctx)
   const now = nowMs()
   const db = ctx.env.DB
-  const row = await db.prepare('SELECT id, submitter_id, status FROM hub_items WHERE id = ?').bind(ctx.params.id ?? '').first<{ id: string; submitter_id: string | null; status: string }>()
+  const row = await db.prepare('SELECT id, submitter_id, status, group_id FROM hub_items WHERE id = ?').bind(ctx.params.id ?? '').first<{ id: string; submitter_id: string | null; status: string; group_id: string | null }>()
   if (!row) throw new HttpError(404, 'not_found', '条目不存在')
 
   let session: ResolvedSession | null = null
@@ -309,8 +313,15 @@ export async function withdrawItem(ctx: RouteContext): Promise<Response> {
   const now = nowMs()
   const session = await requireUser(ctx.env.DB, ctx.req, now)
   const db = ctx.env.DB
-  const row = await db.prepare('SELECT id, submitter_id, status FROM hub_items WHERE id = ?').bind(ctx.params.id ?? '').first<{ id: string; submitter_id: string | null; status: string }>()
-  if (!row || row.submitter_id !== session.user.id) throw new HttpError(404, 'not_found', '条目不存在')
+  const row = await db.prepare('SELECT id, submitter_id, status, group_id FROM hub_items WHERE id = ?').bind(ctx.params.id ?? '').first<{ id: string; submitter_id: string | null; status: string; group_id: string | null }>()
+  // 上传者本人可撤；群库条目群主亦可移除
+  const isSubmitter = row !== null && row.submitter_id === session.user.id
+  let isGroupOwner = false
+  if (row !== null && !isSubmitter && row.group_id !== null) {
+    const membership = await getMembership(db, row.group_id, session.user.id)
+    isGroupOwner = membership !== null && membership.role === 'owner'
+  }
+  if (row === null || (!isSubmitter && !isGroupOwner)) throw new HttpError(404, 'not_found', '条目不存在')
   await db.batch([
     db.prepare('DELETE FROM hub_item_docs WHERE item_id = ?').bind(row.id),
     db.prepare('DELETE FROM hub_items WHERE id = ?').bind(row.id),

@@ -59,6 +59,19 @@ export interface AdminHubItem {
   updatedAt: number
 }
 
+/** 群组（管理视角，docs/39 §5.3） */
+export interface AdminGroup {
+  id: string
+  name: string
+  joinCode: string
+  intro: string | null
+  status: 'active' | 'banned'
+  ownerNickname: string
+  memberCount: number
+  itemCount: number
+  createdAt: number
+}
+
 /** 管理端点类型化封装（docs/31 §5.4 / docs/39 §5.2）；非 admin 一律 403，错误信封中文直达 */
 export const adminApi = {
   stats: (): Promise<AdminStats> => apiFetch('/api/admin/stats'),
@@ -88,4 +101,9 @@ export const adminApi = {
     apiFetch('/api/admin/hub/official', { method: 'POST', body: { levelId, title, payload }, timeoutMs: 30_000 }),
   createOfficialSeries: (folderId: string, title: string, docs: { id: string; kind: string; payload: unknown }[]): Promise<{ ok: boolean; item: { id: string } }> =>
     apiFetch('/api/admin/hub/official', { method: 'POST', body: { folderId, title, docs }, timeoutMs: 60_000 }),
+  listGroups: (query: string, offset = 0, limit = 20): Promise<{ groups: AdminGroup[] } & Paged> =>
+    apiFetch(`/api/admin/groups?query=${encodeURIComponent(query)}&offset=${offset}&limit=${limit}`),
+  patchGroup: (id: string, status: 'active' | 'banned'): Promise<{ ok: boolean; status: string }> =>
+    apiFetch(`/api/admin/groups/${id}`, { method: 'PATCH', body: { status } }),
+  deleteGroup: (id: string): Promise<{ ok: boolean }> => apiFetch(`/api/admin/groups/${id}`, { method: 'DELETE' }),
 }

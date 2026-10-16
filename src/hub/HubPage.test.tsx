@@ -167,6 +167,6 @@ describe('关卡库页（docs/39 H3）', () => {
     expect(calls.some(([url]) => String(url).includes('scope=official'))).toBe(true)
 
     await act(async () => buttonByText(c, '群组关卡').click())
-    await flushUntil(() => c.textContent!.includes('群组关卡库即将上线'))
+    await flushUntil(() => c.textContent!.includes('群组功能需要登录'))
   })
 })
