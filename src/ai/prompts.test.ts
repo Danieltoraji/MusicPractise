@@ -79,9 +79,18 @@ describe('提示词节流与 plan 标记合并（工具粒度治理）', () => {
     expect(text).toContain('events 剧本')
   })
 
-  it('ask/plan 守则不含效率守则（只读模式无写入批量形态）', () => {
+  it('agent 守则包含事件守则：契约清单为准、禁止臆测、run_level 一次性探测', () => {
+    const text = buildEditorSystemPrompt(makeDoc(), 'agent')
+    expect(text).toContain('事件守则')
+    expect(text).toContain('绝不臆测')
+    expect(text).toContain('无处理器命中')
+  })
+
+  it('ask/plan 守则不含效率与事件守则（只读模式无写入批量形态）', () => {
     expect(buildEditorSystemPrompt(makeDoc(), 'ask')).not.toContain('效率守则')
     expect(buildEditorSystemPrompt(makeDoc(), 'plan')).not.toContain('效率守则')
+    expect(buildEditorSystemPrompt(makeDoc(), 'ask')).not.toContain('事件守则')
+    expect(buildEditorSystemPrompt(makeDoc(), 'plan')).not.toContain('事件守则')
   })
 
   it('plan 执行提示：编号清单 + 要求合并标记（marks 批量）', () => {

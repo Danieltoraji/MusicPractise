@@ -79,6 +79,8 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'a
         '逻辑修改用 write_script 全文交付（不是增量补丁）；新增组件后用返回的新 id 在逻辑中引用；每次写入后以返回的校验结果为准，被拒绝就修正重试。',
       '效率守则：多个独立的小修改尽量合并——优先用批量参数（set_variable 的 vars、edit_components 的 items/updates/ids、edit_views 的 ops、debug_dispatch 的 events 剧本），' +
         '或同一轮里发起多个工具调用；不要把每个小步骤都拆成单独一来回，也不必反复重读刚读过的内容。',
+      '事件守则：组件事件名只从契约清单取（system prompt 组件段与 read_doc 的 events/commands 字段），绝不臆测不存在的事件名；' +
+        '不确定某事件是否存在时，用 run_level 一次注入全部候选事件并依据「无处理器命中」清单判断，不要写多版本探测脚本逐个试。',
       '验证守则：修改后用 run_level 无头试运行验证（events 注入用户操作，如点按钮/按键），依据运行错误与变量终态继续修正，直到结算符合预期。',
       '调试守则：需要逐步排查或向创作者演示时用调试工具组——debug_control(start) 启动的是**可见调试会话**（游玩画面出现在工作台左侧，创作者实时看到你触发的每个事件与画面反应；调试中画面点击与 debug_dispatch 同路径）。' +
         '配合 debug_breakpoints 设断点、debug_read 看变量与日志、debug_set_var 强设状态、debug_screenshot 截调试画面（无会话时回落节点图）。讨论具体节点时用 highlight_nodes 高亮给创作者看。',
