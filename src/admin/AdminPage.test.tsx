@@ -44,6 +44,25 @@ const NORMAL = { id: 'usr_NORMAL0000000000000000001', nickname: '用户甲', rol
 const USER_ROW = { id: 'usr_NORMAL0000000000000000001', nickname: '用户甲', role: 'user', status: 'active', createdAt: 1 }
 const LEVEL_ROW = { id: 'cld_TEST000000000000000000001', levelId: 'res_X', title: '甲的关卡', ownerNickname: '用户甲', bytes: 2048, updatedAt: 1 }
 const AUDIT_ROW = { id: 'aud_TEST000000000000000000001', actorNickname: '站长', action: 'admin.patch_user', targetType: 'user', targetId: USER_ROW.id, detail: { status: 'disabled' }, createdAt: 1 }
+const HUB_PENDING = {
+  id: 'hub_TEST000000000000000000001',
+  scope: 'public',
+  itemKind: 'level',
+  rootDocId: 'res_X',
+  title: '甲的申请',
+  levelCount: 1,
+  bytes: 2048,
+  submitterName: '用户甲',
+  submitterNote: '请审核',
+  wantFeatured: true,
+  status: 'pending',
+  featured: false,
+  rejectReason: null,
+  downloads: 0,
+  createdAt: 1,
+  updatedAt: 2,
+}
+const HUB_PUBLISHED = { ...HUB_PENDING, id: 'hub_TEST000000000000000000002', status: 'published', submitterNote: null, wantFeatured: false, updatedAt: 3 }
 
 /** 按方法+路径前缀路由的可变 fetch 桩 */
 const routes: Array<{ method: string; prefix: string; respond: (path: string) => Response }> = []
@@ -96,6 +115,10 @@ function stubAdminData(): void {
     { method: 'GET', prefix: '/api/admin/users?', respond: () => new Response(JSON.stringify({ users: [USER_ROW], total: 1, limit: 20, offset: 0 })) },
     { method: 'GET', prefix: '/api/admin/levels?', respond: () => new Response(JSON.stringify({ levels: [LEVEL_ROW], total: 1, limit: 20, offset: 0 })) },
     { method: 'GET', prefix: '/api/admin/audit?', respond: () => new Response(JSON.stringify({ entries: [AUDIT_ROW], total: 1, limit: 20, offset: 0 })) },
+    { method: 'GET', prefix: '/api/admin/hub?', respond: (path) => {
+        const items = path.includes('status=published') ? [HUB_PUBLISHED] : [HUB_PENDING]
+        return new Response(JSON.stringify({ items, total: items.length, limit: 20, offset: 0 }))
+      } },
   )
 }
 
@@ -180,5 +203,79 @@ describe('管理后台页（批次 B4，#/admin）', () => {
     await act(async () => buttonByText(c, '重置密码').click())
     await flushUntil(() => c.textContent!.includes('已重置密码'))
     expect(calls.find((x) => x.method === 'PATCH')?.body).toEqual({ newPassword: 'new-pass-12345' })
+  })
+
+  it('关卡库审核：待审行渲染 + 批准并精选 POST {featured:true}', async () => {
+    stubAdminData()
+    routes.push({
+      method: 'POST',
+      prefix: '/api/admin/hub/hub_TEST000000000000000000001/approve',
+      respond: () => new Response(JSON.stringify({ ok: true, status: 'published', featured: true })),
+    })
+    const c = await renderAfterProbe(ADMIN)
+    await flushUntil(() => c.textContent!.includes('甲的申请'))
+    expect(c.textContent).toContain('申请人：用户甲')
+    expect(c.textContent).toContain('留言：请审核')
+    expect(c.textContent).toContain('申请精选')
+    await act(async () => buttonByText(c, '批准并精选').click())
+    await flushUntil(() => c.textContent!.includes('已批准「甲的申请」并设为精选'))
+    const post = calls.find((x) => x.method === 'POST' && x.path.includes('/approve'))
+    expect(post?.body).toEqual({ featured: true })
+  })
+
+  it('驳回：prompt 理由 → POST reject {reason}', async () => {
+    stubAdminData()
+    routes.push({
+      method: 'POST',
+      prefix: '/api/admin/hub/hub_TEST000000000000000000001/reject',
+      respond: () => new Response(JSON.stringify({ ok: true, status: 'rejected' })),
+    })
+    const c = await renderAfterProbe(ADMIN)
+    await flushUntil(() => c.textContent!.includes('甲的申请'))
+    vi.spyOn(window, 'prompt').mockReturnValue('难度标注不符')
+    await act(async () => buttonByText(c, '驳回').click())
+    await flushUntil(() => c.textContent!.includes('已驳回「甲的申请」'))
+    const post = calls.find((x) => x.method === 'POST' && x.path.includes('/reject'))
+    expect(post?.body).toEqual({ reason: '难度标注不符' })
+  })
+
+  it('精选开关：已发布公共条目 PATCH {featured:true}', async () => {
+    stubAdminData()
+    routes.push({
+      method: 'PATCH',
+      prefix: '/api/admin/hub/hub_TEST000000000000000000002',
+      respond: () => new Response(JSON.stringify({ ok: true, featured: true })),
+    })
+    const c = await renderAfterProbe(ADMIN)
+    await flushUntil(() => c.textContent!.includes('关卡库审核'))
+    await act(async () => {
+      const sel = c.querySelector('.admin-toolbar select') as HTMLSelectElement
+      sel.value = 'published'
+      sel.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await flushUntil(() => c.textContent!.includes('设为精选'))
+    await act(async () => buttonByText(c, '设为精选').click())
+    await flushUntil(() => c.textContent!.includes('已设置精选'))
+    const patch = calls.find((x) => x.method === 'PATCH' && x.path.includes('/api/admin/hub/'))
+    expect(patch?.body).toEqual({ featured: true })
+  })
+
+  it('官方直传：单关 JSON 文件上传 → POST official', async () => {
+    stubAdminData()
+    routes.push({
+      method: 'POST',
+      prefix: '/api/admin/hub/official',
+      respond: () => new Response(JSON.stringify({ ok: true, item: { id: 'hub_NEW' } }), { status: 201 }),
+    })
+    const c = await renderAfterProbe(ADMIN)
+    await flushUntil(() => c.textContent!.includes('官方库管理'))
+    const doc = { schemaVersion: 3, kind: 'level', id: 'res_OFFICIAL00000000000000001', version: '1.0.0', meta: { title: '官方关' }, refs: [], content: {} }
+    const file = new File([JSON.stringify(doc)], 'official.json', { type: 'application/json' })
+    const input = [...c.querySelectorAll('input[type="file"]')].find((i) => !(i as HTMLInputElement).multiple) as HTMLInputElement
+    Object.defineProperty(input, 'files', { value: [file] })
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })))
+    await flushUntil(() => c.textContent!.includes('官方条目已上传'))
+    const post = calls.find((x) => x.method === 'POST' && x.path.includes('/official'))
+    expect(post?.body).toMatchObject({ levelId: 'res_OFFICIAL00000000000000001', title: '官方关' })
   })
 })

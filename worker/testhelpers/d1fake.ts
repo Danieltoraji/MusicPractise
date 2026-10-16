@@ -516,6 +516,32 @@ export class D1Fake implements D1Database {
       return { results: row ? [row as unknown as Row] : [], changes: 0 }
     }
 
+    m = /^UPDATE hub_items SET featured = \?, updated_at = \? WHERE id = \?$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => r.id === p[2])
+      if (!row) return { results: [], changes: 0 }
+      row.featured = Number(p[0])
+      row.updated_at = Number(p[1])
+      return { results: [], changes: 1 }
+    }
+
+    m = /^SELECT COUNT\(\*\) AS n FROM hub_items WHERE scope = 'official'$/.exec(sql)
+    if (m) {
+      return { results: [{ n: this.hub_items.filter((r) => r.scope === 'official').length }], changes: 0 }
+    }
+
+    m = /^SELECT (.+) FROM hub_items WHERE scope = 'official' AND root_doc_id = \?$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => r.scope === 'official' && r.root_doc_id === p[0])
+      return { results: row ? [this.pick(row as unknown as Row, m![1])] : [], changes: 0 }
+    }
+
+    m = /^SELECT id, scope FROM hub_items WHERE root_doc_id = \? AND scope IN \('public', 'official'\)$/.exec(sql)
+    if (m) {
+      const row = this.hub_items.find((r) => (r.scope === 'public' || r.scope === 'official') && r.root_doc_id === p[0])
+      return { results: row ? [{ id: row.id, scope: row.scope }] : [], changes: 0 }
+    }
+
     m = /^SELECT (.+) FROM hub_items WHERE id = \?$/.exec(sql)
     if (m) {
       const row = this.hub_items.find((r) => r.id === p[0])

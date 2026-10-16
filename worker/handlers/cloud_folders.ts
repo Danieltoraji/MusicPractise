@@ -44,8 +44,8 @@ function readDocId(value: unknown, label: string): string {
   return value
 }
 
-/** 校验 + 序列化请求体：三道闸逐文档执行；恰含一个 series 且其 id 即 folderId */
-function parseFolderBody(body: Record<string, unknown>): { folderId: string; title: string; docs: ParsedDoc[] } {
+/** 校验 + 序列化请求体：三道闸逐文档执行；恰含一个 series 且其 id 即 folderId（官方直传复用） */
+export function parseFolderBody(body: Record<string, unknown>): { folderId: string; title: string; docs: ParsedDoc[] } {
   const folderId = readDocId(body.folderId, 'folderId')
   const title = readTitle(body)
   const rawDocs = body.docs
@@ -108,7 +108,7 @@ function parseFolderBody(body: Record<string, unknown>): { folderId: string; tit
  * 必须全部在包内（缺件拒绝）；包内不允许存在未被引用的多余文档。
  * 返回 level_count = 内含关卡数（= 槽位占用）。
  */
-function checkClosure(docs: ParsedDoc[]): number {
+export function checkClosure(docs: ParsedDoc[]): number {
   const series = docs.find((d) => d.kind === 'series')!
   const topics = new Map(docs.filter((d) => d.kind === 'topic').map((d) => [d.id, d]))
   const levels = new Map(docs.filter((d) => d.kind === 'level').map((d) => [d.id, d]))

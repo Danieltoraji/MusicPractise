@@ -36,8 +36,8 @@ function qs(params: Record<string, string | number | boolean | undefined>): stri
 
 /** 关卡库端点类型化封装（docs/39 §5.2 契约）；详情含全量快照，超时放宽 */
 export const hubApi = {
-  list: (params: { featured?: boolean; query?: string; limit?: number; offset?: number } = {}): Promise<{ items: HubItemMeta[]; total: number; limit: number; offset: number }> =>
-    apiFetch(`/api/hub/items${qs({ scope: 'public', featured: params.featured ? 1 : undefined, query: params.query, limit: params.limit, offset: params.offset })}`),
+  list: (params: { scope?: 'public' | 'official'; featured?: boolean; query?: string; limit?: number; offset?: number } = {}): Promise<{ items: HubItemMeta[]; total: number; limit: number; offset: number }> =>
+    apiFetch(`/api/hub/items${qs({ scope: params.scope ?? 'public', featured: params.featured ? 1 : undefined, query: params.query, limit: params.limit, offset: params.offset })}`),
   get: (id: string): Promise<{ item: HubItemMeta; docs: { id: string; kind: string; payload: unknown }[] }> =>
     apiFetch(`/api/hub/items/${id}`, { timeoutMs: 30_000 }),
   mine: (): Promise<{ items: HubMineItem[] }> => apiFetch('/api/hub/mine'),

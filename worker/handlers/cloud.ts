@@ -70,7 +70,7 @@ export function toFolderMeta(row: CloudFolderMetaRow) {
   }
 }
 
-function readLevelId(body: Record<string, unknown>): string {
+export function readLevelId(body: Record<string, unknown>): string {
   const value = body.levelId
   if (typeof value !== 'string' || !LEVEL_ID_RE.test(value)) {
     throw new HttpError(400, 'bad_request', 'levelId 必须是合法的关卡资源 id（res_*）')
@@ -86,7 +86,7 @@ export function readTitle(body: Record<string, unknown>): string {
   return [...value].slice(0, 64).join('')
 }
 
-function readPayload(body: Record<string, unknown>): Record<string, unknown> {
+export function readPayload(body: Record<string, unknown>): Record<string, unknown> {
   const payload = body.payload
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
     throw new HttpError(400, 'bad_request', 'payload 必须是关卡 JSON 对象')
@@ -95,7 +95,7 @@ function readPayload(body: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** 校验 + 序列化：proto 键 → schema → 体积，三道闸顺序执行；expectLevelId 用于槽位一致性检查 */
-function serializePayload(payload: Record<string, unknown>, expectLevelId?: string): { text: string; bytes: number; schemaVersion: number } {
+export function serializePayload(payload: Record<string, unknown>, expectLevelId?: string): { text: string; bytes: number; schemaVersion: number } {
   const protoKey = findProtoViolation(payload)
   if (protoKey) throw new HttpError(400, 'bad_request', `payload 含有不被允许的键：${protoKey}`)
   const check = validateLevelDoc(payload)

@@ -227,11 +227,11 @@ export async function publishFolder(ctx: RouteContext): Promise<Response> {
   return applyPublish(ctx, loadFolderSource)
 }
 
-/** GET /api/hub/items?scope=public&featured=&query=&limit=&offset=：公共列表（匿名） */
+/** GET /api/hub/items?scope=public|official&featured=&query=&limit=&offset=：公开列表（匿名；H4 起官方域开放浏览） */
 export async function listPublic(ctx: RouteContext): Promise<Response> {
   const url = new URL(ctx.req.url)
   const scope = url.searchParams.get('scope') ?? 'public'
-  if (scope !== 'public') throw new HttpError(400, 'bad_request', '暂只支持 scope=public')
+  if (scope !== 'public' && scope !== 'official') throw new HttpError(400, 'bad_request', '暂只支持 scope=public/official')
   const featured = url.searchParams.get('featured') === '1'
   const query = (url.searchParams.get('query') ?? '').trim().slice(0, 64)
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 20) || 20, 1), HUB_PAGE_MAX)
@@ -246,9 +246,9 @@ export async function listPublic(ctx: RouteContext): Promise<Response> {
     : query !== ''
       ? `WHERE scope = ? AND status = 'published' AND title LIKE ?`
       : `WHERE scope = ? AND status = 'published'`
-  const args = featured ? (query !== '' ? ['public', `%${query}%`, limit, offset] : ['public', limit, offset]) : query !== '' ? ['public', `%${query}%`, limit, offset] : ['public', limit, offset]
+  const args = featured ? (query !== '' ? [scope, `%${query}%`, limit, offset] : [scope, limit, offset]) : query !== '' ? [scope, `%${query}%`, limit, offset] : [scope, limit, offset]
   const list = await db.prepare(`SELECT ${cols} FROM hub_items ${where} ORDER BY published_at DESC LIMIT ? OFFSET ?`).bind(...args).all<HubItemRow>()
-  const countArgs = featured ? (query !== '' ? ['public', `%${query}%`] : ['public']) : query !== '' ? ['public', `%${query}%`] : ['public']
+  const countArgs = featured ? (query !== '' ? [scope, `%${query}%`] : [scope]) : query !== '' ? [scope, `%${query}%`] : [scope]
   const total = await db.prepare(`SELECT COUNT(*) AS n FROM hub_items ${where}`).bind(...countArgs).first<{ n: number }>()
   return jsonResponse({ items: (list.results ?? []).map(toPublicMeta), total: Number(total?.n ?? 0), limit, offset })
 }

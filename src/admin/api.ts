@@ -39,7 +39,27 @@ export interface Paged {
   offset: number
 }
 
-/** 管理端点类型化封装（docs/31 §5.4）；非 admin 一律 403，错误信封中文直达 */
+/** 关卡库条目（管理视角，docs/39 §5.2）：含提交者与审核状态机字段 */
+export interface AdminHubItem {
+  id: string
+  scope: 'public' | 'official' | 'group'
+  itemKind: 'level' | 'series'
+  rootDocId: string
+  title: string
+  levelCount: number
+  bytes: number
+  submitterName: string
+  submitterNote: string | null
+  wantFeatured: boolean
+  status: 'pending' | 'published' | 'rejected'
+  featured: boolean
+  rejectReason: string | null
+  downloads: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** 管理端点类型化封装（docs/31 §5.4 / docs/39 §5.2）；非 admin 一律 403，错误信封中文直达 */
 export const adminApi = {
   stats: (): Promise<AdminStats> => apiFetch('/api/admin/stats'),
   listUsers: (query: string, offset = 0, limit = 20): Promise<{ users: AdminUser[] } & Paged> =>
@@ -55,4 +75,17 @@ export const adminApi = {
   deleteLevel: (id: string): Promise<{ ok: boolean }> => apiFetch(`/api/admin/levels/${id}`, { method: 'DELETE' }),
   listAudit: (offset = 0, limit = 20): Promise<{ entries: AuditEntry[] } & Paged> =>
     apiFetch(`/api/admin/audit?offset=${offset}&limit=${limit}`),
+  listHub: (status: 'pending' | 'published' | 'rejected', query = '', offset = 0, limit = 20): Promise<{ items: AdminHubItem[] } & Paged> =>
+    apiFetch(`/api/admin/hub?status=${status}&query=${encodeURIComponent(query)}&offset=${offset}&limit=${limit}`),
+  approveHub: (id: string, featured = false): Promise<{ ok: boolean; status: string; featured: boolean }> =>
+    apiFetch(`/api/admin/hub/${id}/approve`, { method: 'POST', body: { featured } }),
+  rejectHub: (id: string, reason: string): Promise<{ ok: boolean; status: string }> =>
+    apiFetch(`/api/admin/hub/${id}/reject`, { method: 'POST', body: { reason } }),
+  setHubFeatured: (id: string, featured: boolean): Promise<{ ok: boolean; featured: boolean }> =>
+    apiFetch(`/api/admin/hub/${id}`, { method: 'PATCH', body: { featured } }),
+  deleteHub: (id: string): Promise<{ ok: boolean }> => apiFetch(`/api/admin/hub/${id}`, { method: 'DELETE' }),
+  createOfficialLevel: (levelId: string, title: string, payload: unknown): Promise<{ ok: boolean; item: { id: string } }> =>
+    apiFetch('/api/admin/hub/official', { method: 'POST', body: { levelId, title, payload }, timeoutMs: 30_000 }),
+  createOfficialSeries: (folderId: string, title: string, docs: { id: string; kind: string; payload: unknown }[]): Promise<{ ok: boolean; item: { id: string } }> =>
+    apiFetch('/api/admin/hub/official', { method: 'POST', body: { folderId, title, docs }, timeoutMs: 60_000 }),
 }

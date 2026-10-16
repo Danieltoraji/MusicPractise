@@ -12,12 +12,15 @@ import { getHubItem, listMine, listPublic, publishFolder, publishLevel, withdraw
 import { listProgress, putProgress } from './handlers/progress'
 import {
   adminApproveHub,
+  adminCreateOfficial,
+  adminDeleteHub,
   adminDeleteLevel,
   adminDeleteUser,
   adminListAudit,
   adminListHub,
   adminListLevels,
   adminListUsers,
+  adminPatchHubFeatured,
   adminPatchUser,
   adminRejectHub,
   adminStats,
@@ -66,6 +69,9 @@ api.add('DELETE', '/api/admin/levels/:id', adminDeleteLevel)
 api.add('GET', '/api/admin/audit', adminListAudit)
 
 api.add('GET', '/api/admin/hub', adminListHub)
+api.add('POST', '/api/admin/hub/official', adminCreateOfficial)
+api.add('PATCH', '/api/admin/hub/:id', adminPatchHubFeatured)
+api.add('DELETE', '/api/admin/hub/:id', adminDeleteHub)
 api.add('POST', '/api/admin/hub/:id/approve', adminApproveHub)
 api.add('POST', '/api/admin/hub/:id/reject', adminRejectHub)
 

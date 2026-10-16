@@ -60,6 +60,10 @@ function resId(n: number): string {
   return `res_${String(n).padStart(26, '0')}`
 }
 
+function now(): number {
+  return Date.now()
+}
+
 async function uploadLevelSlot(cookie: string, id: number, title = `关卡${id}`): Promise<string> {
   const res = await handler.fetch(request('POST', '/api/cloud/levels', { levelId: resId(id), title, payload: { ...(goodLevel as Record<string, unknown>), id: resId(id) } }, cookie), env, ctx)
   expect(res.status).toBe(201)
@@ -328,5 +332,165 @@ describe('关卡库 API（docs/39 §5.2）', () => {
     const eleventh = await publishLevel(cookie, slotIds[5])
     expect(eleventh.status).toBe(429)
     expect(((await eleventh.json()) as { error: { code: string } }).error.code).toBe('rate_limited')
+  })
+})
+
+describe('精选开关与官方库（docs/39 H4）', () => {
+  async function publishAndApprove(cookie: string, slotId: string, adminCookie: string, featured = false): Promise<string> {
+    const pub = await publishLevel(cookie, slotId)
+    const itemId = ((await pub.json()) as { item: { id: string } }).item.id
+    const res = await handler.fetch(request('POST', `/api/admin/hub/${itemId}/approve`, { featured }, adminCookie), env, ctx)
+    expect(res.status).toBe(200)
+    return itemId
+  }
+
+  it('精选开关：PATCH 随时指定/取消（仅 published）；写审计；非 admin 403', async () => {
+    const cookie = await registerUser('小明')
+    const adminCookie = await registerAdmin('管理员')
+    const slotId = await uploadLevelSlot(cookie, 1)
+    const itemId = await publishAndApprove(cookie, slotId, adminCookie)
+
+    const nonAdmin = await handler.fetch(request('PATCH', `/api/admin/hub/${itemId}`, { featured: true }, cookie), env, ctx)
+    expect(nonAdmin.status).toBe(403)
+
+    const bad = await handler.fetch(request('PATCH', `/api/admin/hub/${itemId}`, { featured: 'yes' }, adminCookie), env, ctx)
+    expect(bad.status).toBe(400)
+
+    const on = await handler.fetch(request('PATCH', `/api/admin/hub/${itemId}`, { featured: true }, adminCookie), env, ctx)
+    expect(on.status).toBe(200)
+    expect(db.hub_items[0].featured).toBe(1)
+    const featList = await handler.fetch(request('GET', '/api/hub/items?featured=1'), env, ctx)
+    expect(((await featList.json()) as { total: number }).total).toBe(1)
+    expect(db.audit_log.some((a) => a.action === 'hub.set_featured' && a.target_id === itemId)).toBe(true)
+
+    const off = await handler.fetch(request('PATCH', `/api/admin/hub/${itemId}`, { featured: false }, adminCookie), env, ctx)
+    expect(off.status).toBe(200)
+    expect(db.hub_items[0].featured).toBe(0)
+  })
+
+  it('admin 移除条目：快照删除 + 审计 + 源槽位解锁', async () => {
+    const cookie = await registerUser('小明')
+    const adminCookie = await registerAdmin('管理员')
+    const slotId = await uploadLevelSlot(cookie, 1)
+    const itemId = await publishAndApprove(cookie, slotId, adminCookie)
+
+    const del = await handler.fetch(request('DELETE', `/api/admin/hub/${itemId}`, undefined, adminCookie), env, ctx)
+    expect(del.status).toBe(200)
+    expect(db.hub_items).toHaveLength(0)
+    expect(db.hub_item_docs).toHaveLength(0)
+    expect(db.audit_log.some((a) => a.action === 'hub.delete' && a.target_id === itemId)).toBe(true)
+    // 源槽位随之解锁：可删除
+    expect((await handler.fetch(request('DELETE', `/api/cloud/levels/${slotId}`, undefined, cookie), env, ctx)).status).toBe(200)
+  })
+
+  it('官方直传·单关：published + 昵称快照官方 + 匿名 official 域可见', async () => {
+    const adminCookie = await registerAdmin('管理员')
+    const levelId = resId(70)
+    const up = await handler.fetch(request('POST', '/api/admin/hub/official', { levelId, title: '官方教学关', payload: { ...(goodLevel as Record<string, unknown>), id: levelId } }, adminCookie), env, ctx)
+    expect(up.status).toBe(201)
+    const body = (await up.json()) as { item: { id: string; itemKind: string; status: string } }
+    expect(body.item.itemKind).toBe('level')
+    expect(body.item.status).toBe('published')
+    expect(db.hub_items[0].submitter_id).toBeNull()
+    expect(db.hub_items[0].submitter_name).toBe('官方')
+    expect(db.audit_log.some((a) => a.action === 'hub.official_add')).toBe(true)
+
+    const list = await handler.fetch(request('GET', '/api/hub/items?scope=official'), env, ctx)
+    const listBody = (await list.json()) as { items: { title: string; authorName: string }[]; total: number }
+    expect(listBody.total).toBe(1)
+    expect(listBody.items[0].title).toBe('官方教学关')
+    expect(listBody.items[0].authorName).toBe('官方')
+
+    // 普通 scope 仍只看公共域
+    const pub = await handler.fetch(request('GET', '/api/hub/items'), env, ctx)
+    expect(((await pub.json()) as { total: number }).total).toBe(0)
+  })
+
+  it('官方直传·系列包：闭包校验复用 + 覆盖更新（不重复占位）', async () => {
+    const adminCookie = await registerAdmin('管理员')
+    const folderId = resId(80)
+    const tid = resId(81)
+    const lid = resId(82)
+    const body = {
+      folderId,
+      title: '官方入门系列',
+      docs: [
+        { id: folderId, kind: 'series', payload: { schemaVersion: 1, kind: 'series', id: folderId, version: '1.0.0', meta: { title: '官方入门系列' }, refs: [], content: { topicIds: [tid] } } },
+        { id: lid, kind: 'level', payload: { ...(goodLevel as Record<string, unknown>), id: lid } },
+        { id: tid, kind: 'topic', payload: { schemaVersion: 1, kind: 'topic', id: tid, version: '1.0.0', meta: { title: '基础' }, refs: [], content: { levelIds: [lid], brief: '' } } },
+      ],
+    }
+    const first = await handler.fetch(request('POST', '/api/admin/hub/official', body, adminCookie), env, ctx)
+    expect(first.status).toBe(201)
+    expect(db.hub_items[0].item_kind).toBe('series')
+
+    // 覆盖更新（改标题）→ 200，仍 1 条，docs 整体替换
+    const revised = JSON.parse(JSON.stringify(body)) as typeof body
+    ;(revised.docs[0].payload as { meta: { title: string } }).meta.title = '官方入门系列·修订'
+    revised.title = '官方入门系列·修订'
+    const second = await handler.fetch(request('POST', '/api/admin/hub/official', revised, adminCookie), env, ctx)
+    expect(second.status).toBe(200)
+    expect(db.hub_items).toHaveLength(1)
+    expect(db.hub_items[0].title).toBe('官方入门系列·修订')
+    expect(db.hub_item_docs).toHaveLength(3)
+
+    // 闭包缺件拒绝
+    const broken = JSON.parse(JSON.stringify(body)) as typeof body
+    ;(broken.docs[2].payload as { content: { levelIds: string[] } }).content.levelIds = [resId(999)]
+    const bad = await handler.fetch(request('POST', '/api/admin/hub/official', broken, adminCookie), env, ctx)
+    expect(bad.status).toBe(400)
+    expect(((await bad.json()) as { error: { message: string } }).error.message).toContain('缺件')
+  })
+
+  it('官方直传跨域冲突：公共域已存在同内容 → 409 already_in_public；移除后可传', async () => {
+    const cookie = await registerUser('小明')
+    const adminCookie = await registerAdmin('管理员')
+    const slotId = await uploadLevelSlot(cookie, 60)
+    const pub = await publishLevel(cookie, slotId)
+    const publicItemId = ((await pub.json()) as { item: { id: string } }).item.id
+    await handler.fetch(request('POST', `/api/admin/hub/${publicItemId}/approve`, {}, adminCookie), env, ctx)
+
+    const levelId = resId(60)
+    const conflict = await handler.fetch(request('POST', '/api/admin/hub/official', { levelId, title: '官方版', payload: { ...(goodLevel as Record<string, unknown>), id: levelId } }, adminCookie), env, ctx)
+    expect(conflict.status).toBe(409)
+    expect(((await conflict.json()) as { error: { code: string } }).error.code).toBe('already_in_public')
+
+    // 移除公共条目后官方直传成功
+    await handler.fetch(request('DELETE', `/api/admin/hub/${publicItemId}`, undefined, adminCookie), env, ctx)
+    const ok = await handler.fetch(request('POST', '/api/admin/hub/official', { levelId, title: '官方版', payload: { ...(goodLevel as Record<string, unknown>), id: levelId } }, adminCookie), env, ctx)
+    expect(ok.status).toBe(201)
+    expect(db.hub_items).toHaveLength(1)
+    expect(db.hub_items[0].scope).toBe('official')
+  })
+
+  it('官方库上限 200：触顶 409 official_full', async () => {
+    const adminCookie = await registerAdmin('管理员')
+    for (let i = 0; i < 200; i++) {
+      db.hub_items.push({
+        id: `hub_${String(i).padStart(26, '0')}`,
+        scope: 'official',
+        item_kind: 'level',
+        root_doc_id: resId(500 + i),
+        title: `官方${i}`,
+        level_count: 1,
+        bytes: 100,
+        submitter_id: null,
+        submitter_name: '官方',
+        submitter_note: null,
+        want_featured: 0,
+        status: 'published',
+        featured: 0,
+        reject_reason: null,
+        reviewed_by: null,
+        reviewed_at: null,
+        published_at: now(),
+        downloads: 0,
+        created_at: now(),
+        updated_at: now(),
+      })
+    }
+    const up = await handler.fetch(request('POST', '/api/admin/hub/official', { levelId: resId(999), title: '超限', payload: { ...(goodLevel as Record<string, unknown>), id: resId(999) } }, adminCookie), env, ctx)
+    expect(up.status).toBe(409)
+    expect(((await up.json()) as { error: { code: string } }).error.code).toBe('official_full')
   })
 })

@@ -35,10 +35,16 @@ export function HubPage() {
 
   const load = useCallback(
     async (which: HubTab, q: string, offset: number): Promise<void> => {
-      if (which !== 'public' && which !== 'featured') return
+      if (which !== 'public' && which !== 'featured' && which !== 'official') return
       setLoading(true)
       try {
-        const res = await hubApi.list({ featured: which === 'featured' ? true : undefined, query: q, limit: PAGE_SIZE, offset })
+        const res = await hubApi.list({
+          scope: which === 'official' ? 'official' : 'public',
+          featured: which === 'featured' ? true : undefined,
+          query: q,
+          limit: PAGE_SIZE,
+          offset,
+        })
         setItems((prev) => (offset === 0 || prev === null ? res.items : [...prev, ...res.items]))
         setTotal(res.total)
       } catch (err) {
@@ -54,7 +60,7 @@ export function HubPage() {
   useEffect(() => {
     setMsg(null)
     setReport(null)
-    if (tab === 'public' || tab === 'featured') void load(tab, query, 0)
+    if (tab === 'public' || tab === 'featured' || tab === 'official') void load(tab, query, 0)
   }, [tab, query, load])
 
   async function handleDownload(item: HubItemMeta): Promise<void> {
@@ -71,7 +77,7 @@ export function HubPage() {
     }
   }
 
-  const visible = tab === 'public' || tab === 'featured'
+  const visible = tab === 'public' || tab === 'featured' || tab === 'official'
   const hasMore = items !== null && items.length < total
 
   return (
@@ -128,14 +134,20 @@ export function HubPage() {
       )}
 
       {!visible ? (
-        <p className="muted">{tab === 'official' ? '官方关卡库即将上线。' : '群组关卡库即将上线——创建/加入群组功能随群组版本开放。'}</p>
+        <p className="muted">群组关卡库即将上线——创建/加入群组功能随群组版本开放。</p>
       ) : items === null ? (
         <p className="muted">加载中…</p>
       ) : items.length === 0 ? (
         <p className="muted">
-          {query !== '' ? `没有匹配「${query}」的条目。` : '关卡库还是空的——到'}
-          {query === '' && <a href="#/cloud">我的云盘</a>}
-          {query === '' && '把你的关卡申请公开吧。'}
+          {query !== ''
+            ? `没有匹配「${query}」的条目。`
+            : tab === 'official'
+              ? '官方关卡库还没有内容。'
+              : tab === 'featured'
+                ? '精选关卡暂空——管理员会从公共关卡中挑选佳作。'
+                : '关卡库还是空的——到'}
+          {query === '' && tab === 'public' && <a href="#/cloud">我的云盘</a>}
+          {query === '' && tab === 'public' && '把你的关卡申请公开吧。'}
         </p>
       ) : (
         <>

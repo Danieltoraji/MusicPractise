@@ -141,7 +141,7 @@ describe('关卡库页（docs/39 H3）', () => {
     expect(await getResource(LEVEL_ID)).not.toBeUndefined()
   })
 
-  it('Tab：精选走 featured 过滤；官方/群组显示占位', async () => {
+  it('Tab：精选走 featured 过滤；官方走 scope=official；群组占位', async () => {
     routes.push({
       method: 'GET',
       path: '/api/hub/items',
@@ -163,7 +163,9 @@ describe('关卡库页（docs/39 H3）', () => {
     expect(calls.some(([url]) => String(url).includes('featured=1'))).toBe(true)
 
     await act(async () => buttonByText(c, '官方关卡').click())
-    await flushUntil(() => c.textContent!.includes('官方关卡库即将上线'))
+    await flushUntil(() => c.textContent!.includes('官方关卡库还没有内容'))
+    expect(calls.some(([url]) => String(url).includes('scope=official'))).toBe(true)
+
     await act(async () => buttonByText(c, '群组关卡').click())
     await flushUntil(() => c.textContent!.includes('群组关卡库即将上线'))
   })
