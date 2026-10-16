@@ -54,7 +54,8 @@ export function stopAgent(docId: string): void {
 export interface AgentTurnOptions {
   docId: string
   profile: AiProfileConfig
-  systemPrompt: string
+  /** System prompt；传函数则每轮请求前以「运行内最新 doc」现算（读取运行中途新增组件的契约清单） */
+  systemPrompt: string | ((doc: LevelDoc) => string)
   /** 用户输入（调用方已拼好选中上下文前缀）；不传/空 = 不追加 user 消息（失败重试时直接续跑现有历史） */
   userText?: string
   /** 随本轮 user 消息附带的图片（data URL；用户附图/多模态） */
@@ -110,9 +111,11 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     }
 
     for (let turn = 0; turn < maxTurns; turn++) {
+      // System prompt 每轮现算（函数形态）：runDoc 是运行内最新 doc——中途新增组件的契约当轮即可见
+      const sys = typeof opts.systemPrompt === 'function' ? opts.systemPrompt(runDoc ?? opts.ctx.getDoc()) : opts.systemPrompt
       // 流式：先落一条 streaming 占位消息，delta 打字机填充，完成后用最终消息替换
       if (opts.stream) beginStreamingMessage(opts.docId)
-      const res = await chatCompleteRaw(opts.profile, buildModelMessages(opts.systemPrompt, history), {
+      const res = await chatCompleteRaw(opts.profile, buildModelMessages(sys, history), {
         tools: specs,
         signal: ctrl.signal,
         stream: opts.stream === true,

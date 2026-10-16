@@ -130,7 +130,8 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
   const turnOptions = (mode: AiMode, prof: AiProfileConfig) => ({
     docId: doc.id,
     profile: prof,
-    systemPrompt: buildEditorSystemPrompt(docRef.current, mode),
+    // 函数形态:agent 循环每轮以「运行内最新 doc」现算——中途新增组件的事件/命令清单当轮即可见
+    systemPrompt: (doc: LevelDoc) => buildEditorSystemPrompt(doc, mode),
     tools:
       mode === 'agent'
         ? [

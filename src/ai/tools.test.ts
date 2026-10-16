@@ -97,6 +97,17 @@ describe('AI 只读工具', () => {
     expect(all).toContain('## logic 概要')
   })
 
+  it('read_doc：组件段附事件/命令契约清单（写入逻辑前的事件名依据）', () => {
+    const doc = makeDoc()
+    const comps = tool('read_doc').exec({ part: 'components' }, ctxFor(doc)) as string
+    expect(comps).toContain('"events"')
+    expect(comps).toContain('"commands"')
+    // button 契约：clicked 事件 / setText、setEnabled 命令
+    expect(comps).toContain('"clicked"')
+    expect(comps).toContain('"setText"')
+    expect(comps).toContain('"setEnabled"')
+  })
+
   it('read_json：完整 JSON', () => {
     const doc = makeDoc()
     const text = tool('read_json').exec({}, ctxFor(doc)) as string

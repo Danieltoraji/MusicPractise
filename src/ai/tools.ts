@@ -10,6 +10,7 @@ import type { LevelDoc } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { loadLevelDoc } from '../library/validate'
 import { readRunLog } from '../runtime/runLog'
+import { getDef } from '../runtime/store'
 import { generateScript } from '../engine/script'
 import { describeGNode } from './prompts'
 import { formatRunReport, runLevelHeadless, type RunEventStep } from './runHarness'
@@ -61,7 +62,9 @@ const MAX_ROWS = 10
 
 const readDocTool: AiTool = {
   name: 'read_doc',
-  description: '读取关卡文档的结构化摘要（meta/视图/组件/变量/数据表/推进配置）。看逻辑请用 read_script，看原始 JSON 用 read_json',
+  description:
+    '读取关卡文档的结构化摘要（meta/视图/组件/变量/数据表/推进配置）。' +
+    '组件段附每个组件的事件/命令契约清单（写入逻辑前以此为准，不要臆测事件名）；看逻辑用 read_script，看原始 JSON 用 read_json',
   parameters: {
     type: 'object',
     properties: {
@@ -78,15 +81,29 @@ const readDocTool: AiTool = {
       sections.push(`## meta\n${JSON.stringify(doc.meta, null, 2)}`)
     }
     if (part === 'all' || part === 'components') {
-      const comps = content.components.map((c) => ({
-        id: c.id,
-        type: c.type,
-        name: c.name,
-        view: c.view,
-        visible: c.visible,
-        layout: c.layout,
-        props: c.props,
-      }))
+      const comps = content.components.map((c) => {
+        // 契约清单随读随取：运行中途新增的组件（如 agent 刚批量添加的）也能立刻被模型看到事件/命令
+        let events: string[] = []
+        let commands: string[] = []
+        try {
+          const def = getDef(c.type)
+          events = Object.keys(def.contract.events)
+          commands = Object.keys(def.contract.commands)
+        } catch {
+          // 未知/旧数据类型：跳过契约段，不阻断读取
+        }
+        return {
+          id: c.id,
+          type: c.type,
+          name: c.name,
+          view: c.view,
+          visible: c.visible,
+          layout: c.layout,
+          props: c.props,
+          ...(events.length > 0 ? { events } : {}),
+          ...(commands.length > 0 ? { commands } : {}),
+        }
+      })
       sections.push(`## components（${comps.length} 个）\n${JSON.stringify(comps, null, 2)}`)
     }
     if (part === 'all' || part === 'table') {

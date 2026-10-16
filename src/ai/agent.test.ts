@@ -236,6 +236,30 @@ describe('运行内写通道（读写链路修复）', () => {
     const msgs = getSession('res_agent_wt2').messages
     expect(msgs[4]).toMatchObject({ role: 'tool', content: 'tag=x' })
   })
+
+  it('systemPrompt 函数形态：每轮以运行内最新 doc 现算', async () => {
+    clearSession('res_agent_sp')
+    const { staleCtx, tools } = markTools()
+    const seenTags: string[] = []
+    scriptFetch([
+      { choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'write_mark', arguments: '{"tag":"t1"}' } }] } }] },
+      { choices: [{ message: { content: '', tool_calls: [{ id: 'c2', type: 'function', function: { name: 'write_mark', arguments: '{"tag":"t2"}' } }] } }] },
+      { choices: [{ message: { content: '完成' } }] },
+    ])
+    await runAgentTurn({
+      docId: 'res_agent_sp',
+      profile,
+      systemPrompt: (doc) => {
+        seenTags.push(String((doc as { tag?: unknown }).tag ?? 'none'))
+        return 'S'
+      },
+      userText: 'go',
+      tools,
+      ctx: staleCtx,
+    })
+    // 三轮请求：第 1 轮尚无写入，第 2/3 轮分别基于最新 runDoc
+    expect(seenTags).toEqual(['none', 't1', 't2'])
+  })
 })
 
 describe('agent 图像消息（批次5）', () => {
