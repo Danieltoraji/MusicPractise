@@ -486,6 +486,18 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
       case 'on':
         if (typeof node.event === 'string' && !EVENT_RE.test(node.event)) {
           issues.push({ code: 'structure', nodeId: node.id, field: 'event', message: `${where}: 非法事件名 "${node.event}"` })
+        } else if (typeof node.event === 'string' && node.event.includes('.') && compIds) {
+          // 悬空组件事件：前缀不是伪实例也不在现有组件里（臆测事件名是无效探测的根源，事件入口静默 no-op）
+          const prefix = node.event.split('.')[0] as string
+          const isPseudo = prefix === 'level' || prefix === 'question' || prefix === 'view'
+          if (!isPseudo && !compIds.has(prefix)) {
+            issues.push({
+              code: 'dangling-ref',
+              nodeId: node.id,
+              field: 'event',
+              message: `${where}: 事件 "${node.event}" 的实例 "${prefix}" 不存在（组件事件前缀必须是现有组件 id；内部事件用冒号分隔）`,
+            })
+          }
         }
         if (program.edges.some((e) => e.to === node.id)) {
           issues.push({ code: 'structure', nodeId: node.id, message: `${where}: 事件入口节点不能有入边` })

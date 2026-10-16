@@ -400,6 +400,32 @@ describe('应用行数据命令的格式判断（docs/26）', () => {
     expect(issues.some((i) => i.code === 'dangling-ref' && i.message.includes('q.nope'))).toBe(true)
   })
 
+  it('on 事件前缀不是现有组件：dangling-ref（臆测事件名防线）', () => {
+    const bad: GraphProgram = {
+      ...base(),
+      nodes: [on('e', 'notexist_comp.clicked')],
+      edges: [],
+    }
+    const issues = lintGraphProgramDetailed(bad, ctx)
+    expect(issues.some((i) => i.code === 'dangling-ref' && i.field === 'event' && i.message.includes('notexist_comp'))).toBe(true)
+  })
+
+  it('on 事件伪实例与真实组件前缀豁免；内部事件（冒号）不受影响', () => {
+    const ok: GraphProgram = {
+      ...base(),
+      nodes: [on('e1', 'level.started'), on('e2', 'question.loaded'), on('e3', 'view.entered'), on('e4', 'lab1.clicked'), on('e5', 'score:reset')],
+      edges: [],
+    }
+    const issues = lintGraphProgramDetailed(ok, ctx)
+    expect(issues.some((i) => i.code === 'dangling-ref' && i.field === 'event')).toBe(false)
+  })
+
+  it('on 事件悬空检查在无 componentIds 上下文时跳过', () => {
+    const bad: GraphProgram = { ...base(), nodes: [on('e', 'ghost.x')], edges: [] }
+    const issues = lintGraphProgramDetailed(bad)
+    expect(issues.some((i) => i.code === 'dangling-ref' && i.field === 'event')).toBe(false)
+  })
+
   it('数字列喂 setText 属收敛范围：不告警；字符串字面量里的 q.x 不误报', () => {
     const ok: GraphProgram = {
       ...base(),

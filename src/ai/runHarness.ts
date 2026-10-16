@@ -118,8 +118,11 @@ export async function runLevelHeadless(
   return report
 }
 
-/** 报告 → 可读中文文本（回喂模型/面板展示） */
-export function formatRunReport(r: RunReport, opts: { events?: RunEventStep[]; timeoutMs?: number } = {}): string {
+/** 报告 → 可读中文文本（回喂模型/面板展示）。unmatchedEvents=注入了但关卡没有任何 on 处理器的事件（调用方静态对照） */
+export function formatRunReport(
+  r: RunReport,
+  opts: { events?: RunEventStep[]; timeoutMs?: number; unmatchedEvents?: string[] } = {},
+): string {
   if (r.loadErrors) {
     return `试运行未能开始——关卡未通过装载校验：\n${r.loadErrors.map((e) => `- ${e}`).join('\n')}`
   }
@@ -144,6 +147,10 @@ export function formatRunReport(r: RunReport, opts: { events?: RunEventStep[]; t
       lines.push(`- ${e.nodeId ? `(节点 ${e.nodeId})` : ''}${e.event ? `[${e.event}]` : ''} ${e.message}`)
     }
     if (r.errors.length > 12) lines.push(`…（其余 ${r.errors.length - 12} 条略）`)
+  }
+  if (opts.unmatchedEvents && opts.unmatchedEvents.length > 0) {
+    lines.push('⚠ 以下注入事件没有任何处理器命中（组件不存在或事件名未注册——用 read_doc 核对组件 id 与事件/命令清单；不含题目 logicPatch 动态处理器）：')
+    for (const ev of opts.unmatchedEvents) lines.push(`- ${ev}`)
   }
   lines.push(`命令轨迹：${r.commands.length} 条${r.commands.length > 0 ? `（最近：${r.commands.slice(-6).join('、')}）` : ''}`)
   const varKeys = Object.keys(r.finalVars)

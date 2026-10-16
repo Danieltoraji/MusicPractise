@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LevelDoc } from '../engine/level'
 import { loadLevelDoc } from '../library/validate'
-import { formatRunReport, runLevelHeadless } from './runHarness'
+import { formatRunReport, runLevelHeadless, type RunReport } from './runHarness'
 
 import tutorialDoc from '../sample/tutorial-hello.level.json'
 
@@ -66,5 +66,26 @@ describe('runLevelHeadless（无头试运行）', () => {
     expect(report.ran).toBe(false)
     expect(report.loadErrors!.length).toBeGreaterThan(0)
     expect(formatRunReport(report)).toContain('未通过装载校验')
+  })
+
+  it('formatRunReport：无命中的注入事件单独成段（探测信号）', () => {
+    const report: RunReport = {
+      ran: true,
+      errors: [],
+      commands: [],
+      rowsVisited: [],
+      viewsVisited: [],
+      finished: null,
+      finalVars: {},
+      steps: 3,
+      durationMs: 5,
+      timedOut: false,
+    }
+    const text = formatRunReport(report, { unmatchedEvents: ['ghost.nope', 'nope2.x'] })
+    expect(text).toContain('没有任何处理器命中')
+    expect(text).toContain('- ghost.nope')
+    expect(text).toContain('- nope2.x')
+    // 无未命中时不出现该段
+    expect(formatRunReport(report)).not.toContain('没有任何处理器命中')
   })
 })

@@ -232,7 +232,12 @@ const runLevelTool: AiTool = {
       events: events as RunEventStep[],
       timeoutMs: typeof args.timeoutMs === 'number' ? args.timeoutMs : undefined,
     })
-    return formatRunReport(report, { events: events as RunEventStep[] })
+    // 无命中对照（引擎对无处理器事件静默 no-op，只能静态比对 on 事件入口）
+    const onEvents = new Set(
+      ctx.getDoc().content.logic.nodes.filter((n) => n.kind === 'on').map((n) => (n as { event: string }).event),
+    )
+    const unmatchedEvents = [...new Set(events.map((e) => e.event))].filter((ev) => !onEvents.has(ev))
+    return formatRunReport(report, { events: events as RunEventStep[], unmatchedEvents })
   },
 }
 
