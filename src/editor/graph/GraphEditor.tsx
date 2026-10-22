@@ -242,6 +242,11 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     })
   }
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // RF 受控选区：受控模式下 React Flow 不自行应用 select change，必须由宿主回填 nodes/edges 的
+  // selected 字段。这是画布多选态（Ctrl 点选/Shift 框选），与 Inspector 的单选 selectedId 互不影响。
+  const [rfSel, setRfSel] = useState<{ nodes: Set<string>; edges: Set<string> }>(() => ({ nodes: new Set(), edges: new Set() }))
+  const rfSelRef = useRef(rfSel)
+  rfSelRef.current = rfSel
   // dock 布局：列槽归属 + 显隐 + 列宽/面板高（docs/29 追加：跨会话记住工作台布局）
   const [dock, setDock] = useState<DockState>(loadDock)
   const [heights, setHeights] = useState<Record<string, number>>(loadHeights)
@@ -451,6 +456,33 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     [doc, onChange],
   )
 
+  // Delete/Backspace 删除 RF 受控选中集（节点级联断边；输入控件聚焦时不拦截）。
+  // 不用 React Flow 内置 deleteKeyCode：受控模式下其键处理依赖内部 effect 时序，
+  // 真实浏览器实测不可靠；自有 window 监听与画布 tab 的组件删除口径一致。
+  // rfSelRef 为真源镜像，避免监听随选集变化反复重挂。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const nodeIds = [...rfSelRef.current.nodes]
+      const edgeIds = [...rfSelRef.current.edges]
+      if (nodeIds.length === 0 && edgeIds.length === 0) return
+      e.preventDefault()
+      apply((prog) => {
+        let cur = prog
+        for (const id of edgeIds) cur = disconnect(cur, id)
+        for (const id of nodeIds) cur = removeNode(cur, id)
+        return cur
+      })
+      setRfSel({ nodes: new Set(), edges: new Set() })
+      setSelectedId((cur) => (cur && nodeIds.includes(cur) ? null : cur))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [apply])
+
   const rootRef = useRef<HTMLDivElement>(null)
   // 全屏态走 React state：根节点 className 是受控的，classList 直接挂的 is-fullscreen
   // 会在任意重渲染（如切主题）时被覆盖丢失——根节点丢背景色，:fullscreen 黑背板透出
@@ -496,7 +528,8 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
       const bp = breakpointSet.has(node.id)
       const paused = debugSnap.pausedAt === node.id
       const aihl = aiHlSet.has(node.id)
-      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}|${theme}|${summaryMode}|${bp ? 'b' : ''}|${paused ? 'p' : ''}|${aihl ? 'a' : ''}`
+      const sel = rfSel.nodes.has(node.id)
+      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}|${theme}|${summaryMode}|${bp ? 'b' : ''}|${paused ? 'p' : ''}|${aihl ? 'a' : ''}|${sel ? 's' : ''}`
       const prev = prevMap.get(node.id)
       if (prev && prevSig.get(node.id) === signature) {
         nextMap.set(node.id, prev)
@@ -510,6 +543,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         data: { node, errors, comps: compsInfo, related, theme, summaryMode, bp, paused, aihl, onToggleBp: toggleDebugBreakpoint },
         width: NODE_W,
         height: NODE_H,
+        selected: sel,
         // 预置 measured：节点尺寸固定，首帧即可拖拽（否则 RF 拖拽检查报 #015）
         measured: { width: NODE_W, height: NODE_H },
       }
@@ -519,7 +553,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     })
     nodeCacheRef.current = { map: nextMap, sig: nextSig }
     return list
-  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, compsSig, relatedIds, breakpointSet, debugSnap.pausedAt, aiHlSet])
+  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, compsSig, relatedIds, breakpointSet, debugSnap.pausedAt, aiHlSet, rfSel.nodes])
 
   const rfEdges: Edge[] = useMemo(
     () =>
@@ -529,13 +563,14 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         target: e.to,
         sourceHandle: e.port ?? 'out',
         targetHandle: 'in',
+        selected: rfSel.edges.has(e.id),
         className: e.port ? `gedge gedge-${e.port}` : 'gedge',
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: e.port === 'true' ? '#34d399' : e.port === 'false' ? '#f87171' : '#5b6f96',
         },
       })),
-    [program.edges],
+    [program.edges, rfSel.edges],
   )
 
   /** 选中节点并把视口中心移到它（lint 列表/运行日志的定位入口） */
@@ -552,6 +587,18 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
 
   const onNodesChange = useCallback(
     (changes: NodeChange<Node<GraphCardData>>[]): void => {
+      // select：回填受控选区（Delete 删除的前提）；与 Inspector 单选 selectedId 独立
+      const selects = changes.filter((c) => c.type === 'select') as { type: 'select'; id: string; selected: boolean }[]
+      if (selects.length > 0) {
+        setRfSel((cur) => {
+          const nodes = new Set(cur.nodes)
+          for (const c of selects) {
+            if (c.selected) nodes.add(c.id)
+            else nodes.delete(c.id)
+          }
+          return { ...cur, nodes }
+        })
+      }
       const dragging = changes.filter((c) => c.type === 'position' && c.dragging === true && c.position)
       if (dragging.length > 0) {
         setDragPos((cur) => {
@@ -586,8 +633,14 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         }),
       )
       setDragPos(new Map())
-      for (const c of settle as { type: string; id: string }[]) {
-        if (c.type === 'remove') setSelectedId((cur) => (cur === c.id ? null : cur))
+      const removedIds = (settle as { type: string; id: string }[]).filter((c) => c.type === 'remove').map((c) => c.id)
+      for (const id of removedIds) setSelectedId((cur) => (cur === id ? null : cur))
+      if (removedIds.length > 0) {
+        setRfSel((cur) => {
+          const nodes = new Set(cur.nodes)
+          for (const id of removedIds) nodes.delete(id)
+          return { ...cur, nodes }
+        })
       }
     },
     [apply],
@@ -595,12 +648,28 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]): void => {
+      const selects = changes.filter((c) => c.type === 'select') as { type: 'select'; id: string; selected: boolean }[]
+      if (selects.length > 0) {
+        setRfSel((cur) => {
+          const edges = new Set(cur.edges)
+          for (const c of selects) {
+            if (c.selected) edges.add(c.id)
+            else edges.delete(c.id)
+          }
+          return { ...cur, edges }
+        })
+      }
       const removed = changes.filter((c) => c.type === 'remove')
       if (removed.length === 0) return
       apply((prog) => {
         let cur = prog
         for (const c of removed as { id: string }[]) cur = disconnect(cur, c.id)
         return cur
+      })
+      setRfSel((cur) => {
+        const edges = new Set(cur.edges)
+        for (const c of removed as { id: string }[]) edges.delete(c.id)
+        return { ...cur, edges }
       })
     },
     [apply],
@@ -785,7 +854,6 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
           setMenu({ screen: { x: e.clientX, y: e.clientY }, flow })
         }}
         onEdgeDoubleClick={(_, edge) => apply((prog) => disconnect(prog, edge.id))}
-        deleteKeyCode={['Backspace', 'Delete']}
         fitView
         minZoom={0.2}
         colorMode={theme}

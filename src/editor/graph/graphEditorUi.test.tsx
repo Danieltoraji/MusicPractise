@@ -99,6 +99,46 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     expect(added).toMatchObject({ target: 'question', method: 'next', args: [] })
   })
 
+  it('点击选中节点后按 Delete 删除该节点（受控 select 回填是删除前提）', async () => {
+    // 回归背景：受控模式下 select change 被宿主忽略 → 画布选区恒空
+    // → Delete 删不掉任何东西。修复 = select change 回填到受控 nodes + 自有 window 键监听删除。
+    let doc = baseDoc()
+    const onChange = vi.fn((next: LevelDoc) => {
+      doc = next
+    })
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
+    const card = [...container.querySelectorAll('.react-flow__node')].find((n) => (n as HTMLElement).dataset.id === 'on1')
+    expect(card).toBeTruthy()
+    // 选中 on1（RF 发 select change → 宿主回填受控 nodes 的 selected）
+    act(() => card!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    // Delete → 自有 window 监听 → removeNode 级联断边
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }))
+    })
+    expect(onChange).toHaveBeenCalled()
+    expect(doc.content.logic.nodes.map((n) => n.id)).toEqual(['as1'])
+    expect(doc.content.logic.edges).toHaveLength(0)
+  })
+
+  it('输入控件聚焦时按 Delete 不删节点（文本编辑优先）', () => {
+    let doc = baseDoc()
+    const onChange = vi.fn((next: LevelDoc) => {
+      doc = next
+    })
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
+    // 选中 as1（assign 节点 → Inspector 有表达式输入框）
+    const card = [...container.querySelectorAll('.react-flow__node')].find((n) => (n as HTMLElement).dataset.id === 'as1')!
+    act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    // Inspector 出现（选中 on1）——事件表达式输入框聚焦时按 Delete 不删
+    const input = container.querySelector('.ginsp input, .ginsp textarea') as HTMLElement | null
+    expect(input).toBeTruthy()
+    act(() => {
+      input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }))
+    })
+    expect(onChange).not.toHaveBeenCalled()
+    expect(doc.content.logic.nodes).toHaveLength(2)
+  })
+
   it('崩溃回归：先选中 call 节点再切 assign 节点，首帧不因旧草稿崩溃且表达式可见', () => {
     // 回归背景：草稿曾用 useEffect 异步重置，切节点后的首渲染帧拿上一个节点的草稿，
     // assign 的 `'expr' in draft.value` 读到 undefined 直接白屏

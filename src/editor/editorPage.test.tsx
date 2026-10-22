@@ -4,7 +4,7 @@
 import 'fake-indexeddb/auto'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../library/db'
 import { blankLevelDoc } from './docState'
 import { EditorPage } from './EditorPage'
@@ -96,5 +96,60 @@ describe('EditorPage 保存（防重入标记释放）', () => {
     const saved = putSpy.mock.calls[1][0] as { doc: { meta: { title: string } } }
     expect(saved.doc.meta.title).toBe('改名关卡')
     expect(container!.textContent).toContain('已保存')
+  })
+})
+
+describe('EditorPage 画布 Delete 快捷删除', () => {
+  beforeAll(() => {
+    // jsdom 无指针捕获语义：选中组件的 pointerdown 依赖 setPointerCapture
+    Element.prototype.setPointerCapture = (): void => {}
+    Element.prototype.releasePointerCapture = (): void => {}
+  })
+
+  it('选中组件后按 Delete 删除（可 Ctrl+Z 撤销）；输入框聚焦时不拦截', async () => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root!.render(<EditorPage id={DOC_ID} />)
+    })
+    await flush()
+
+    // 空画布 → 从组件面板添加一个组件
+    const addBtn = [...container!.querySelectorAll('.palette button')].find((b) => b.textContent!.startsWith('+ '))
+    expect(addBtn).toBeTruthy()
+    await act(async () => {
+      ;(addBtn as HTMLElement).click()
+    })
+    await flush()
+    expect(container!.querySelectorAll('.editor-box')).toHaveLength(1)
+
+    // pointerdown 选中组件
+    await act(async () => {
+      container!.querySelector('.editor-box')!.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, pointerId: 3 }),
+      )
+    })
+    expect(container!.querySelector('.inspector')).toBeTruthy()
+
+    // 输入框聚焦时按 Delete 不删除（文本编辑优先）
+    const title = container!.querySelector('.editor-title') as HTMLInputElement
+    await act(async () => {
+      title.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+    })
+    expect(container!.querySelectorAll('.editor-box')).toHaveLength(1)
+
+    // 画布态按 Delete 删除选中组件（走 update 管线 → 入撤销栈）
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+    })
+    expect(container!.querySelectorAll('.editor-box')).toHaveLength(0)
+    expect(container!.querySelector('.inspector')).toBeNull()
+
+    // Ctrl+Z 撤销删除，组件恢复
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    })
+    expect(container!.querySelectorAll('.editor-box')).toHaveLength(1)
   })
 })

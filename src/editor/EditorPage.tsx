@@ -412,6 +412,23 @@ function EditorCanvas({
   const [view, setView] = useState(doc.content.views[0]?.id ?? 'main')
   const currentView = doc.content.views.some((v) => v.id === view) ? view : (doc.content.views[0]?.id ?? 'main')
 
+  // Delete/Backspace 快捷删除选中组件（与节点图 deleteKeyCode 口径一致；走 onChange 入撤销栈）。
+  // 输入控件聚焦时不拦截——标题/属性等文本编辑优先（节点图侧 RF 键处理同规则）。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (!selected || !doc.content.components.some((c) => c.id === selected)) return
+      e.preventDefault()
+      onChange(removeComponent(doc, selected))
+      onSelect(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected, doc, onChange, onSelect])
+
   function onBoxPointerDown(e: React.PointerEvent, comp: ComponentInstance): void {
     e.currentTarget.setPointerCapture(e.pointerId)
     onSelect(comp.id)
@@ -735,7 +752,7 @@ function Inspector({
           {propsErr && <span className="tone-error">{propsErr}</span>}
         </label>
       </details>
-      <button type="button" className="danger" onClick={onRemove}>
+      <button type="button" className="danger" onClick={onRemove} title="删除组件（快捷键 Delete / Backspace）">
         删除组件
       </button>
       <p className="muted">id：{comp.id}</p>
