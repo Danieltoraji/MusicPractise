@@ -108,14 +108,23 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     // 同轮多写入时后一个工具会读到旧快照互相覆盖；面板实例中途重挂（dock 拖拽/tab 切换/调试布局/
     // HMR）后其引用更是永久停摆。runDoc 让本轮读写始终基于最新已应用结果，不依赖外部引用的存活与提交时序。
     let runDoc: LevelDoc | null = null
+    // F1（docs/40）：外部（编辑器）doc 引用跟踪。applyDoc 是异步提交（React 渲染滞后），
+    // 写入瞬间的外部引用记为 lastSeenExternal——检测时 external 与「影子最新值」和
+    // 「最后一次写入时看到的值」都不同 = 创作者手动改过文档
+    let lastSeenExternal = opts.ctx.getDoc()
     const ctx: ToolContext = {
       ...opts.ctx,
       getDoc: () => runDoc ?? opts.ctx.getDoc(),
       applyDoc: (next) => {
         runDoc = next
+        lastSeenExternal = opts.ctx.getDoc()
         opts.ctx.applyDoc(next)
       },
-      emitImages: (imgs) => imageBuffer.push(...imgs),
+      emitImages: (imgs) => {
+        // F15：工具产出图片设上限（会话随消息持久化 IndexedDB，无上限会撑爆配额）
+        const room = Math.max(0, 12 - imageBuffer.length)
+        imageBuffer.push(...imgs.slice(0, room))
+      },
       signal: ctrl.signal, // F5/C4：本地工具可感知停止（长等待点提前收尾）
     }
 
@@ -149,6 +158,16 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
             result = await tool.exec(args, ctx)
           } catch (err) {
             result = `工具执行出错：${err instanceof Error ? err.message : String(err)}`
+          }
+        }
+        // F1：写工具执行后检测创作者同栈手动编辑——检测到则附提醒，让模型先重读再继续，
+        // 而不是基于幻影状态继续写（此前静默覆盖用户改动）
+        if (runDoc !== null) {
+          const external = opts.ctx.getDoc()
+          if (external !== runDoc && external !== lastSeenExternal) {
+            lastSeenExternal = external
+            result += '\n⚠ 警告：检测到创作者刚刚在编辑器中手动修改了关卡（编辑器文档与你的工作副本已不一致）。' +
+              '你基于旧状态做的后续修改可能覆盖其改动——请先 read_doc / read_script 重新读取现状再继续，必要时向创作者说明。'
           }
         }
         const msg: ChatMessage = { role: 'tool', toolCallId: call.id, name: call.function.name, content: result }

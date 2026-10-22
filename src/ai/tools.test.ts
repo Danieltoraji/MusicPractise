@@ -102,10 +102,10 @@ describe('AI 只读工具', () => {
     const comps = tool('read_doc').exec({ part: 'components' }, ctxFor(doc)) as string
     expect(comps).toContain('"events"')
     expect(comps).toContain('"commands"')
-    // button 契约：clicked 事件 / setText、setEnabled 命令
-    expect(comps).toContain('"clicked"')
-    expect(comps).toContain('"setText"')
-    expect(comps).toContain('"setEnabled"')
+    // button 契约：clicked 事件 / setText、setEnabled 命令（F3：下发「键(负载说明)」值形态）
+    expect(comps).toContain('clicked(')
+    expect(comps).toContain('setText(')
+    expect(comps).toContain('setEnabled(')
   })
 
   it('read_json：完整 JSON', () => {

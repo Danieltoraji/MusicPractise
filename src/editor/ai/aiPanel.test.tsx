@@ -317,7 +317,10 @@ describe('AiPanel agent 模式（批次2a）', () => {
     expect(getSession(original.id).checkpointAt).not.toBeNull()
     const rollback = [...c.querySelectorAll('button')].find((b) => b.textContent === '↩ 回滚') as HTMLButtonElement
     expect(rollback).toBeTruthy()
+    // F4：回滚有二次确认（jsdom stub 接受）
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     await act(async () => rollback.click())
+    expect(confirmSpy).toHaveBeenCalled()
     expect(applyDoc).toHaveBeenCalledTimes(2)
     expect((applyDoc.mock.calls[1][0] as LevelDoc).meta.title).toBe(original.meta.title)
     expect(getSession(original.id).checkpointAt).toBeNull()

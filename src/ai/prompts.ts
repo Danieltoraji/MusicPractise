@@ -55,14 +55,35 @@ export function describeGNode(n: GNode): string {
   }
 }
 
-function safeContract(type: string): { displayName: string; events: Record<string, string>; commands: Record<string, string> } | null {
+function safeContract(type: string): {
+  displayName: string
+  events: Record<string, string>
+  commands: Record<string, string>
+  queries: Record<string, string>
+} | null {
   try {
     const def = getDef(type)
-    return { displayName: def.contract.displayName, events: def.contract.events, commands: def.contract.commands }
+    return {
+      displayName: def.contract.displayName,
+      events: def.contract.events,
+      commands: def.contract.commands,
+      queries: def.contract.queries ?? {},
+    }
   } catch {
     return null
   }
 }
+
+/** F3（docs/40）：契约「值」就是负载/参数形状说明——只下发键名曾让 AI 猜错 payload 静默无效 */
+function contractSegment(entries: Record<string, string>): string {
+  return Object.entries(entries)
+    .map(([k, v]) => `${k}(${v})`)
+    .join('/')
+}
+
+/** 生命周期事件目录（与事件管理面板同源语义）：从零写逻辑时不再靠猜 */
+const LIFECYCLE_CATALOG = 'level.started（进入关卡一次）/ level.finished（结算，payload: score/passed）/ ' +
+  'question.loaded（每行装载，payload: index/total/row）/ view.entered（切视图，payload: view）'
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}\n…（已截断，可用 read_json 看更多）` : text
@@ -115,16 +136,17 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'a
     `## 当前关卡：${String(doc.meta.title ?? '')}（id=${doc.id}，v${doc.version}）`,
   )
 
-  lines.push('', '### 组件')
+  lines.push('', '### 组件', `生命周期事件目录（on 入口可用）：${LIFECYCLE_CATALOG}`)
   const comps = doc.content.components
   if (comps.length === 0) lines.push('（无组件）')
   for (const c of comps) {
     const contract = safeContract(c.type)
-    const events = contract ? Object.keys(contract.events).join('/') : ''
-    const commands = contract ? Object.keys(contract.commands).join('/') : ''
+    const events = contract ? contractSegment(contract.events) : ''
+    const commands = contract ? contractSegment(contract.commands) : ''
+    const queries = contract ? contractSegment(contract.queries) : ''
     const view = c.view ?? doc.content.views[0]?.id ?? 'main'
     lines.push(
-      `- ${c.id}（${c.type}${contract ? `·${contract.displayName}` : ''}${c.name ? `·${c.name}` : ''}·视图 ${view}${c.visible === false ? '·隐藏' : ''}）事件: ${events || '无'} 命令: ${commands || '无'}`,
+      `- ${c.id}（${c.type}${contract ? `·${contract.displayName}` : ''}${c.name ? `·${c.name}` : ''}·视图 ${view}${c.visible === false ? '·隐藏' : ''}）事件: ${events || '无'} 命令: ${commands || '无'}${queries ? ` 查询: ${queries}` : ''}`,
     )
   }
 

@@ -136,3 +136,21 @@ describe('A5 校验错误可读化（docs/40）', () => {
     expect(capErrorLines(lines.slice(0, 5))).toHaveLength(5)
   })
 })
+
+describe('F6 flow.pass 表达式语法 lint（docs/40）', () => {
+  it('语法错误的 pass.expr → lintWarnings 提示静默未通过风险', () => {
+    const bad = JSON.parse(JSON.stringify(noteClickDoc)) as { content: { flow: { pass: { expr: string } } } }
+    bad.content.flow = { pass: { expr: 'v.score >=' } }
+    const r = loadLevelDoc(bad)
+    expect(r.ok).toBe(true) // 宽松放行（先放行后清洗），但必须告警
+    if (r.ok) expect(r.lintWarnings.some((w) => w.includes('flow.pass') && w.includes('语法错误'))).toBe(true)
+  })
+
+  it('合法 pass.expr 不告警', () => {
+    const ok = JSON.parse(JSON.stringify(noteClickDoc)) as { content: { flow: { pass: { expr: string } } } }
+    ok.content.flow = { pass: { expr: 'v.score >= 10' } }
+    const r = loadLevelDoc(ok)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.lintWarnings.some((w) => w.includes('flow.pass'))).toBe(false)
+  })
+})

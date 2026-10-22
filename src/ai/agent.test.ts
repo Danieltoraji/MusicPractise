@@ -621,3 +621,38 @@ describe('token 用量累计（批次8c）', () => {
     clearSession('res_agent_nousage')
   })
 })
+
+describe('F1 创作者手动编辑冲突检测（docs/40 R7）', () => {
+  it('写工具执行期间编辑器 doc 被手动修改 → 工具结果附警告，模型被引导重读', async () => {
+    clearSession('res_agent_f1')
+    let external = { id: 'L' } as LevelDoc
+    const ctxMut: ToolContext = {
+      getDoc: () => external,
+      applyDoc: () => {},
+      levelId: 'L',
+    }
+    const write: AiTool = {
+      name: 'write_mark',
+      description: '',
+      parameters: { type: 'object', properties: {} },
+      exec: (_a, c) => {
+        c.applyDoc({ ...c.getDoc(), tag: 'w' } as LevelDoc)
+        // 写入提交后、本轮检测前：创作者手动编辑（编辑器 doc 换新引用——
+        // 既不等于 runDoc 也不等于写入瞬间看到的 lastSeenExternal）
+        external = { id: 'L', touched: true } as unknown as LevelDoc
+        return 'ok'
+      },
+    }
+    scriptFetch([
+      {
+        choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'write_mark', arguments: '{}' } }] } }],
+      },
+      { choices: [{ message: { content: 'done' } }] },
+    ])
+    await runAgentTurn({ docId: 'res_agent_f1', profile, systemPrompt: 'S', userText: 'go', tools: [write], ctx: ctxMut })
+    const msgs = getSession('res_agent_f1').messages
+    expect(msgs[2].content).toContain('手动修改')
+    expect(msgs[2].content).toContain('read_doc')
+    clearSession('res_agent_f1')
+  })
+})

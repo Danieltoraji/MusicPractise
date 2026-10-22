@@ -281,13 +281,21 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
   const rollback = (): void => {
     const cp = getCheckpoint(doc.id)
     if (!cp || session.busy) return
+    // F4（docs/40）：回滚 = 整文档覆盖，会连带撤销检查点之后的全部手工修改——
+    // 二次确认 + 影响摘要；执行中的计划一并复位。回滚经 applyRef → update 入撤销栈（可 Ctrl+Z）
+    const cur = docRef.current
+    const diff = (a: unknown[] | undefined, b: unknown[] | undefined): string => `${a?.length ?? 0}→${b?.length ?? 0}`
+    const summary = cur
+      ? `组件 ${diff(cur.content.components, cp.doc.content.components)} · 逻辑节点 ${diff(cur.content.logic.nodes, cp.doc.content.logic.nodes)} · 表行 ${diff(cur.content.table.rows, cp.doc.content.table.rows)}`
+      : ''
+    if (!window.confirm(`回滚到检查点（${new Date(cp.at).toLocaleTimeString()}）？这将覆盖检查点之后的全部修改（含手工编辑）：${summary}`)) return
     applyRef.current(cp.doc)
     appendMessage(doc.id, {
       role: 'assistant',
-      content: `↩ 已回滚到 AI 修改前的版本（检查点 ${new Date(cp.at).toLocaleTimeString()}）。`,
+      content: `↩ 已回滚到 AI 修改前的版本（检查点 ${new Date(cp.at).toLocaleTimeString()}；${summary}）。可用 Ctrl+Z 撤销本次回滚。`,
     })
     clearCheckpoint(doc.id)
-    patchSession(doc.id, { checkpointAt: null })
+    patchSession(doc.id, { checkpointAt: null, plan: null })
   }
 
   const empty = session.messages.length === 0

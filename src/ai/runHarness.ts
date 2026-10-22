@@ -67,6 +67,9 @@ export async function runLevelHeadless(
     return report
   }
   const runDoc = check.doc
+  // F12（docs/40）：超时「中止」此前只放弃等待——session 继续在后台跑且不 dispose。
+  // 外层持引用，超时侧主动 dispose 终止计时器/音频
+  let activeSession: LevelSession | null = null
 
   const run = async (): Promise<void> => {
     const events: LogicRunEvent[] = []
@@ -81,6 +84,7 @@ export async function runLevelHeadless(
       onLogicEvent: (e) => events.push(e),
     }
     const session = new LevelSession(runDoc, host)
+    activeSession = session
     try {
       session.start()
       await flush()
@@ -95,6 +99,7 @@ export async function runLevelHeadless(
       // 终态必须在 dispose 前采集——engine.reset 会把变量复位
       report.finalVars = { ...session.engine.vars } as Record<string, Json>
     } finally {
+      if (activeSession === session) activeSession = null
       session.dispose()
     }
     for (const e of events) {
@@ -109,6 +114,7 @@ export async function runLevelHeadless(
       run(),
       sleep(timeoutMs).then(() => {
         report.timedOut = true
+        activeSession?.dispose()
       }),
     ])
     report.ran = !report.timedOut

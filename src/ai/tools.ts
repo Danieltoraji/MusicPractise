@@ -90,10 +90,13 @@ const readDocTool: AiTool = {
         // 契约清单随读随取：运行中途新增的组件（如 agent 刚批量添加的）也能立刻被模型看到事件/命令
         let events: string[] = []
         let commands: string[] = []
+        let queries: string[] = []
         try {
           const def = getDef(c.type)
-          events = Object.keys(def.contract.events)
-          commands = Object.keys(def.contract.commands)
+          // F3：下发「键(负载说明)」值——只给键名曾让模型猜错 payload 形状静默无效
+          events = Object.entries(def.contract.events).map(([k, v]) => `${k}(${v})`)
+          commands = Object.entries(def.contract.commands).map(([k, v]) => `${k}(${v})`)
+          queries = Object.entries(def.contract.queries ?? {}).map(([k, v]) => `${k}(${v})`)
         } catch {
           // 未知/旧数据类型：跳过契约段，不阻断读取
         }
@@ -107,6 +110,7 @@ const readDocTool: AiTool = {
           props: c.props,
           ...(events.length > 0 ? { events } : {}),
           ...(commands.length > 0 ? { commands } : {}),
+          ...(queries.length > 0 ? { queries } : {}),
         }
       })
       sections.push(`## components（${comps.length} 个）\n${JSON.stringify(comps, null, 2)}`)

@@ -72,12 +72,19 @@ function assertConfig(profile: AiProfileConfig): void {
   if (!/^https?:\/\//i.test(profile.baseUrl.trim())) {
     throw new AiClientError('bad-config', 'API 地址需以 http:// 或 https:// 开头')
   }
+  // F16：https 页面下 http 接口必被浏览器 mixed content 拦截，且报错伪装成 CORS——
+  // 提前给出可读诊断（http 部署的站点不受影响）
+  if (typeof location !== 'undefined' && location.protocol === 'https:' && /^http:\/\//i.test(profile.baseUrl.trim())) {
+    throw new AiClientError('bad-config', '当前页面是 https，HTTP 的 API 地址会被浏览器拦截（mixed content）——请使用 https 接口地址，或改用 http 访问本站')
+  }
   if (!profile.model.trim()) throw new AiClientError('bad-config', '请先填写模型名')
   if (!profile.apiKey.trim()) throw new AiClientError('bad-config', '请先填写 API Key')
 }
 
 function chatUrl(baseUrl: string): string {
-  return `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`
+  // F16（docs/40）：用户可能直接粘贴含 endpoint 的完整地址——剥除避免双重拼接 404
+  const base = baseUrl.trim().replace(/\/+$/, '').replace(/\/chat\/completions$/, '')
+  return `${base}/chat/completions`
 }
 
 interface ChatChoice {

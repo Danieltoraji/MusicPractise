@@ -13,6 +13,7 @@
 import { Validator, type Schema } from '@cfworker/json-schema'
 import type { LevelDoc } from '../engine/level'
 import { lintGraphProgram } from '../engine/graphProgram'
+import { parseExpr } from '../engine/expr'
 import { migrateDocToV3 } from '../engine/migrateDoc'
 import type { ResourceKind } from './db'
 
@@ -209,6 +210,17 @@ export function loadLevelDoc(raw: unknown): LoadResult {
       componentIds: doc.content.components.map((c) => c.id),
       viewIds: doc.content.views.map((v) => v.id),
     })
+    // F6（docs/40）：flow.pass.expr 语法 lint——写坏的表达式运行时静默「永不通过」
+    const passExpr = doc.content.flow?.pass?.expr
+    if (typeof passExpr === 'string' && passExpr.trim() !== '') {
+      try {
+        parseExpr(passExpr)
+      } catch (err) {
+        lintWarnings.push(
+          'flow.pass 过关表达式语法错误：' + (err instanceof Error ? err.message : String(err)) + '——运行时会静默判未通过',
+        )
+      }
+    }
     // v3 结构告警（schema 无法表达的约束，评审 P2-12/13）
     const viewIdSet = new Set(doc.content.views.map((v) => v.id))
     for (const c of doc.content.components) {
