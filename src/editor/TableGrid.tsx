@@ -45,7 +45,7 @@ const MIN_ROW_H = 28
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 const clip = (s: string, n = 60): string => (s.length > n ? `${s.slice(0, n)}…` : s)
 
-export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
+export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc, tag?: string) => void }) {
   const table = doc.content.table
   const [colW, setColW] = useState<Record<string, number>>({})
   const [rowH, setRowH] = useState<Record<number, number>>({})
@@ -101,8 +101,10 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
     rowDrag.current = null
   }
 
-  const commitCell = (row: number, key: string, value: Json): void => {
-    onChange(updateTableCell(doc, row, { [key]: value }))
+  // 逐键编辑的 text/number 单元格带连续性 tag（docs/40 B1）：同单元格的连续输入
+  // 在撤销栈中合并为一条；notes/list/json 走弹窗一次性 commit，无需 tag
+  const commitCell = (row: number, key: string, value: Json, tag?: string): void => {
+    onChange(updateTableCell(doc, row, { [key]: value }), tag)
   }
 
   // staffCell 打开期间解析一次：合规 → 直接编辑谱面；不合规 → importRaw 走修复/导入通道
@@ -229,7 +231,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
                       value={row[c.key] ?? null}
                       width={widthOf(c.key, c.type ?? 'text')}
                       height={heightOf(i)}
-                      onCommit={(v) => commitCell(i, c.key, v)}
+                      onCommit={(v, tag) => commitCell(i, c.key, v, tag)}
                       onOpenJson={() => setJsonCell({ row: i, key: c.key })}
                       onOpenStaff={() => setStaffCell({ row: i, key: c.key })}
                       onOpenList={() => setListCell({ row: i, key: c.key })}
@@ -297,7 +299,8 @@ function CellEditor(props: {
   /** 所在列宽/行高（notes 迷你谱预览适配用） */
   width?: number
   height?: number
-  onCommit: (v: Json) => void
+  /** 逐键编辑（text/number）时携带连续性 tag，撤销栈据此合并一次输入会话（docs/40 B1） */
+  onCommit: (v: Json, tag?: string) => void
   onOpenJson: () => void
   onOpenStaff: () => void
   onOpenList: () => void
@@ -328,9 +331,9 @@ function CellEditor(props: {
         value={text}
         onChange={(e) => {
           const t = e.target.value
-          if (t === '') return onCommit(null)
+          if (t === '') return onCommit(null, 'cell')
           const n = Number(t)
-          if (Number.isFinite(n)) onCommit(n)
+          if (Number.isFinite(n)) onCommit(n, 'cell')
         }}
       />
     )
@@ -394,7 +397,7 @@ function CellEditor(props: {
     <input
       className="tgrid-input"
       value={text}
-      onChange={(e) => onCommit(e.target.value === '' ? null : e.target.value)}
+      onChange={(e) => onCommit(e.target.value === '' ? null : e.target.value, 'cell')}
     />
   )
 }

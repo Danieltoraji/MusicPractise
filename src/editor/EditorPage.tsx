@@ -170,18 +170,35 @@ export function EditorPage({ id }: Props) {
   const histRef = useRef<{ past: LevelDoc[]; future: LevelDoc[] }>({ past: [], future: [] })
   const [, histBump] = useState(0)
   const HIST_CAP = 50
+  // 保存落库的 doc 引用（「干净基线」）：undo/redo/update 回到该引用即视为未修改（撤销回保存点不再要求再保存）
+  const cleanDocRef = useRef<LevelDoc | null>(null)
+  // 连续性 tag（docs/40 B1）：与栈顶入栈时携带的 tag 相同的连续 update 合并不压栈；
+  // 无 tag 的 update、undo/redo 都会打断合并（一次用户操作 = 一条撤销步）
+  const pendingTagRef = useRef<string | null>(null)
 
-  /** 编辑器内所有文档修改走这里：入历史栈（撤销/重做，批次6c）、标脏、清「已保存」提示 */
+  /**
+   * 编辑器内所有文档修改走这里：入历史栈（撤销/重做）、标脏、清「已保存」提示。
+   * docs/40 R3 纪律：
+   * - 历史条目存 doc 引用而非 structuredClone——docState 全部变换恒返回新对象、
+   *   全仓「禁原地 mutation」纪律保证已提交 doc 不再被改（每次入栈省一次整文档深拷贝）；
+   * - 同 tag 连续 update（标题逐键/表格单元格逐键）合并且不重复压栈；
+   * - next === cur 引用相等短路（无 no-op 入栈）；
+   * - dirty 判定 = next !== cleanDocRef（撤销回保存点自动清脏）。
+   */
   const update = useCallback(
-    (next: LevelDoc) => {
+    (next: LevelDoc, tag?: string) => {
       const cur = docRef.current
       if (cur) {
+        if (next === cur) return // no-op 短路
         const h = histRef.current
-        h.past = [...h.past.slice(-(HIST_CAP - 1)), structuredClone(cur)]
+        if (!(tag !== undefined && pendingTagRef.current === tag)) {
+          h.past = [...h.past.slice(-(HIST_CAP - 1)), cur]
+        }
+        pendingTagRef.current = tag ?? null
         h.future = []
       }
       setSavedTip('')
-      setDirty(true)
+      setDirty(next !== cleanDocRef.current)
       setDoc(next)
       histBump((v) => v + 1)
     },
@@ -194,9 +211,10 @@ export function EditorPage({ id }: Props) {
     if (h.past.length === 0 || !cur) return
     const prev = h.past[h.past.length - 1]
     h.past = h.past.slice(0, -1)
-    h.future = [structuredClone(cur), ...h.future.slice(0, HIST_CAP - 1)]
+    h.future = [cur, ...h.future.slice(0, HIST_CAP - 1)]
+    pendingTagRef.current = null
     setSavedTip('')
-    setDirty(true)
+    setDirty(prev !== cleanDocRef.current)
     setDoc(prev)
     histBump((v) => v + 1)
   }, [histBump])
@@ -207,9 +225,10 @@ export function EditorPage({ id }: Props) {
     if (h.future.length === 0 || !cur) return
     const next = h.future[0]
     h.future = h.future.slice(1)
-    h.past = [...h.past.slice(-(HIST_CAP - 1)), structuredClone(cur)]
+    h.past = [...h.past.slice(-(HIST_CAP - 1)), cur]
+    pendingTagRef.current = null
     setSavedTip('')
-    setDirty(true)
+    setDirty(next !== cleanDocRef.current)
     setDoc(next)
     histBump((v) => v + 1)
   }, [histBump])
@@ -273,6 +292,8 @@ export function EditorPage({ id }: Props) {
       }
       if (docRef.current === latest) {
         setDoc(saved) // A6：内存与库内一致（规范化 + 新版本），消除列类型等漂移
+        cleanDocRef.current = saved // R3：干净基线前移——undo 回到这里自动清脏
+        pendingTagRef.current = null // 保存是操作分界：保存后的连续输入不与保存前的编辑合并（B1）
         setDirty(false)
         dirtyRef.current = false // 显式同步：不依赖「React 调度先于 hashchange 任务」的时序假设（评审 P2-1）
         if (id === 'new') {
@@ -350,7 +371,7 @@ export function EditorPage({ id }: Props) {
         <input
           className="editor-title"
           value={String(doc.meta.title ?? '')}
-          onChange={(e) => update(setMeta(doc, { title: e.target.value }))}
+          onChange={(e) => update(setMeta(doc, { title: e.target.value }), 'title')} // tag：一次连续输入合并为一条撤销步（docs/40 B1）
         />
         <span className="editor-head-group">
           <button
@@ -515,6 +536,17 @@ function EditorCanvas({
   const canvasRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: string; grabX: number; grabY: number; rect: DOMRect } | null>(null)
   const resizeRef = useRef<{ id: string; startX: number; startY: number; w: number; h: number } | null>(null)
+  // 拖拽/缩放中间帧走 transient 状态（docs/40 B2，照 GraphEditor dragPos 模式）：
+  // pointermove 只更新本态（不写 doc、不入撤销栈），落点一次性 commit——
+  // 此前每帧 updateComponent 整文档深拷贝 ×2 + 全组件重渲染 + 撤销栈逐帧膨胀。
+  // ref 镜像保证 pointerup 与最后一次 move 同帧到达时也 commit 到最新位置
+  //（渲染闭包快照在同帧同步序列里会滞后一帧）。
+  const [transient, setTransient] = useState<{ id: string; layout: { x: number; y: number; w: number; h: number } } | null>(null)
+  const transientRef = useRef<{ id: string; layout: { x: number; y: number; w: number; h: number } } | null>(null)
+  const setTransientBoth = useCallback((v: { id: string; layout: { x: number; y: number; w: number; h: number } } | null) => {
+    transientRef.current = v
+    setTransient(v)
+  }, [])
   // 当前编辑的视图（组件互斥渲染的编辑侧对应物；不随 doc 变化重置）
   const [view, setView] = useState(doc.content.views[0]?.id ?? 'main')
   const currentView = doc.content.views.some((v) => v.id === view) ? view : (doc.content.views[0]?.id ?? 'main')
@@ -537,7 +569,13 @@ function EditorCanvas({
   }, [selected, doc, onChange, onSelect])
 
   function onBoxPointerDown(e: React.PointerEvent, comp: ComponentInstance): void {
-    e.currentTarget.setPointerCapture(e.pointerId)
+    // 合成事件/非活跃 pointerId 下 setPointerCapture 抛 InvalidPointerId（GraphEditor startSplitDrag 同款坑）：
+    // 捕获失败不阻断选中与拖拽状态记录，window 无兜底监听时仅影响「指针移出盒子后的跟手」
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // ignore
+    }
     onSelect(comp.id)
     const rect = canvasRef.current!.getBoundingClientRect()
     const layout = comp.layout ?? { x: 0, y: 0, w: 120, h: 40 }
@@ -547,7 +585,11 @@ function EditorCanvas({
   /** 右下角手柄拖拽调整尺寸（独立捕获路径，与移动互不干扰） */
   function onResizeDown(e: React.PointerEvent, comp: ComponentInstance): void {
     e.stopPropagation()
-    e.currentTarget.setPointerCapture(e.pointerId)
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // ignore
+    }
     onSelect(comp.id)
     resizeRef.current = { id: comp.id, startX: e.clientX, startY: e.clientY, w: comp.layout?.w ?? 120, h: comp.layout?.h ?? 40 }
   }
@@ -558,11 +600,21 @@ function EditorCanvas({
     const w = Math.max(40, Math.round((rz.w + (e.clientX - rz.startX)) / 2) * 2)
     const h = Math.max(28, Math.round((rz.h + (e.clientY - rz.startY)) / 2) * 2)
     const layout = comp.layout ?? { x: 0, y: 0, w: 120, h: 40 }
-    if (w !== layout.w || h !== layout.h) onChange(updateComponent(doc, comp.id, { layout: { ...layout, w, h } }))
+    if (w !== layout.w || h !== layout.h) setTransientBoth({ id: comp.id, layout: { ...layout, w, h } })
+  }
+
+  /** 拖拽/缩放落点：transient 有值才 commit 一次（pointerup/pointercancel 共用）。
+   *  从 ref 读最新值（不用 setState updater——updater 必须纯函数，副作用在并发下会双调）。 */
+  function commitTransient(): void {
+    const cur = transientRef.current
+    if (cur) onChange(updateComponent(doc, cur.id, { layout: cur.layout }))
+    setTransientBoth(null)
+    resizeRef.current = null
+    dragRef.current = null
   }
 
   function onResizeUp(): void {
-    resizeRef.current = null
+    commitTransient()
   }
 
   function onBoxPointerMove(e: React.PointerEvent, comp: ComponentInstance): void {
@@ -570,27 +622,36 @@ function EditorCanvas({
     if (!drag || drag.id !== comp.id) return
     const rect = drag.rect
     const snap = (v: number) => Math.round(v / 10) * 10
-    const boxW = comp.layout?.w ?? 120
-    const boxH = comp.layout?.h ?? 40
+    const base = transient?.id === comp.id ? transient.layout : (comp.layout ?? { x: 0, y: 0, w: 120, h: 40 })
+    const boxW = base.w
+    const boxH = base.h
     // 双向 clamp：画布内自由拖动，不出界
     const x = Math.min(rect.width - boxW, Math.max(0, snap(e.clientX - rect.left - drag.grabX)))
     const y = Math.min(rect.height - boxH, Math.max(0, snap(e.clientY - rect.top - drag.grabY)))
-    onChange(updateComponent(doc, comp.id, { layout: { ...(comp.layout ?? { w: 120, h: 40 }), x, y } }))
+    if (x !== base.x || y !== base.y) setTransientBoth({ id: comp.id, layout: { ...base, x, y } })
   }
 
   function onBoxPointerUp(): void {
-    dragRef.current = null
+    commitTransient()
   }
 
   const palette = allContracts()
 
-  // 真组件预览：专用 store（组件初始态驱动），组件列表变化即重建。
-  // 预览层禁交互（pointer-events:none），事件类组件不会误发事件；visible=false 的组件以幽灵框呈现。
+  // 真组件预览：专用 store（组件初始态驱动）。按「id:type:props」签名 memo（docs/40 B2）：
+  // 预览初始态只与组件定义相关——标题/表格/逻辑等无关编辑不再整 store 重建
+  //（拖拽期间 doc 不写、签名不变，本就零重建）。compsRef 绕开 memo 对数组引用的依赖。
+  const compsRef = useRef(doc.content.components)
+  compsRef.current = doc.content.components
+  const previewCompsSig = useMemo(
+    () => doc.content.components.map((c) => `${c.id}:${c.type}:${JSON.stringify(c.props ?? {})}`).join(','),
+    [doc.content.components],
+  )
   const previewStore = useMemo(() => {
     const s = new ComponentStore()
-    s.init(doc.content.components.map((c) => ({ ...c, visible: true })))
+    s.init(compsRef.current.map((c) => ({ ...c, visible: true })))
     return s
-  }, [doc.content.components])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 签名不变时复用 store（组件清单从 ref 取最新）
+  }, [previewCompsSig])
 
   const selectedComp = doc.content.components.find((c) => c.id === selected) ?? null
   const viewComps = doc.content.components.filter((c) => (c.view ?? doc.content.views[0]?.id) === currentView)
@@ -651,41 +712,45 @@ function EditorCanvas({
           className="editor-canvas"
           onPointerDown={() => onSelect(null)}
         >
-          {viewComps.map((comp) => (
-            <div
-              key={comp.id}
-              className={`editor-box ${selected === comp.id ? 'is-selected' : ''} ${comp.visible === false ? 'is-ghost' : ''}`}
-              style={comp.layout ? { left: comp.layout.x, top: comp.layout.y, width: comp.layout.w, height: comp.layout.h } : undefined}
-              data-comp-type={comp.type}
-              onPointerDown={(e) => {
-                e.stopPropagation()
-                onBoxPointerDown(e, comp)
-              }}
-              onPointerMove={(e) => onBoxPointerMove(e, comp)}
-              onPointerUp={onBoxPointerUp}
-              onPointerCancel={onBoxPointerUp}
-              title={`${comp.type} · ${comp.name ?? comp.id}`}
-            >
-              <div className="editor-box-preview" inert={true as unknown as boolean}>
-                {/* 预览盒已由 inset:0 定位到布局框内：把 layout.x/y 清零，
-                    否则组件视图的绝对定位（boxStyle）会按画布坐标二次偏移并溢出裁切 */}
-                <ComponentView
-                  spec={{ ...comp, visible: true, layout: comp.layout ? { ...comp.layout, x: 0, y: 0 } : undefined }}
-                  store={previewStore}
-                  emit={noopEmit}
+          {viewComps.map((comp) => {
+            const tl = transient?.id === comp.id ? transient.layout : null
+            const layout = tl ?? comp.layout
+            return (
+              <div
+                key={comp.id}
+                className={`editor-box ${selected === comp.id ? 'is-selected' : ''} ${comp.visible === false ? 'is-ghost' : ''}`}
+                style={layout ? { left: layout.x, top: layout.y, width: layout.w, height: layout.h } : undefined}
+                data-comp-type={comp.type}
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  onBoxPointerDown(e, comp)
+                }}
+                onPointerMove={(e) => onBoxPointerMove(e, comp)}
+                onPointerUp={onBoxPointerUp}
+                onPointerCancel={onBoxPointerUp}
+                title={`${comp.type} · ${comp.name ?? comp.id}`}
+              >
+                <div className="editor-box-preview" inert={true as unknown as boolean}>
+                  {/* 预览盒已由 inset:0 定位到布局框内：把 layout.x/y 清零，
+                      否则组件视图的绝对定位（boxStyle）会按画布坐标二次偏移并溢出裁切 */}
+                  <ComponentView
+                    spec={{ ...comp, visible: true, layout: layout ? { ...layout, x: 0, y: 0 } : undefined }}
+                    store={previewStore}
+                    emit={noopEmit}
+                  />
+                </div>
+                <span className="box-label">{comp.name ?? comp.id}</span>
+                <span
+                  className="box-resize"
+                  title="拖拽调整大小"
+                  onPointerDown={(e) => onResizeDown(e, comp)}
+                  onPointerMove={(e) => onResizeMove(e, comp)}
+                  onPointerUp={onResizeUp}
+                  onPointerCancel={onResizeUp}
                 />
               </div>
-              <span className="box-label">{comp.name ?? comp.id}</span>
-              <span
-                className="box-resize"
-                title="拖拽调整大小"
-                onPointerDown={(e) => onResizeDown(e, comp)}
-                onPointerMove={(e) => onResizeMove(e, comp)}
-                onPointerUp={onResizeUp}
-                onPointerCancel={onResizeUp}
-              />
-            </div>
-          ))}
+            )
+          })}
           {viewComps.length === 0 && (
             <p className="muted" style={{ padding: 24 }}>
               当前视图没有组件——从左侧组件面板添加
