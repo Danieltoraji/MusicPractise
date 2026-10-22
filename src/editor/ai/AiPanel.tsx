@@ -25,6 +25,7 @@ import { PLAN_TOOLS } from '../../ai/tools-plan'
 import { DEBUG_TOOLS } from '../../ai/tools-debug'
 import { WRITE_TOOLS } from '../../ai/tools-write'
 import type { LevelDoc } from '../../engine/level'
+import { DRAFT_SLOTS, loadDraft, saveDraft } from '../draftStore'
 
 interface Props {
   doc: LevelDoc
@@ -69,7 +70,11 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
   docRef.current = doc
   const applyRef = useRef(onApplyDoc)
   applyRef.current = onApplyDoc
-  const [input, setInput] = useState('')
+  // 输入草稿跨 Tab 存活（docs/40 C1）：面板随 Tab 条件渲染卸载，草稿经 draftStore 保留
+  const [input, setInput] = useState(() => loadDraft<string>(doc.id, DRAFT_SLOTS.aiInput) ?? '')
+  useEffect(() => {
+    saveDraft(doc.id, DRAFT_SLOTS.aiInput, input)
+  }, [doc.id, input])
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)

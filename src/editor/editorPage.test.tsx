@@ -369,3 +369,109 @@ describe('EditorPage 保存链路收口（docs/40 A1/A2/A3/A7）', () => {
     window.location.hash = '#/library'
   })
 })
+
+describe('EditorPage 草稿与内置副本（docs/40 R4：C1/C5）', () => {
+  beforeAll(() => {
+    Element.prototype.setPointerCapture = (): void => {}
+    Element.prototype.releasePointerCapture = (): void => {}
+  })
+
+  it('C1 回归（§15.2 第 3 条反转）：画布选「视图二」→ 切 JSON → 切回，视图保持不再回落主视图', async () => {
+    window.location.hash = '#/edit/new'
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root!.render(<EditorPage id="new" />)
+    })
+    await flush()
+    // 建第二个视图
+    const addViewBtn = [...container!.querySelectorAll('button')].find((b) => b.textContent === '+ 视图')!
+    await act(async () => {
+      addViewBtn.click()
+    })
+    await flush()
+    // 选中「视图二」
+    const view2 = [...container!.querySelectorAll('.views-open')].find((b) => b.textContent?.includes('视图2')) as HTMLElement
+    await act(async () => view2.click())
+    await flush()
+    expect([...container!.querySelectorAll('.views-open')].find((b) => b.textContent?.startsWith('▸'))!.textContent).toContain('视图2')
+    // 切 JSON 再切回画布
+    const jsonTab = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === 'JSON') as HTMLElement
+    const canvasTab = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === '画布') as HTMLElement
+    await act(async () => jsonTab.click())
+    await flush()
+    await act(async () => canvasTab.click())
+    await flush()
+    // 修复前：切走卸载 → 视图退回主视图
+    const current = [...container!.querySelectorAll('.views-open')].find((b) => b.textContent?.startsWith('▸'))!
+    expect(current.textContent).toContain('视图2')
+    window.location.hash = '#/library'
+  })
+
+  it('C5 回归：内置示例保存后原地另存副本（hash 换 id、不重挂——撤销栈保留、提示直接展示）', async () => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root!.render(<EditorPage id={DOC_ID} />)
+    })
+    await flush()
+    // 把该记录标成内置（模拟内置示例编辑场景）
+    const rec = await db.resources.get(DOC_ID)
+    await db.resources.put({ ...(rec as object), builtIn: 1 } as never)
+    // 加组件产生历史
+    const addBtn = [...container!.querySelectorAll('.palette button')].find((b) => b.textContent!.startsWith('+ '))!
+    await act(async () => addBtn.click())
+    await flush()
+    const undoBefore = [...container!.querySelectorAll('.editor-head button')].find((b) => b.textContent === '↶') as HTMLButtonElement
+    expect(undoBefore.disabled).toBe(false)
+    // 保存 → 另存副本
+    await act(async () => {
+      saveButton().click()
+    })
+    await flush()
+    expect(window.location.hash).toMatch(/^#\/edit\/res_/) // 换到副本 id
+    expect(window.location.hash).not.toContain(DOC_ID)
+    // 未重挂：撤销栈保留（一次 undo 可回退加组件）
+    const undoAfter = [...container!.querySelectorAll('.editor-head button')].find((b) => b.textContent === '↶') as HTMLButtonElement
+    expect(undoAfter.disabled).toBe(false)
+    expect(container!.textContent).toContain('已另存为你的副本')
+    // 脏标已清
+    expect(saveButton().textContent).not.toContain(' *')
+  })
+})
+
+describe('EditorPage Inspector props（docs/40 R4 D7）', () => {
+  beforeAll(() => {
+    Element.prototype.setPointerCapture = (): void => {}
+    Element.prototype.releasePointerCapture = (): void => {}
+  })
+
+  it('props JSON 输入 null：明确报错「必须是 JSON 对象」（null 裁决）', async () => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root!.render(<EditorPage id={DOC_ID} />)
+    })
+    await flush()
+    const addBtn = [...container!.querySelectorAll('.palette button')].find((b) => b.textContent!.startsWith('+ '))!
+    await act(async () => addBtn.click())
+    await flush()
+    await act(async () => {
+      container!.querySelector('.editor-box')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 3 }))
+    })
+    // 展开 props JSON details 并输入 null
+    const summary = [...container!.querySelectorAll('.inspector details summary')].find((el) => el.textContent?.includes('props JSON')) as HTMLElement
+    await act(async () => summary.click())
+    await flush()
+    const ta = container!.querySelector('.inspector details textarea') as HTMLTextAreaElement
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+    await act(async () => {
+      setter.call(ta, 'null')
+      ta.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(container!.querySelector('.inspector')!.textContent).toContain('必须是 JSON 对象')
+  })
+})

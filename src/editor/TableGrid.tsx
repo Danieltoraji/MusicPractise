@@ -13,6 +13,7 @@ import type { ColumnType, LevelDoc } from '../engine/level'
 import { FlowEditor } from './FlowEditor'
 import { ListEditorModal, listEntriesFromCell } from './ListEditor'
 import { registerModalOpen } from './keyGuard'
+import { DRAFT_SLOTS, loadDraft, saveDraft } from './draftStore'
 import type { Json } from '../engine/expr'
 import {
   addTableColumn,
@@ -47,8 +48,17 @@ const clip = (s: string, n = 60): string => (s.length > n ? `${s.slice(0, n)}…
 
 export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc, tag?: string) => void }) {
   const table = doc.content.table
-  const [colW, setColW] = useState<Record<string, number>>({})
-  const [rowH, setRowH] = useState<Record<number, number>>({})
+  // 列宽/行高布局态跨 Tab 存活（docs/40 C1/D3 部分）：经 draftStore 按列 key / 行号保留——
+  // 此前组件内 state 切走即丢。键仍为列 key / 行号（稳定 rowId 改造见 docs/41 R8 D3）
+  const [colW, setColW] = useState<Record<string, number>>(
+    () => loadDraft<{ colW: Record<string, number>; rowH: Record<number, number> }>(doc.id, DRAFT_SLOTS.tableLayout)?.colW ?? {},
+  )
+  const [rowH, setRowH] = useState<Record<number, number>>(
+    () => loadDraft<{ colW: Record<string, number>; rowH: Record<number, number> }>(doc.id, DRAFT_SLOTS.tableLayout)?.rowH ?? {},
+  )
+  useEffect(() => {
+    saveDraft(doc.id, DRAFT_SLOTS.tableLayout, { colW, rowH })
+  }, [doc.id, colW, rowH])
   const [newCol, setNewCol] = useState('')
   const [colErr, setColErr] = useState('')
   const [jsonCell, setJsonCell] = useState<{ row: number; key: string } | null>(null)

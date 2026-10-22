@@ -32,6 +32,7 @@ import {
   updateComponent,
 } from './docState'
 import { findDuplicateIdErrors } from '../library/validate'
+import { DRAFT_SLOTS, clearDraft, loadDraft, saveDraft } from './draftStore'
 
 type Tab = 'canvas' | 'graph' | 'script' | 'table' | 'json'
 
@@ -70,13 +71,9 @@ interface Props {
 export function EditorPage({ id }: Props) {
   const record = useLiveQuery(async () => {
     if (id === 'new') return 'new'
-    let got = await db.resources.get(id)
-    if (!got) {
-      // 防御 ensureSeeded 与首次查询并发的理论窗口：短暂等待后重试一次
-      await new Promise((r) => setTimeout(r, 150))
-      got = await db.resources.get(id)
-    }
-    return got ?? null
+    // App 层已有 seeded 门控（App.tsx 渲染前等待 ensureSeeded 完成），
+    // 此处不再需要 150ms 重试补丁（docs/40 A9）
+    return (await db.resources.get(id)) ?? null
   }, [id], 'loading')
   const [doc, setDoc] = useState<LevelDoc | null>(null)
   const [tab, setTab] = useState<Tab>('canvas')
@@ -86,13 +83,8 @@ export function EditorPage({ id }: Props) {
   const [scriptRange, setScriptRange] = useState<ScriptRangeReport | null>(null)
   const [saveErrors, setSaveErrors] = useState<string[]>([])
   const [lintWarnings, setLintWarnings] = useState<string[]>([])
-  // 一次性提示：跨重挂载传达（内置另存副本后 hash 切换会重建本组件，评审 P2-2）。
-  // C6：按 docId 键控（单槽会在「副本页从未挂载」时残留并错显到下一个编辑器）。
-  const [savedTip, setSavedTip] = useState(() => {
-    const n = sessionStorage.getItem(`edit-notice:${id}`) ?? ''
-    if (n) sessionStorage.removeItem(`edit-notice:${id}`)
-    return n
-  })
+  // 一次性提示（C5 后内置副本原地换 id，同挂载内 setSavedTip 直接展示，无需跨重挂通道）
+  const [savedTip, setSavedTip] = useState('')
   const [dirty, setDirty] = useState(false)
 
   // dirty-guard：刷新/关闭前浏览器原生确认；站内 hash 跳转在捕获阶段确认，取消则回滚 hash。
@@ -286,8 +278,19 @@ export function EditorPage({ id }: Props) {
       await putResource(saved as never)
       baselineVersionRef.current = String(saved.version)
       if (isBuiltIn) {
-        sessionStorage.setItem(`edit-notice:${saved.id}`, '内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
-        window.location.hash = `#/edit/${saved.id}` // 切到副本继续编辑（App 按 hash 重挂载）
+        // C5（docs/40）：原地换 id 而非 hash 重挂——重挂会清空撤销栈/面板/草稿。
+        // replaceState 不触发 hashchange，props.id 仍指内置记录（其 record 不会被本保存触碰，
+        // useLiveQuery 无扰动）；刷新后 App 按新 hash 正常装载副本。
+        setDoc(saved)
+        cleanDocRef.current = saved
+        pendingTagRef.current = null
+        loadedIdRef.current = id // 防装载 effect 因 record 引用变化重复装载
+        baselineVersionRef.current = String(saved.version)
+        setDirty(false)
+        dirtyRef.current = false
+        setSavedTip('内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
+        window.history.replaceState(null, '', `#/edit/${saved.id}`)
+        prevHashRef.current = window.location.hash
         return { ok: true, savedId: saved.id }
       }
       if (docRef.current === latest) {
@@ -496,7 +499,9 @@ export function EditorPage({ id }: Props) {
         </ErrorBoundary>
 
         {/* graph tab 的 AI 面板由 GraphEditor 在工作台内入坞（随深浅主题换肤，docs/29）；
-            其余 tab 在编辑器右栏渲染——同一会话 store，切 tab 对话连续 */}
+            其余 tab 在编辑器右栏渲染——同一会话 store，切 tab 对话连续。
+            B6（docs/40）：AI 写入携带 tag='ai'——一次 run 的连续写工具在撤销栈中合并，
+            一次 Ctrl+Z 回退整个 AI 任务；用户手动编辑（无 tag）自然打断分段 */}
         {aiOpen && tab !== 'graph' && (
           <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
             <AiPanel
@@ -506,7 +511,7 @@ export function EditorPage({ id }: Props) {
                 componentId: tab === 'canvas' ? selected : null,
                 scriptRange: tab === 'script' ? scriptRange : null,
               }}
-              onApplyDoc={update}
+              onApplyDoc={(next) => update(next, 'ai')}
               onClose={() => setAiOpen(false)}
             />
           </Suspense>
@@ -547,8 +552,12 @@ function EditorCanvas({
     transientRef.current = v
     setTransient(v)
   }, [])
-  // 当前编辑的视图（组件互斥渲染的编辑侧对应物；不随 doc 变化重置）
-  const [view, setView] = useState(doc.content.views[0]?.id ?? 'main')
+  // 当前编辑的视图（组件互斥渲染的编辑侧对应物）。草稿跨 Tab 存活（docs/40 C1：
+  // 此前切到 JSON 再切回，视图退回首视图）；视图被删除时回落首视图
+  const [view, setView] = useState(() => loadDraft<string>(doc.id, DRAFT_SLOTS.canvasView) ?? doc.content.views[0]?.id ?? 'main')
+  useEffect(() => {
+    saveDraft(doc.id, DRAFT_SLOTS.canvasView, view)
+  }, [doc.id, view])
   const currentView = doc.content.views.some((v) => v.id === view) ? view : (doc.content.views[0]?.id ?? 'main')
 
   // Delete/Backspace 快捷删除选中组件（走 onChange 入撤销栈）。守卫统一走 keyGuard
@@ -792,16 +801,20 @@ function Inspector({
   const [propsText, setPropsText] = useState(() => JSON.stringify(comp.props ?? {}, null, 2))
   const [propsErr, setPropsErr] = useState('')
 
-  // 切换选中组件时同步文本
+  // 同步信号 = [comp.id, comp.props 引用]（docs/40 D7）：仅按 id 曾让 undo/AI/结构化
+  // 控件改动后 textarea 停留旧 JSON，继续编辑会整体覆盖新值。正在报错（编辑中草稿）不覆盖。
   useEffect(() => {
-    setPropsText(JSON.stringify(comp.props ?? {}, null, 2))
-  }, [comp.id])
+    if (!propsErr) setPropsText(JSON.stringify(comp.props ?? {}, null, 2))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- propsErr 变化本身不应触发覆盖
+  }, [comp.id, comp.props])
 
   const applyProps = (text: string): void => {
     setPropsText(text)
     const v = parseJsonText(text)
-    if (v === null && text.trim() !== '') setPropsErr('不是合法 JSON')
-    else {
+    if (v === null && text.trim() !== '') {
+      // 裁决（docs/40 D7）：props 不允许 null——必须是 JSON 对象；报错文案明示
+      setPropsErr('props 必须是 JSON 对象（写成 {} 清空全部属性；null 不是对象）')
+    } else {
       setPropsErr('')
       onChange({ props: v ?? {} })
     }
@@ -943,14 +956,15 @@ function safeContract(type: string) {
 // ---------------------------------------------------------------------------
 
 function JsonTab({ doc, onApply }: { doc: LevelDoc; onApply: (doc: LevelDoc) => void }) {
-  const [text, setText] = useState(() => JSON.stringify(doc, null, 2))
+  // 草稿跨 Tab 存活（docs/40 C1）：未应用的 JSON 文本经 draftStore 保留——
+  // 此前切走 Tab 卸载即丢（「回到原样」承诺冲突）；应用成功后清除草稿
+  const [text, setText] = useState(() => loadDraft<string>(doc.id, DRAFT_SLOTS.jsonText) ?? JSON.stringify(doc, null, 2))
   const [err, setErr] = useState('')
 
-  // doc 外部变化（保存/试运行返回等）时同步文本；应用 JSON 引起的 setDoc
-  // 会带上新 doc 再触发本 effect，文本被格式化刷新属预期
+  // 草稿持久化（卸载/切 Tab 不丢）；经 effect 同步，避免渲染期副作用
   useEffect(() => {
-    setText(JSON.stringify(doc, null, 2))
-  }, [doc])
+    saveDraft(doc.id, DRAFT_SLOTS.jsonText, text)
+  }, [doc.id, text])
 
   return (
     <div className="json-tab">
@@ -973,6 +987,7 @@ function JsonTab({ doc, onApply }: { doc: LevelDoc; onApply: (doc: LevelDoc) => 
               return
             }
             onApply(result.doc)
+            clearDraft(doc.id, DRAFT_SLOTS.jsonText) // 已落地：下次挂载从 doc 重新生成
             setErr('')
           } catch (e) {
             setErr(String(e instanceof Error ? e.message : e))
