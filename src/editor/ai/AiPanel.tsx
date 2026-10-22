@@ -88,13 +88,15 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
   }, [session.messages.length, session.busy, session.error])
 
   // AI 新建关卡开场（批次4）：资源库写入的 kickoff 指令 → 本 doc 首次挂载时自动以 agent 开工
+  // 键按 docId 键控（docs/40 C6）：跨挂载残留只影响同 id 的面板，不会错显/覆盖其它关卡
   useEffect(() => {
-    const raw = sessionStorage.getItem('ai-kickoff')
+    const key = `ai-kickoff:${doc.id}`
+    const raw = sessionStorage.getItem(key)
     if (!raw) return
     try {
       const kickoff = JSON.parse(raw) as { docId: string; prompt: string }
       if (kickoff.docId !== doc.id || !kickoff.prompt.trim()) return
-      sessionStorage.removeItem('ai-kickoff')
+      sessionStorage.removeItem(key)
       patchSession(doc.id, { mode: 'agent' })
       if (!activeProfile()) {
         setInput(kickoff.prompt.trim()) // 未配置 Key：先填入输入框，配置后一键发送
@@ -102,7 +104,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       }
       void sendText(kickoff.prompt.trim())
     } catch {
-      sessionStorage.removeItem('ai-kickoff')
+      sessionStorage.removeItem(key)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.id])

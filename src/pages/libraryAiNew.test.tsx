@@ -68,7 +68,7 @@ describe('LibraryPage AI 新建关卡（批次4）', () => {
     await flushUntil(() => window.location.hash.startsWith('#/edit/'))
     const newId = window.location.hash.slice('#/edit/'.length)
     expect(newId).toMatch(/^res_/)
-    const kickoff = JSON.parse(sessionStorage.getItem('ai-kickoff')!)
+    const kickoff = JSON.parse(sessionStorage.getItem(`ai-kickoff:${newId}`)!)
     expect(kickoff).toMatchObject({ docId: newId, prompt: '大三和弦听辨练习，10 题' })
     // 空关卡已入库
     const rec = await db.resources.get(newId)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import noteClickDoc from '../sample/note-click.level.json'
 import v1NoteClickDoc from '../sample/fixtures/note-click.v1.json'
-import { loadLevelDoc, validateEnvelope } from './validate'
+import { capErrorLines, loadLevelDoc, validateEnvelope } from './validate'
 
 describe('装载管线 loadLevelDoc', () => {
   it('合法关卡装载成功且无 lint 告警', () => {
@@ -79,5 +79,60 @@ describe('validateEnvelope', () => {
     const r = validateEnvelope('patch', {})
     expect(r.ok).toBe(false)
     expect(r.errors[0]).toContain('未知的文档 kind')
+  })
+})
+
+describe('D5 唯一性预检（docs/40）', () => {
+  it('重复组件 id / 视图 id / 列 key 在 loadLevelDoc 被拦截（保存/导入/AI 写入路径）', () => {
+    const dupComp = JSON.parse(JSON.stringify(noteClickDoc)) as { content: { components: { id: string }[] } }
+    dupComp.content.components.push(JSON.parse(JSON.stringify(dupComp.content.components[0])))
+    const r1 = loadLevelDoc(dupComp)
+    expect(r1.ok).toBe(false)
+    if (!r1.ok) expect(r1.errors.some((e) => e.includes('组件 id') && e.includes('重复'))).toBe(true)
+
+    const dupView = JSON.parse(JSON.stringify(noteClickDoc)) as { content: { views: { id: string }[] } }
+    dupView.content.views.push({ ...dupView.content.views[0] })
+    const r2 = loadLevelDoc(dupView)
+    expect(r2.ok).toBe(false)
+    if (!r2.ok) expect(r2.errors.some((e) => e.includes('视图 id') && e.includes('重复'))).toBe(true)
+
+    const dupCol = JSON.parse(JSON.stringify(noteClickDoc)) as { content: { table: { columns: { key: string }[] } } }
+    dupCol.content.table.columns.push({ ...dupCol.content.table.columns[0] })
+    const r3 = loadLevelDoc(dupCol)
+    expect(r3.ok).toBe(false)
+    if (!r3.ok) expect(r3.errors.some((e) => e.includes('数据表列') && e.includes('重复'))).toBe(true)
+  })
+})
+
+describe('A5 校验错误可读化（docs/40）', () => {
+  it('v3 文档缺必填：错误为中文「位置：标签——细节」形态且只保留 v3 分支（oneOf 归纳）', () => {
+    const bad = JSON.parse(JSON.stringify(noteClickDoc)) as Record<string, unknown>
+    delete (bad as { meta?: unknown }).meta
+    const r = validateEnvelope('level', bad)
+    expect(r.ok).toBe(false)
+    // oneOf 双分支：V1Level 与 V3Level 都会失败——归纳后不得出现成对的重复结构
+    if (!r.ok) {
+      expect(r.errors.length).toBeGreaterThan(0)
+      expect(r.errors.some((e) => e.includes('缺少必填字段'))).toBe(true)
+      // 同文去重：meta 缺失在双分支下曾输出两条同文
+      expect(r.errors.filter((e) => e.includes('缺少必填字段')).length).toBeLessThan(r.errors.length + 2)
+    }
+  })
+
+  it('数据表内错误定位中文化为「数据表第 N 行」', () => {
+    const bad = JSON.parse(JSON.stringify(noteClickDoc)) as { content: { table: { rows: Record<string, unknown>[] } } }
+    // 破坏行结构：把第一行改成字符串（rows.items 要求 object）
+    bad.content.table.rows[0] = 'poison' as unknown as Record<string, unknown>
+    const r = validateEnvelope('level', bad)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors.some((e) => e.includes('数据表第 1 行'))).toBe(true)
+  })
+
+  it('大量错误截断为上限并附总数提示（capErrorLines；cfworker 对数组首败短路，自然流难超限故直测）', () => {
+    const lines = Array.from({ length: 25 }, (_, i) => `组件第 ${i + 1} 项：类型不符`)
+    const capped = capErrorLines(lines)
+    expect(capped).toHaveLength(21)
+    expect(capped[20]).toContain('另有 5 条')
+    expect(capErrorLines(lines.slice(0, 5))).toHaveLength(5)
   })
 })

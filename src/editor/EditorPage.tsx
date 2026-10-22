@@ -20,7 +20,7 @@ import type { ComponentInstance, LevelDoc } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { parseExpr, ExprError } from '../engine/expr'
 import { migrateDocToV3 } from '../engine/migrateDoc'
-import { copyForEditing } from './docState'
+import { bumpVersion, copyForEditing } from './docState'
 import {
   addComponent,
   addView,
@@ -31,6 +31,7 @@ import {
   setMeta,
   updateComponent,
 } from './docState'
+import { findDuplicateIdErrors } from '../library/validate'
 
 type Tab = 'canvas' | 'graph' | 'script' | 'table' | 'json'
 
@@ -85,10 +86,11 @@ export function EditorPage({ id }: Props) {
   const [scriptRange, setScriptRange] = useState<ScriptRangeReport | null>(null)
   const [saveErrors, setSaveErrors] = useState<string[]>([])
   const [lintWarnings, setLintWarnings] = useState<string[]>([])
-  // 一次性提示：跨重挂载传达（内置另存副本后 hash 切换会重建本组件，评审 P2-2）
+  // 一次性提示：跨重挂载传达（内置另存副本后 hash 切换会重建本组件，评审 P2-2）。
+  // C6：按 docId 键控（单槽会在「副本页从未挂载」时残留并错显到下一个编辑器）。
   const [savedTip, setSavedTip] = useState(() => {
-    const n = sessionStorage.getItem('edit-notice') ?? ''
-    if (n) sessionStorage.removeItem('edit-notice')
+    const n = sessionStorage.getItem(`edit-notice:${id}`) ?? ''
+    if (n) sessionStorage.removeItem(`edit-notice:${id}`)
     return n
   })
   const [dirty, setDirty] = useState(false)
@@ -132,6 +134,8 @@ export function EditorPage({ id }: Props) {
   const loadedIdRef = useRef<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadTick, setLoadTick] = useState(0)
+  // A8 外部修改检测：装载时的版本号基线；保存后随 bump 前移（引用比对不可行——Dexie 回读恒新对象）
+  const baselineVersionRef = useRef<string | null>(null)
   useEffect(() => {
     if (record === 'loading' || record === undefined || record === null) return
     if (loadedIdRef.current === id) return
@@ -139,12 +143,17 @@ export function EditorPage({ id }: Props) {
     if (record === 'new') {
       setDoc(blankLevelDoc())
       setLoadError(null)
+      baselineVersionRef.current = null
       return
     }
     try {
       const migrated = migrateDocToV3((record as LibraryRecord).doc)
       setDoc(migrated)
       setLoadError(null)
+      baselineVersionRef.current = String((record as LibraryRecord).version ?? '')
+      // 装载宽松告警（D5）：重复 id 不拦截（「先放行后清洗」铁律），提示待保存时修正——
+      // 保存路径走 loadLevelDoc 严格拦截
+      setLintWarnings(findDuplicateIdErrors(migrated))
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
       setDoc(null)
@@ -227,14 +236,26 @@ export function EditorPage({ id }: Props) {
   }, [undo, redo])
 
   const savingRef = useRef(false)
-  /** 保存：普通关卡覆盖原记录；内置示例不可覆盖（会被种子重写）——自动另存为用户副本并切换过去 */
+  const [saving, setSaving] = useState(false)
+  /**
+   * 保存（docs/40 A1/A2/A3/A6/A7 收口）：
+   * - 以「await 窗口内的最新编辑」为保存对象（docRef.current），而非点击瞬间的闭包快照；
+   * - put 完成后仅当期间没有新编辑才清脏并回写规范化结果（bump 后版本 + 迁移器规范化）；
+   *   期间又有编辑则保留脏标并提示再次保存（绝不静默丢弃）；
+   * - 版本自动升修订号（A3 裁决）：与导入/云盘「同 id 同版本跳过」规则自洽；
+   * - 失败 catch → 可读错误条，脏标保留、按钮复位可重试（A2）；
+   * - #/edit/new 首存成功后 replaceState 原地切真实 id（A7，不触发重挂）；
+   * - 内置示例不可覆盖：另存副本并切换（C6：notice 按副本 id 键控）。
+   */
   const save = useCallback(async (): Promise<{ ok: boolean; savedId: string | null }> => {
     if (!doc || savingRef.current) return { ok: false, savedId: null } // 防重入：异步保存期间快速双击不产生双副本（评审 P2-4）
     savingRef.current = true
+    setSaving(true)
     try {
       const existing = await db.resources.get(doc.id)
+      const latest = docRef.current ?? doc // await 窗口内的最新编辑（A1）
       const isBuiltIn = existing?.builtIn === 1
-      const target = isBuiltIn ? copyForEditing(doc) : doc
+      const target = isBuiltIn ? copyForEditing(latest) : latest
       const result = loadLevelDoc(target)
       if (!result.ok) {
         setSaveErrors(result.errors)
@@ -242,21 +263,35 @@ export function EditorPage({ id }: Props) {
       }
       setSaveErrors([])
       setLintWarnings(result.lintWarnings)
-      await putResource(result.doc as never)
-      setDirty(false)
-      dirtyRef.current = false // 显式同步：不依赖「React 调度先于 hashchange 任务」的时序假设（评审 P2-1）
+      const saved = bumpVersion(result.doc)
+      await putResource(saved as never)
+      baselineVersionRef.current = String(saved.version)
       if (isBuiltIn) {
-        sessionStorage.setItem('edit-notice', '内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
-        setDoc(result.doc)
-        window.location.hash = `#/edit/${result.doc.id}` // 切到副本继续编辑（App 按 hash 重挂载）
-      } else {
-        setSavedTip(`已保存（v${result.doc.version}）`)
+        sessionStorage.setItem(`edit-notice:${saved.id}`, '内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
+        window.location.hash = `#/edit/${saved.id}` // 切到副本继续编辑（App 按 hash 重挂载）
+        return { ok: true, savedId: saved.id }
       }
-      return { ok: true, savedId: result.doc.id }
+      if (docRef.current === latest) {
+        setDoc(saved) // A6：内存与库内一致（规范化 + 新版本），消除列类型等漂移
+        setDirty(false)
+        dirtyRef.current = false // 显式同步：不依赖「React 调度先于 hashchange 任务」的时序假设（评审 P2-1）
+        if (id === 'new') {
+          window.history.replaceState(null, '', `#/edit/${saved.id}`) // A7：不触发 hashchange/重挂
+          prevHashRef.current = window.location.hash // dirty-guard 回滚基线同步前移
+        }
+        setSavedTip(`已保存（v${saved.version}）`)
+      } else {
+        setSavedTip(`已保存（v${saved.version}）——保存期间又有新的修改，请再次保存`)
+      }
+      return { ok: true, savedId: saved.id }
+    } catch (err) {
+      setSaveErrors([`保存失败：${err instanceof Error ? err.message : String(err)}`])
+      return { ok: false, savedId: null }
     } finally {
       savingRef.current = false // 保存结束后必须释放，否则本次挂载内保存/试运行永久失效
+      setSaving(false)
     }
-  }, [doc])
+  }, [doc, id])
 
   async function tryRun(): Promise<void> {
     const r = await save()
@@ -303,6 +338,11 @@ export function EditorPage({ id }: Props) {
     )
   }
 
+  // A8：库内记录版本与基线不同 = 其他窗口/导入覆盖过此文档（loadedIdRef 拦截重装后用户不可见）
+  const externalChanged =
+    !!(record && typeof record === 'object' && doc && loadedIdRef.current === id && baselineVersionRef.current !== null) &&
+    (record as LibraryRecord).version !== baselineVersionRef.current
+
   return (
     <div className="page editor">
       <div className="editor-head">
@@ -331,14 +371,38 @@ export function EditorPage({ id }: Props) {
           </button>
         </span>
         <span className="editor-head-group">
-          <button type="button" className="primary" onClick={() => save()}>
-            💾 保存{dirty ? ' *' : ''}
+          <button type="button" className="primary" onClick={() => void save()} disabled={saving}>
+            {saving ? '保存中…' : `💾 保存${dirty ? ' *' : ''}`}
           </button>
           <button type="button" onClick={tryRun}>
             ▶ 试运行
           </button>
         </span>
       </div>
+      {externalChanged && (
+        <div className="editor-lint">
+          ⚠ 文档已在其他窗口被修改（库内版本 v{String((record as LibraryRecord).version)}）。继续编辑并保存将覆盖外部版本。
+          <button
+            type="button"
+            onClick={() => {
+              const rec = record as LibraryRecord
+              try {
+                const migrated = migrateDocToV3(rec.doc)
+                setDoc(migrated)
+                baselineVersionRef.current = String(rec.version)
+                setDirty(false)
+                dirtyRef.current = false
+                setSavedTip('')
+                setLintWarnings(findDuplicateIdErrors(migrated))
+              } catch (err) {
+                setSaveErrors([`外部版本装载失败：${err instanceof Error ? err.message : String(err)}`])
+              }
+            }}
+          >
+            加载外部版本（覆盖当前编辑）
+          </button>
+        </div>
+      )}
       {saveErrors.length > 0 && (
         <div className="editor-errors">
           <b>无法保存，请修正：</b>
@@ -835,9 +899,15 @@ function JsonTab({ doc, onApply }: { doc: LevelDoc; onApply: (doc: LevelDoc) => 
               return
             }
             // 保留当前关卡 id：应用 JSON 改 id 会让保存落为新记录、URL 与库脱节；
-            // 迁移器统一出 v3（评审 P1-1：防止 JSON 页注入 v1 形态致画布崩溃）
+            // 应用前走完整 loadLevelDoc 预检（docs/40 D5/A5：schema + 重复 id 拦截，
+            // 与保存/导入/AI 写入同一管线——此前直贴 migrate 会放进毒结构到画布才崩）
             parsed.id = doc.id
-            onApply(migrateDocToV3(parsed))
+            const result = loadLevelDoc(parsed)
+            if (!result.ok) {
+              setErr(result.errors.slice(0, 8).join('\n'))
+              return
+            }
+            onApply(result.doc)
             setErr('')
           } catch (e) {
             setErr(String(e instanceof Error ? e.message : e))
@@ -846,7 +916,7 @@ function JsonTab({ doc, onApply }: { doc: LevelDoc; onApply: (doc: LevelDoc) => 
       >
         应用 JSON 到编辑器
       </button>
-      {err && <span className="tone-error" style={{ marginLeft: 12 }}>{err}</span>}
+      {err && <pre className="tone-error" style={{ marginLeft: 12, whiteSpace: 'pre-wrap' }}>{err}</pre>}
       <textarea rows={24} value={text} onChange={(e) => setText(e.target.value)} />
     </div>
   )

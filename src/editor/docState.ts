@@ -59,6 +59,18 @@ export function copyForEditing(doc: LevelDoc): LevelDoc {
   return copy
 }
 
+/**
+ * 保存升版（docs/40 A3 裁决 2026-10-23）：保存成功时自动递增 semver 修订号（0.1.0 → 0.1.1）。
+ * 导入/云盘冲突规则「同 id 同版本跳过、异版本覆盖」依赖版本具备内容变更语义——
+ * 编辑器保存是内容变更的主要入口，此前 version 永不递增会让导出/同步静默跳过更新。
+ * 版本非法（手改坏）时保留原值不抛错——升版失败不应阻断保存。
+ */
+export function bumpVersion(doc: LevelDoc): LevelDoc {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(doc.version ?? ''))
+  if (!m) return doc
+  return { ...doc, version: `${m[1]}.${m[2]}.${Number(m[3]) + 1}` }
+}
+
 // ---------------------------------------------------------------------------
 // 视图管理（v3）
 // ---------------------------------------------------------------------------
@@ -138,12 +150,13 @@ export function removeComponent(doc: LevelDoc, cid: string): LevelDoc {
 // 数据表（v3：取代 questions；与变量平权的自定义字段大表格）
 // ---------------------------------------------------------------------------
 
-/** 新增列：key 需为合法标识符且不与现有列重名 */
+/** 新增列：key 需为合法标识符且不与现有列重名；显式 type:'text'
+ *  （docs/40 A6：缺省 type 会让 UI 按 text 渲染而迁移器按行值推断入库，内存与库内漂移） */
 export function addTableColumn(doc: LevelDoc, key: string, label?: string): LevelDoc {
   const next = structuredClone(doc)
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`非法列名: ${key}`)
   if (next.content.table.columns.some((c) => c.key === key)) throw new Error(`列名已存在: ${key}`)
-  next.content.table.columns.push({ key, label })
+  next.content.table.columns.push({ key, label, type: 'text' })
   for (const row of next.content.table.rows) row[key] = null
   return next
 }

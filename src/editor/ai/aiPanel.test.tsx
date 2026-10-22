@@ -381,7 +381,7 @@ describe('AiPanel 开场自动发送与预设（批次4）', () => {
     setKey()
     clearSession(DOC.id)
     const kickoffDoc = blankLevelDoc()
-    sessionStorage.setItem('ai-kickoff', JSON.stringify({ docId: kickoffDoc.id, prompt: '做一个三和弦听辨练习' }))
+    sessionStorage.setItem(`ai-kickoff:${kickoffDoc.id}`, JSON.stringify({ docId: kickoffDoc.id, prompt: '做一个三和弦听辨练习' }))
     const fetchMock = vi.fn(async () => bodyResponse({ choices: [{ message: { content: '收到，开始搭建。' } }] }))
     vi.stubGlobal('fetch', fetchMock)
     const c = renderEl(<AiPanel doc={kickoffDoc} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
@@ -390,16 +390,16 @@ describe('AiPanel 开场自动发送与预设（批次4）', () => {
     const body = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
     const lastUser = [...body.messages].reverse().find((m: { role: string }) => m.role === 'user')
     expect(lastUser.content).toContain('做一个三和弦听辨练习')
-    expect(sessionStorage.getItem('ai-kickoff')).toBeNull()
+    expect(sessionStorage.getItem(`ai-kickoff:${kickoffDoc.id}`)).toBeNull()
   })
 
   it('kickoff 未配置 Key：提示词填入输入框不丢失', () => {
     const kickoffDoc = blankLevelDoc()
-    sessionStorage.setItem('ai-kickoff', JSON.stringify({ docId: kickoffDoc.id, prompt: '节奏训练关' }))
+    sessionStorage.setItem(`ai-kickoff:${kickoffDoc.id}`, JSON.stringify({ docId: kickoffDoc.id, prompt: '节奏训练关' }))
     const c = renderEl(<AiPanel doc={kickoffDoc} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
     expect((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement).value).toBe('节奏训练关')
     expect(getSession(kickoffDoc.id).mode).toBe('agent')
-    expect(sessionStorage.getItem('ai-kickoff')).toBeNull()
+    expect(sessionStorage.getItem(`ai-kickoff:${kickoffDoc.id}`)).toBeNull()
   })
 
   it('空态预设：点击即填入输入框', () => {

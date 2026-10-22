@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { loadLevelDoc } from '../library/validate'
 import {
   addComponent,
+  bumpVersion,
   addTableColumn,
   addTableRow,
   blankLevelDoc,
@@ -132,5 +133,33 @@ describe('setFlow 归一化（批次10）', () => {
     doc = setFlow(doc, { pass: null as never, count: null as never })
     const r = loadLevelDoc(structuredClone(doc))
     expect(r.ok).toBe(true)
+  })
+})
+
+describe('bumpVersion（docs/40 A3 裁决：保存自动升修订号）', () => {
+  it('semver 修订号 +1', () => {
+    const doc = { ...blankLevelDoc(), version: '0.1.0' }
+    expect(bumpVersion(doc).version).toBe('0.1.1')
+    expect(bumpVersion({ ...doc, version: '2.19.9' }).version).toBe('2.19.10')
+  })
+
+  it('非法/缺失版本保留原值不抛错（升版失败不阻断保存）', () => {
+    const doc = blankLevelDoc()
+    expect(bumpVersion({ ...doc, version: 'not-semver' }).version).toBe('not-semver')
+    expect(bumpVersion({ ...doc, version: undefined as unknown as string }).version).toBeUndefined()
+  })
+
+  it('返回新对象、不改入参（不可变约定）', () => {
+    const doc = { ...blankLevelDoc(), version: '0.1.0' }
+    const next = bumpVersion(doc)
+    expect(next).not.toBe(doc)
+    expect(doc.version).toBe('0.1.0')
+  })
+})
+
+describe('addTableColumn 显式 type（docs/40 A6）', () => {
+  it('新列携带 type:text，避免 UI 缺省显示与库内推断类型漂移', () => {
+    const doc = addTableColumn(blankLevelDoc(), 'newcol')
+    expect(doc.content.table.columns.find((c) => c.key === 'newcol')?.type).toBe('text')
   })
 })

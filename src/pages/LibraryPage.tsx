@@ -268,7 +268,8 @@ export function LibraryPage() {
     try {
       const doc = blankLevelDoc()
       await putResource(doc as never)
-      sessionStorage.setItem('ai-kickoff', JSON.stringify({ docId: doc.id, prompt }))
+      // 按 docId 键控（docs/40 C6）：单槽键在连续创建两个 AI 关卡时会被后一个覆盖
+      sessionStorage.setItem(`ai-kickoff:${doc.id}`, JSON.stringify({ docId: doc.id, prompt }))
       window.location.hash = `#/edit/${doc.id}`
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
