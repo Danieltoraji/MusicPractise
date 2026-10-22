@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LevelDoc } from '../../engine/level'
 import type { GraphProgram } from '../../engine/graphProgram'
-import { generateScript, parseScript, ScriptError } from '../../engine/script'
+import { generateScript, mergeScriptAnchors, parseScript, ScriptError } from '../../engine/script'
 
 /** 脚本选区上报（行号 1 起；编辑器 AI 面板附带上下文用） */
 export interface ScriptSelectionReport {
@@ -72,9 +72,14 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
   const [parseError, setParseError] = useState<ScriptError | null>(null)
   const [appliedTip, setAppliedTip] = useState<string | null>(null)
 
-  // 草稿持久缓存（卸载/切 Tab 不丢）；经 effect 同步，避免渲染期副作用
+  // 草稿持久缓存（卸载/切 Tab 不丢）；经 effect 同步，避免渲染期副作用。
+  // O4（docs/40）：上限 20 份防跨关卡累积（超出按插入序淘汰最旧）
   useEffect(() => {
     drafts.set(doc.id, draft)
+    if (drafts.size > 20) {
+      const oldest = drafts.keys().next().value
+      if (oldest !== undefined && oldest !== doc.id) drafts.delete(oldest)
+    }
   }, [doc.id, draft])
 
   const { text, genError } = draft
@@ -90,12 +95,19 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
   const apply = (): void => {
     if (genError) return
     try {
-      const next = parseScript(text, { variables: program.variables, idPrefix: ID_PREFIX })
-      const nextSig = signatureOf(next)
+      const parsed = parseScript(text, { variables: program.variables, idPrefix: ID_PREFIX })
+      // E1（docs/40）：锚点合并——按语句特征回填旧节点 id 与 x/y，不再整块重建。
+      // 断点/AI 高亮/选中/布局不再因一次脚本应用而全部悬空丢失
+      const { prog, dropped } = mergeScriptAnchors(parsed, program)
+      const nextSig = signatureOf(prog)
       setDraft({ text, baseline: text, baselineSig: nextSig, genError: null })
       setParseError(null)
-      setAppliedTip(`已应用（${next.nodes.length} 节点 / ${next.edges.length} 连线；节点图已按脚本重建）`)
-      onChange({ ...doc, content: { ...doc.content, logic: next } })
+      setAppliedTip(
+        `已应用（${prog.nodes.length} 节点 / ${prog.edges.length} 连线；节点 id 与坐标已保留${
+          dropped > 0 ? `；丢弃了 ${dropped} 个未接线节点` : ''
+        }）`,
+      )
+      onChange({ ...doc, content: { ...doc.content, logic: prog } })
     } catch (e) {
       if (e instanceof ScriptError) setParseError(e)
       else setParseError(null)
@@ -134,6 +146,25 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
     [onSelectionReport],
   )
 
+  // E1：应用将丢弃的不可达节点数（旧图可达序列之外的节点）——应用前明示而非静默删除
+  const droppedCount = useMemo(() => {
+    const byId = new Map(program.nodes.map((n) => [n.id, n]))
+    const seen = new Set<string>()
+    const visit = (id: string): void => {
+      if (seen.has(id)) return
+      const node = byId.get(id)
+      if (!node) return
+      seen.add(id)
+      for (const e of program.edges.filter((x) => x.from === id)) visit(e.to)
+    }
+    for (const n of program.nodes) {
+      if (n.kind !== 'on') continue
+      visit(n.id)
+      for (const e of program.edges.filter((x) => x.from === n.id && !x.port)) visit(e.to)
+    }
+    return program.nodes.length - seen.size
+  }, [program])
+
   const stats = useMemo(() => {
     const handlers = (text.match(/^on /gm) ?? []).length
     return { handlers, lines: text.split('\n').length }
@@ -152,7 +183,7 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
           从节点图重新生成
         </button>
         <span className="muted script-toolbar-hint">
-          {stats.handlers} 个事件处理器 · {stats.lines} 行 · 表达式与节点图完全同文；应用将按脚本重建节点图（变量保留）
+          {stats.handlers} 个事件处理器 · {stats.lines} 行 · 表达式与节点图完全同文；应用按语句特征保留节点 id 与坐标
         </span>
       </div>
       {parseError && (
@@ -176,6 +207,11 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
       {genError && (
         <div className="editor-errors script-error">
           当前逻辑图超出伪代码能表达的结构（{genError}）——请在节点图中简化该结构，或查看 JSON。
+        </div>
+      )}
+      {!genError && droppedCount > 0 && (
+        <div className="editor-lint script-stale">
+          当前图中有 {droppedCount} 个未接线节点——脚本只表达接线的执行链，应用后它们将被移除（如需保留请先在节点图中接线或删除）。
         </div>
       )}
       {appliedTip && <div className="editor-saved">{appliedTip}</div>}

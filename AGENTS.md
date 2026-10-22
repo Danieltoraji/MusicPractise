@@ -1,6 +1,6 @@
 # AGENTS.md — MusicPractise（音乐练习 UGC 平台）
 
-> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-23 由 ZCode 会话修订（docs/40 编辑器审计 + docs/41 修复批次 R1 起落地，基线 805 → 847（R5））。
+> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-23 由 ZCode 会话修订（docs/40 编辑器审计 + docs/41 修复批次 R1 起落地，基线 805 → 853（R6））。
 
 ## 项目定位
 
@@ -9,7 +9,7 @@
 ## 命令与工程基线
 
 - `npm run dev` 纯前端（5173，`/api` 代理到 wrangler 8787）；`npm run dev:worker` 全栈（先 `npm run build`）；`npm run db:migrate:local` 本地 D1 迁移；`npm test`（Vitest）；`npm run build` = `tsc --noEmit && vite build`。
-- 质量门禁：全量测试全绿（现行基线 **847 项 / 97 文件**，随批次递增——见 docs/41）+ `tsc`/`build` 干净 + 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环。
+- 质量门禁：全量测试全绿（现行基线 **853 项 / 97 文件**，随批次递增——见 docs/41）+ `tsc`/`build` 干净 + 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环。
 - 设计/评审/落地记录按编号归档 `docs/`（如 docs/02 数据结构契约、docs/27 数据表 2.0、docs/31 后端、docs/36 UI 全量重设计、docs/37 运行时 UI 改造、docs/38 编辑器界面改造）；数据模型或接口变更须同步对应文档与契约表。
 
 ## 目录与架构要点

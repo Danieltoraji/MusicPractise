@@ -57,6 +57,7 @@ import { NodeInspector } from './NodeInspector'
 import { VariablesPanel } from './VariablesPanel'
 import { CanvasMap } from './CanvasMap'
 import { clearRunLog, readRunLog } from '../../runtime/runLog'
+import { getDef } from '../../runtime/store'
 
 interface Props {
   doc: LevelDoc
@@ -220,6 +221,19 @@ function startSplitDrag(e: React.PointerEvent<HTMLDivElement>, axis: 'x' | 'y', 
 }
 
 const NO_POSITIONS = new Map<string, { x: number; y: number }>()
+
+// E14（docs/40）：受控 RF 每帧为每个节点计算签名串——JSON.stringify(node) 是大头。
+// GNode 恒为不可变新对象（graphOps 纪律），WeakMap 按引用缓存序列化结果：
+// 拖动/无关编辑时未变节点的签名计算降为 O(1) 引用查找
+const nodeJsonCache = new WeakMap<object, string>()
+function nodeJson(n: GNode): string {
+  let s = nodeJsonCache.get(n)
+  if (s === undefined) {
+    s = JSON.stringify(n)
+    nodeJsonCache.set(n, s)
+  }
+  return s
+}
 
 function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
   const program = doc.content.logic
@@ -425,6 +439,25 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
       lintGraphProgramDetailed(program, {
         componentIds: doc.content.components.map((c) => c.id),
         componentTypes: Object.fromEntries(doc.content.components.map((c) => [c.id, c.type])),
+        // E19：契约方法/事件尾名白名单（运行时静默无效的写法在编辑器先红标）
+        componentMethods: Object.fromEntries(
+          doc.content.components.map((c) => {
+            try {
+              return [c.id, Object.keys(getDef(c.type).contract.commands)]
+            } catch {
+              return [c.id, [] as string[]]
+            }
+          }),
+        ),
+        componentEvents: Object.fromEntries(
+          doc.content.components.map((c) => {
+            try {
+              return [c.id, Object.keys(getDef(c.type).contract.events)]
+            } catch {
+              return [c.id, [] as string[]]
+            }
+          }),
+        ),
         viewIds: doc.content.views.map((v) => v.id),
         tableColumns: doc.content.table.columns,
       }),
@@ -530,7 +563,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
       const paused = debugSnap.pausedAt === node.id
       const aihl = aiHlSet.has(node.id)
       const sel = rfSel.nodes.has(node.id)
-      const signature = `${JSON.stringify(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}|${theme}|${summaryMode}|${bp ? 'b' : ''}|${paused ? 'p' : ''}|${aihl ? 'a' : ''}|${sel ? 's' : ''}`
+      const signature = `${nodeJson(node)}|${JSON.stringify(errors ?? [])}|${position.x},${position.y}|${drag ? 'drag' : 'doc'}|${related ? 'r' : ''}|${compsSig}|${theme}|${summaryMode}|${bp ? 'b' : ''}|${paused ? 'p' : ''}|${aihl ? 'a' : ''}|${sel ? 's' : ''}`
       const prev = prevMap.get(node.id)
       if (prev && prevSig.get(node.id) === signature) {
         nextMap.set(node.id, prev)
@@ -576,10 +609,37 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     [program.edges, rfSel.edges],
   )
 
-  /** 选中节点并把视口中心移到它（lint 列表/运行日志的定位入口） */
+  // E17（docs/40）：进出调试布局保存/恢复画布视口——此前调试后回到编辑布局视口重置
+  const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
+  const wasDebuggingRef = useRef(false)
+  useEffect(() => {
+    const debugging = debugSnap.mode !== 'idle'
+    if (debugging && !wasDebuggingRef.current) {
+      try {
+        pendingViewportRef.current = rf.getViewport()
+      } catch {
+        // RF 未挂载（stage 窗格直启等）：放弃恢复
+      }
+    }
+    wasDebuggingRef.current = debugging
+  }, [debugSnap.mode, rf])
+
+  /** 编辑布局的 ReactFlow 重新挂载（调试归来/全屏往返）时应用保存的视口 */
+  const onFlowInit = useCallback((inst: { setViewport: (v: { x: number; y: number; zoom: number }) => void }) => {
+    const saved = pendingViewportRef.current
+    if (saved) {
+      inst.setViewport(saved)
+      pendingViewportRef.current = null
+    }
+  }, [])
+
+  /** 选中节点并把视口中心移到它（lint 列表/运行日志的定位入口）。
+   *  E12：同步写入 RF 受控选区——此前只写 Inspector 的 selectedId，双选中模型分裂
+   *  （Delete 失效、后续批量操作拿不到选区） */
   const focusNode = useCallback(
     (id: string): void => {
       setSelectedId(id)
+      setRfSel({ nodes: new Set([id]), edges: new Set() })
       const node = program.nodes.find((n) => n.id === id)
       const base: { x: number; y: number } | undefined =
         node?.x !== undefined && node?.y !== undefined ? { x: node.x, y: node.y } : fallbackPos.get(id)
@@ -587,6 +647,20 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     },
     [program, fallbackPos, rf],
   )
+
+  // E13（docs/40）：外部改写 doc（AI/undo/JSON 应用）后悬空引用清理——
+  // 选中节点/边可能已不存在，留着会让 Inspector 空转、Delete 静默无效
+  const programNodeIds = useMemo(() => new Set(program.nodes.map((n) => n.id)), [program])
+  const programEdgeIds = useMemo(() => new Set(program.edges.map((e) => e.id)), [program.edges])
+  useEffect(() => {
+    setSelectedId((cur) => (cur && !programNodeIds.has(cur) ? null : cur))
+    setRfSel((cur) => {
+      const nodes = [...cur.nodes].filter((id) => programNodeIds.has(id))
+      const edges = [...cur.edges].filter((id) => programEdgeIds.has(id))
+      if (nodes.length === cur.nodes.size && edges.length === cur.edges.size) return cur
+      return { nodes: new Set(nodes), edges: new Set(edges) }
+    })
+  }, [programNodeIds, programEdgeIds])
 
   const onNodesChange = useCallback(
     (changes: NodeChange<Node<GraphCardData>>[]): void => {
@@ -858,6 +932,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         }}
         onEdgeDoubleClick={(_, edge) => apply((prog) => disconnect(prog, edge.id))}
         deleteKeyCode={null}
+        onInit={onFlowInit}
         fitView
         minZoom={0.2}
         colorMode={theme}

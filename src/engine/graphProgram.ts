@@ -145,6 +145,9 @@ export function updateNode<N extends GNode>(prog: GraphProgram, id: string, patc
 }
 
 export function moveNode(prog: GraphProgram, id: string, x: number, y: number): GraphProgram {
+  // E15：同位置 no-op 短路——RF 拖拽落点/批量 move 的重复 change 不再产生空撤销步
+  const cur = prog.nodes.find((n) => n.id === id)
+  if (cur && cur.x === x && cur.y === y) return prog
   return updateNode(prog, id, { x, y })
 }
 
@@ -152,7 +155,8 @@ export function moveNode(prog: GraphProgram, id: string, x: number, y: number): 
  * 连一条执行边。规则：
  * - on 不能作为 to（事件入口无入边）
  * - branch/loop 出边必须带 port（'true'|'false'），其余节点出边不能带 port
- * - 同一 (from, port) 只保留一条出边，重复连接替换旧边
+ * - 同一 (from, port) 只保留一条出边，重复连接替换旧边（E15：复用旧边 id——
+ *   id churn 曾让依赖 edge id 的选中/高亮悬空）
  * - 允许自环（空循环体等，运行时由节点预算兜底）；comment 执行时直通，可参与连线
  */
 export function connect(prog: GraphProgram, from: string, to: string, port?: 'true' | 'false'): GraphProgram {
@@ -162,12 +166,23 @@ export function connect(prog: GraphProgram, from: string, to: string, port?: 'tr
   const needsPort = f.kind === 'branch' || f.kind === 'loop'
   if (needsPort && port !== 'true' && port !== 'false') throw new Error(`${f.kind} 节点的出边必须选择端口 true/false`)
   if (!needsPort && port !== undefined) throw new Error(`${f.kind} 节点的出边不接受端口`)
+  // 同目标重复连接 = no-op（E15 短路）
+  const existing = prog.edges.find((e) => e.from === from && e.port === port)
+  if (existing && existing.to === to) return prog
   const next = clone(prog)
+  const replaced = next.edges.find((e) => e.from === from && e.port === port)
   next.edges = next.edges.filter((e) => !(e.from === from && e.port === port))
-  const used = new Set(next.edges.map((e) => e.id))
-  let i = next.edges.length + 1
-  while (used.has(`e${i}`)) i++
-  next.edges.push({ id: `e${i}`, from, to, ...(port ? { port } : {}) })
+  // 复用被替换边的 id；全新连接才分配新号
+  let id: string
+  if (replaced) {
+    id = replaced.id
+  } else {
+    const used = new Set(next.edges.map((e) => e.id))
+    let i = next.edges.length + 1
+    while (used.has(`e${i}`)) i++
+    id = `e${i}`
+  }
+  next.edges.push({ id, from, to, ...(port ? { port } : {}) })
   return next
 }
 
@@ -249,6 +264,11 @@ export interface GraphLintCtx {
   viewIds?: Iterable<string>
   /** 数据表列（docs/26：set 命令里 q.<列> 引用的存在性与类型格式检查） */
   tableColumns?: { key: string; type?: ColumnType }[]
+  /** E19（docs/40）：组件 id → 契约命令名清单（调用方从 runtime/store 取——引擎层不反向依赖运行时）。
+   *  提供时对 call.method 做白名单校验（未知方法运行时静默无效，编辑器先红标） */
+  componentMethods?: Record<string, string[]>
+  /** E19：组件 id → 契约事件尾名清单（on 事件 `${id}.${尾}` / `${id}:${尾}` 校验） */
+  componentEvents?: Record<string, string[]>
 }
 
 /** 收集节点中出现的全部表达式源文本（仅在字段为字符串时收集，schema 问题由 structure 检查报告） */
@@ -301,6 +321,8 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
   const issues: LintIssue[] = []
   const compIds = ctx?.componentIds ? new Set(ctx.componentIds) : null
   const compTypes = ctx?.componentTypes ? new Map(Object.entries(ctx.componentTypes)) : null
+  const compMethods = ctx?.componentMethods ? new Map(Object.entries(ctx.componentMethods)) : null
+  const compEvents = ctx?.componentEvents ? new Map(Object.entries(ctx.componentEvents)) : null
   const tableCols = ctx?.tableColumns ?? null
   const viewIdSet = ctx?.viewIds ? new Set(ctx.viewIds) : null
   // 行指针是系统级声明（LevelSession 装载行时写入、赋值即跳行），无需在 variables 里声明
@@ -497,6 +519,19 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
               field: 'event',
               message: `${where}: 事件 "${node.event}" 的实例 "${prefix}" 不存在（组件事件前缀必须是现有组件 id；内部事件用冒号分隔）`,
             })
+          } else if (!isPseudo && compIds.has(prefix)) {
+            // E19：事件尾名白名单——契约里不存在的事件运行时静默 no-op（「点下一题没反应」类假 bug 根源）
+            const evType = compTypes?.get(prefix)
+            const tails = evType !== undefined ? compEvents?.get(evType) : undefined
+            const tail = node.event.slice(prefix.length + 1)
+            if (tails && !tails.includes(tail)) {
+              issues.push({
+                code: 'dangling-ref',
+                nodeId: node.id,
+                field: 'event',
+                message: `${where}: 组件 ${prefix}（${evType}）没有事件 "${tail}"——运行时会静默不触发`,
+              })
+            }
           }
         }
         if (program.edges.some((e) => e.to === node.id)) {
@@ -574,6 +609,17 @@ export function lintGraphProgramDetailed(program: GraphProgram, ctx?: GraphLintC
           break
         }
         checkCompRef(node.target, where, node.id, 'target')
+        // E19：call 方法白名单——契约里不存在的方法运行时静默无效（读默认值），编辑器先红标
+        const callType = compTypes?.get(node.target)
+        const methods = callType !== undefined ? compMethods?.get(callType) : undefined
+        if (methods && !methods.includes(node.method)) {
+          issues.push({
+            code: 'dangling-ref',
+            nodeId: node.id,
+            field: 'method',
+            message: `${where}: 组件 ${node.target}（${callType}）没有命令 "${node.method}"——运行时会静默无效`,
+          })
+        }
         // docs/26 格式判断：应用行数据命令（setText/setOptions/setMusic）的 q.<列> 引用
         // 做存在性（dangling-ref）与列类型兼容（structure 警告）检查——矩阵与编辑器同源
         const compType = compTypes?.get(node.target)

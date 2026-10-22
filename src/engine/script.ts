@@ -788,3 +788,117 @@ export function parseScript(
     edges,
   }
 }
+
+// ---------------------------------------------------------------------------
+// 锚点合并（docs/40 E1）：脚本应用保留节点 id 与坐标。
+// 此前「应用到节点图」按文本整块重建——id 全换 s1..（断点/AI 高亮/选中悬空）、
+// x/y 全丢（布局永久丢失）、不可达节点静默删除，与 UI 写的「双向无损」相反。
+// 策略：新旧 IR 各自按执行序（on 入口沿边遍历）产出「语句特征串」序列，
+// 同特征按出现序 zip 配对——配对成功继承旧 id 与 x/y，未配对的新节点保留 parse 产物。
+// ---------------------------------------------------------------------------
+
+/** 节点的语句特征串（与 generateScript 行文本同构：同特征 ≈ 同一语句） */
+function statementKey(n: GNode): string {
+  switch (n.kind) {
+    case 'on':
+      return `on ${n.event}`
+    case 'comment':
+      return `// ${n.text}`
+    case 'call':
+      return `${n.target}.${n.method}(${n.args.join(', ')})`
+    case 'assign':
+      return `v.${n.target} = ${rvalueText(n.value)}`
+    case 'emit': {
+      const entries = Object.entries(n.payload ?? {})
+      const payload = entries.length ? ` {${entries.map(([k, v]) => `${k}: ${v}`).join(', ')}}` : ''
+      return `emit ${exprStringLiteral(n.event)}${payload}`
+    }
+    case 'branch':
+      return `if (${n.cond})`
+    case 'loop':
+      return n.mode === 'while' ? `while (${n.cond})` : `repeat (${n.times})`
+    case 'wait':
+      return `wait (${n.ms})`
+  }
+}
+
+/** 执行序节点序列：on 入口按声明序，链上沿边 DFS（branch 真→假，loop 体→出）。
+ *  不可达节点（未接线）不进序列——它们就是脚本应用会丢弃的部分 */
+function reachableSequence(prog: GraphProgram): GNode[] {
+  const byId = new Map(prog.nodes.map((n) => [n.id, n]))
+  const outs = (id: string): { to: string; port?: string }[] =>
+    prog.edges.filter((e) => e.from === id).map((e) => ({ to: e.to, port: e.port }))
+  const seen = new Set<string>()
+  const seq: GNode[] = []
+  const visit = (id: string): void => {
+    if (seen.has(id)) return
+    const node = byId.get(id)
+    if (!node) return
+    seen.add(id)
+    seq.push(node)
+    if (node.kind === 'branch' || node.kind === 'loop') {
+      const t = outs(id).find((o) => o.port === 'true')
+      const f = outs(id).find((o) => o.port === 'false')
+      if (t) visit(t.to)
+      if (f) visit(f.to)
+    } else {
+      const o = outs(id).find((x) => !x.port)
+      if (o) visit(o.to)
+    }
+  }
+  for (const n of prog.nodes) {
+    if (n.kind === 'on') {
+      visit(n.id)
+      const o = outs(n.id).find((x) => !x.port)
+      if (o) visit(o.to)
+    }
+  }
+  return seq
+}
+
+export interface MergeResult {
+  prog: GraphProgram
+  /** 旧图中可达（进序列）但未在新图找到特征配对的节点数——脚本改动重写的语句 */
+  unmatched: number
+  /** 旧图中不可达（未接线）的节点数——应用即丢弃 */
+  dropped: number
+}
+
+/**
+ * 把 prev（应用前图）的节点 id 与坐标回填到 next（parseScript 产物）上。
+ * 纯函数：不改 next/prev；id 替换同步映射全部边的端点。
+ */
+export function mergeScriptAnchors(next: GraphProgram, prev: GraphProgram): MergeResult {
+  const prevSeq = reachableSequence(prev)
+  const nextSeq = reachableSequence(next)
+  const prevUnreachable = prev.nodes.length - prevSeq.length
+  // 同特征桶（保序），按出现序 zip 消费
+  const buckets = new Map<string, GNode[]>()
+  for (const n of prevSeq) {
+    const k = statementKey(n)
+    const list = buckets.get(k)
+    if (list) list.push(n)
+    else buckets.set(k, [n])
+  }
+  const idMap = new Map<string, string>() // nextId → prevId
+  let unmatched = 0
+  for (const n of nextSeq) {
+    const list = buckets.get(statementKey(n))
+    const prevNode = list?.shift()
+    if (prevNode) idMap.set(n.id, prevNode.id)
+    else unmatched += 1
+  }
+  const mapped = idMap.get.bind(idMap)
+  const nodes = next.nodes.map((n) => {
+    const prevId = mapped(n.id)
+    if (prevId === undefined) return n
+    const prevNode = prev.nodes.find((p) => p.id === prevId)!
+    return { ...n, id: prevId, x: prevNode.x, y: prevNode.y }
+  })
+  const edges = next.edges.map((e) => ({
+    ...e,
+    from: idMap.has(e.from) ? idMap.get(e.from)! : e.from,
+    to: idMap.has(e.to) ? idMap.get(e.to)! : e.to,
+  }))
+  return { prog: { ...next, nodes, edges }, unmatched, dropped: prevUnreachable }
+}

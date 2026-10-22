@@ -254,7 +254,9 @@ export type ArgView =
 
 export function argsToArgView(args: unknown): ArgView {
   if (!Array.isArray(args) || args.length === 0) return { mode: 'none' }
-  if (typeof args[0] === 'string') {
+  // E18（docs/40）：多参数调用（如 query(target, arg2)）首项即使是对象字面量也不进
+  // object 模式——该模式只回写首项，曾把 args[1..] 静默丢弃；advanced 保留全部参数
+  if (args.length === 1 && typeof args[0] === 'string') {
     const entries = splitObjectLiteral(args[0])
     if (entries) return { mode: 'object', entries }
   }

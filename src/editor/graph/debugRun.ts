@@ -185,6 +185,11 @@ export async function startDebugRun(doc: LevelDoc, owner: 'human' | 'ai' = 'huma
     return check.errors.join('；')
   }
   const generation = ++startGeneration
+  // E10（docs/40）：断点集与文档绑定——运行中切换到不同文档时清空（旧图的节点 id
+  // 对新图无意义，残留断点永不命中还会误发光）；无会话时的预设备点与同关重开保留
+  if (docIdRef !== null && docIdRef !== doc.id) {
+    controller.breakpoints.clear()
+  }
   docIdRef = doc.id
   sessionNo += 1
   commit({ mode: 'running', owner, events: [], finished: null, loadErrors: null, pausedAt: null, pausedEvent: null })

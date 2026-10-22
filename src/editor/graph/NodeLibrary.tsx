@@ -2,7 +2,7 @@
  * 节点库（左栏）与画布右键菜单共用的菜单渲染：分组 + 搜索过滤 + 模板组置顶。
  * 事件入口已升级为独立的事件管理器面板（EventManagerPanel，docs/29）。
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { PaletteGroup, PaletteItem, PaletteTemplate } from './palette'
 
 export interface NodeMenuProps {
@@ -76,6 +76,17 @@ export function NodeContextMenu({
 }: NodeMenuProps & { screen: { x: number; y: number }; onClose: () => void }) {
   const [filter, setFilter] = useState('')
   const f = filter.trim()
+  // E17（docs/40）：Esc 关闭（捕获阶段——此前菜单只能点空白关闭）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [onClose])
   // 屏幕边缘钳制：菜单宽约 250、高约 420
   const left = Math.min(screen.x, Math.max(8, window.innerWidth - 262))
   const top = Math.min(screen.y, Math.max(8, window.innerHeight - 432))

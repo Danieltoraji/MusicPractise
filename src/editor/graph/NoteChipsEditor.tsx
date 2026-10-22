@@ -16,7 +16,8 @@ export interface PlayNote {
   rest?: boolean
 }
 
-export const DUR_OPTIONS = ['1n', '2n', '4n', '8n', '16n', '32n']
+/** O6（docs/40）：附点变体与基础时值并列——schema 允许而下拉曾缺失，用户只能去文本导入 */
+export const DUR_OPTIONS = ['1n', '1n.', '2n', '2n.', '4n', '4n.', '8n', '8n.', '16n', '16n.', '32n', '32n.']
 
 /** C2–C7 的音名候选（tonal 换算，标签带 MIDI 值方便对照） */
 export const NOTE_OPTIONS: { value: number; label: string }[] = (() => {

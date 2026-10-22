@@ -11,7 +11,7 @@
  * 切换节点由外层按 node.id 重挂载，草稿不跨节点泄漏。
  */
 import { useState } from 'react'
-import { checkExprText } from '../EditorPage'
+import { checkExprText } from '../../engine/expr'
 import {
   CMP_OPS,
   argViewToArgs,

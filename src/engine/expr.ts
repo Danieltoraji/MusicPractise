@@ -602,3 +602,18 @@ export function compileExpr(src: string): (scope: ExprScope, ctx?: ExprContext) 
 export function evalExpr(src: string, scope: ExprScope, ctx?: ExprContext): Json {
   return compileExpr(src)(scope, ctx)
 }
+
+/**
+ * 编辑器实时表达式校验（docs/40 O3 下沉）：语法错误返回消息，合法/空返回 null。
+ * 此前实现挂在 EditorPage 页面组件上，graph 子组件反向 import 页面模块（分层倒置），
+ * FlowEditor 还为此复制了一份同逻辑——统一收口到引擎层。
+ */
+export function checkExprText(text: string): string | null {
+  if (text.trim() === '') return null
+  try {
+    parseExpr(text)
+    return null
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+}

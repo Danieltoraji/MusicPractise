@@ -451,3 +451,39 @@ describe('应用行数据命令的格式判断（docs/26）', () => {
     expect(lintGraphProgramDetailed(legacy, { componentIds: ['lab1'] }).some((i) => i.message.includes('q.nope'))).toBe(false)
   })
 })
+
+describe('E19 契约白名单 lint（docs/40）', () => {
+  const prog = (event: string, method: string) =>
+    ({
+      logicVersion: 2,
+      variables: {},
+      nodes: [
+        { id: 'on1', kind: 'on', event },
+        { id: 'c1', kind: 'call', target: 'btn1', method, args: [] },
+      ],
+      edges: [{ id: 'e1', from: 'on1', to: 'c1' }],
+    }) as never
+
+  it('call 方法不在组件契约中 → dangling-ref 红标；契约内方法不报', () => {
+    const ctx = {
+      componentIds: ['btn1'],
+      componentTypes: { btn1: 'button' },
+      componentMethods: { button: ['setText', 'setEnabled'] },
+      componentEvents: { button: ['clicked'] },
+    }
+    const ok = lintGraphProgramDetailed(prog('btn1.clicked', 'setText'), ctx)
+    expect(ok.some((i) => i.field === 'method' || (i.field === 'event' && i.message.includes('没有事件')))).toBe(false)
+    const badMethod = lintGraphProgramDetailed(prog('btn1.clicked', 'setTetxt'), ctx)
+    expect(badMethod.some((i) => i.message.includes('没有命令 "setTetxt"'))).toBe(true)
+    const badEvent = lintGraphProgramDetailed(prog('btn1.clickd', 'setText'), ctx)
+    expect(badEvent.some((i) => i.message.includes('没有事件 "clickd"'))).toBe(true)
+  })
+
+  it('未提供契约清单时保持原口径（不误报）', () => {
+    const issues = lintGraphProgramDetailed(prog('btn1.whatever', 'whatever'), {
+      componentIds: ['btn1'],
+    })
+    expect(issues.some((i) => i.message.includes('没有命令'))).toBe(false)
+    expect(issues.some((i) => i.message.includes('没有事件'))).toBe(false)
+  })
+})

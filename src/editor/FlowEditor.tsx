@@ -6,22 +6,14 @@
  * 清除语义 = 删键（setFlow 归一化）：pass 删除 = 结算默认通过；count 删除 = 全部行。
  */
 import { useState } from 'react'
-import { parseExpr } from '../engine/expr'
+import { checkExprText } from '../engine/expr'
 import type { LevelDoc } from '../engine/level'
 import { setFlow } from './docState'
 import { ConditionBuilder } from './graph/controls'
 import type { BridgeCtx } from './graph/exprBridge'
 
-/** 纯语法校验（与 EditorPage.checkExprText 同一 parseExpr 真源；此处独立引用避免编辑器页循环导入） */
-function exprError(text: string): string | null {
-  if (text.trim() === '') return null
-  try {
-    parseExpr(text)
-    return null
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e)
-  }
-}
+// 表达式校验统一走 engine/expr（docs/40 O3：此前本文件复制了一份同逻辑）
+const exprError = checkExprText
 
 export function FlowEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc) => void }) {
   const flow = doc.content.flow ?? {}

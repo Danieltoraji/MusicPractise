@@ -42,8 +42,8 @@ const baseDoc = (id = 'res_x'): LevelDoc =>
         logicVersion: 2,
         variables: { score: 0 },
         nodes: [
-          { id: 'on1', kind: 'on', event: 'level.started' },
-          { id: 'as1', kind: 'assign', target: 'score', value: { expr: '0' } },
+          { id: 'on1', kind: 'on', event: 'level.started', x: 40, y: 60 },
+          { id: 'as1', kind: 'assign', target: 'score', value: { expr: '0' }, x: 220, y: 60 },
         ],
         edges: [{ id: 'e1', from: 'on1', to: 'as1' }],
       },
@@ -83,8 +83,13 @@ describe('ScriptTab（jsdom）', () => {
     expect(logic.nodes.some((n) => n.kind === 'wait')).toBe(true)
     // 变量保留
     expect(logic.variables).toEqual({ score: 0 })
-    // id 前缀 s（脚本来源可辨识）
-    expect(logic.nodes.every((n) => n.id.startsWith('s'))).toBe(true)
+    // E1：原有节点保 id 与 x/y（锚点合并），新增节点用 s 前缀（脚本来源可辨识）
+    const onNode = logic.nodes.find((n) => n.kind === 'on')!
+    expect(onNode.id).toBe('on1')
+    expect(onNode.x).toBe(40)
+    expect(onNode.y).toBe(60)
+    expect(logic.nodes.find((n) => n.kind === 'assign')!.id).toBe('as1')
+    expect(logic.nodes.find((n) => n.kind === 'wait')!.id).toMatch(/^s/)
     // 应用提示出现
     expect(container.textContent).toContain('已应用')
   })

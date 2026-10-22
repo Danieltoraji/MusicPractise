@@ -19,7 +19,6 @@ import { TableEditor } from './TableGrid'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentInstance, LevelDoc } from '../engine/level'
 import type { Json } from '../engine/expr'
-import { parseExpr, ExprError } from '../engine/expr'
 import { migrateDocToV3 } from '../engine/migrateDoc'
 import { bumpVersion, copyForEditing } from './docState'
 import {
@@ -54,16 +53,8 @@ interface ScriptRangeReport {
 /** 预览层的空事件发射器（模块级稳定引用，避免内联箭头导致子组件反复重渲染） */
 const noopEmit = (): void => {}
 
-/** 表达式实时校验：语法错误返回消息，合法返回 null */
-export function checkExprText(text: string): string | null {
-  if (text.trim() === '') return null
-  try {
-    parseExpr(text)
-    return null
-  } catch (e) {
-    return e instanceof ExprError ? e.message : String(e)
-  }
-}
+// 表达式实时校验已下沉 engine/expr（docs/40 O3）：此处 re-export 保持既有导入路径
+export { checkExprText } from '../engine/expr'
 
 interface Props {
   id: string

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { connect, type GEdge, type GNode, type GraphProgram } from './graphProgram'
 import { migrateLogicV1toV2 } from './migrate'
-import { generateScript, parseScript, ScriptError } from './script'
+import { generateScript, mergeScriptAnchors, parseScript, ScriptError } from './script'
 import type { Json } from './expr'
 import type { LogicProgram } from './logic'
 
@@ -306,5 +306,79 @@ describe('P0 回归：块内 if/loop 的顺序后继（端口协议）', () => {
     const on = g.nodes.find((n) => n.kind === 'on') as Extract<GNode, { kind: 'on' }>
     expect(on.event).toBe('a.b.c')
     expect(() => parseScript('on app:e {\n  label1.show(, 1)\n}')).toThrow(/空参数/)
+  })
+})
+
+describe('mergeScriptAnchors（docs/40 E1：脚本应用保留 id/x/y）', () => {
+  const baseProg = () => ({
+    logicVersion: 2 as const,
+    variables: { score: 0 } as Record<string, unknown>,
+    nodes: [
+      { id: 'on1', kind: 'on', event: 'level.started', x: 40, y: 80 },
+      { id: 'c1', kind: 'call', target: 'sound1', method: 'play', args: ["'x'"], x: 200, y: 80 },
+      { id: 'a1', kind: 'assign', target: 'score', value: { expr: 'v.score + 1' }, x: 360, y: 80 },
+    ],
+    edges: [
+      { id: 'e1', from: 'on1', to: 'c1' },
+      { id: 'e2', from: 'c1', to: 'a1' },
+    ],
+  }) as never as Parameters<typeof mergeScriptAnchors>[1]
+
+  it('未改动往返：全部节点保 id/x/y，unmatched=0', () => {
+    const prev = baseProg()
+    const text = generateScript(prev)
+    const next = parseScript(text, { variables: prev.variables })
+    const { prog, unmatched } = mergeScriptAnchors(next, prev)
+    expect(unmatched).toBe(0)
+    expect(prog.nodes.map((n) => n.id)).toEqual(['on1', 'c1', 'a1'])
+    expect(prog.nodes.find((n) => n.id === 'c1')?.x).toBe(200)
+    expect(prog.nodes.find((n) => n.id === 'a1')?.y).toBe(80)
+  })
+
+  it('改一行表达式：其余节点保 id/x/y，被改写节点拿新 id；id 替换同步边端点', () => {
+    const prev = baseProg()
+    // 改 a1 的表达式 → 其特征串变化 → 新 id；on1/c1 保留
+    const text = generateScript(prev).replace('v.score + 1', 'v.score + 5')
+    const next = parseScript(text, { variables: prev.variables })
+    const { prog, unmatched } = mergeScriptAnchors(next, prev)
+    expect(prog.nodes.find((n) => n.id === 'on1')).toBeTruthy()
+    expect(prog.nodes.find((n) => n.id === 'c1')?.x).toBe(200)
+    const assign = prog.nodes.find((n) => n.kind === 'assign')!
+    expect(assign.id).not.toBe('a1') // 语义变了：新 id（旧 id 不再悬挂在新语句上）
+    expect(assign.value).toEqual({ expr: 'v.score + 5' })
+    expect(unmatched).toBe(1)
+    // 边端点已映射回旧 id
+    expect(prog.edges.some((e) => e.from === 'c1' && e.to === assign.id)).toBe(true)
+  })
+
+  it('不可达节点计入 dropped；边与坐标不影响特征匹配', () => {
+    const prev = baseProg()
+    const withDangling = {
+      ...prev,
+      nodes: [...prev.nodes, { id: 'orphan', kind: 'wait', ms: '500' }],
+    } as never as Parameters<typeof mergeScriptAnchors>[1]
+    const text = generateScript(prev)
+    const next = parseScript(text, { variables: prev.variables })
+    const { prog, dropped } = mergeScriptAnchors(next, withDangling)
+    expect(dropped).toBe(1)
+    expect(prog.nodes.some((n) => n.id === 'orphan')).toBe(false)
+  })
+
+  it('prev 也是脚本产物（s 前缀同 id 场景）往返安全', () => {
+    const text1 = 'on level.started {\n  v.score = 1\n  v.score = 2\n}'
+    const p1 = parseScript(text1, { variables: { score: 0 } })
+    const p1x = { ...p1, nodes: p1.nodes.map((n, i) => ({ ...n, x: i * 100, y: 50 })) }
+    const text2 = generateScript(p1x).replace('v.score = 2', 'v.score = 3')
+    const p2 = parseScript(text2, { variables: p1x.variables })
+    const { prog } = mergeScriptAnchors(p2, p1x)
+    // 未改动的第一个语句节点保 id+坐标（值是 p2 重新解析的新对象，按 id 断言）；改动的第二个节点新 id
+    const assigns = prog.nodes.filter((n) => n.kind === 'assign')
+    expect(assigns).toHaveLength(2)
+    expect(assigns[0].id).toBe(p1x.nodes[1].id)
+    expect(assigns[0].x).toBe(p1x.nodes[1].x)
+    expect(assigns[0].value).toEqual({ expr: '1' })
+    // 改动的语句 unmatched：不继承坐标（走 dagre 兜底布局）；id 恰与旧节点同名无妨——旧图整体被替换
+    expect(assigns[1].x).toBeUndefined()
+    expect(assigns[1].value).toEqual({ expr: '3' })
   })
 })
