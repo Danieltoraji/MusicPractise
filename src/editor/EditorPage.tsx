@@ -13,6 +13,7 @@ import { ErrorBoundary } from '../library/ErrorBoundary'
 import { allContracts, ComponentStore, getDef } from '../runtime/store'
 import { ComponentView } from '../components/views'
 import { makeDirtyHashHandler } from './graph/dirtyGuard'
+import { stopDebugRun } from './graph/debugRun'
 import { undoTargetBlocked, deleteTargetBlocked } from './keyGuard'
 import { TableEditor } from './TableGrid'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -245,6 +246,14 @@ export function EditorPage({ id }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [undo, redo])
+
+  // C3（docs/40）：调试会话的宿主生命周期——debugRun 是模块单例，此前切 Tab/离开编辑器
+  // 后会话继续播音频、跑计时器、写快照且无法停止。归属规则：graph Tab 不可见即停止
+  //（调试布局只存在于 graph Tab；AI 启动的会话同样收口——切走 Tab 即用户主动离开调试视图）
+  useEffect(() => {
+    if (tab !== 'graph') stopDebugRun()
+  }, [tab])
+  useEffect(() => () => stopDebugRun(), [])
 
   const savingRef = useRef(false)
   const [saving, setSaving] = useState(false)
@@ -503,18 +512,20 @@ export function EditorPage({ id }: Props) {
             B6（docs/40）：AI 写入携带 tag='ai'——一次 run 的连续写工具在撤销栈中合并，
             一次 Ctrl+Z 回退整个 AI 任务；用户手动编辑（无 tag）自然打断分段 */}
         {aiOpen && tab !== 'graph' && (
-          <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
-            <AiPanel
-              doc={doc}
-              selection={{
-                tab,
-                componentId: tab === 'canvas' ? selected : null,
-                scriptRange: tab === 'script' ? scriptRange : null,
-              }}
-              onApplyDoc={(next) => update(next, 'ai')}
-              onClose={() => setAiOpen(false)}
-            />
-          </Suspense>
+          <ErrorBoundary title="AI 助手">
+            <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
+              <AiPanel
+                doc={doc}
+                selection={{
+                  tab,
+                  componentId: tab === 'canvas' ? selected : null,
+                  scriptRange: tab === 'script' ? scriptRange : null,
+                }}
+                onApplyDoc={(next) => update(next, 'ai')}
+                onClose={() => setAiOpen(false)}
+              />
+            </Suspense>
+          </ErrorBoundary>
         )}
       </div>
     </div>

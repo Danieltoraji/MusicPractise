@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LevelDoc } from '../engine/level'
 import { loadLevelDoc } from '../library/validate'
-import { clearDebugBreakpoints, getDebugSnapshot, stopDebugRun } from '../editor/graph/debugRun'
+import { clearDebugBreakpoints, getDebugSnapshot, startDebugRun, stepDebug, stopDebugRun } from '../editor/graph/debugRun'
 import { DEBUG_TOOLS } from './tools-debug'
 import type { ToolContext } from './tools'
 
@@ -123,6 +123,51 @@ describe('AI 调试工具批量参数（工具粒度治理）', () => {
     const bad = (await tool('debug_set_var').exec({ vars: { score: 1, __row: 0 } }, harness(doc))) as string
     expect(bad).toContain('赋值失败')
     expect(bad).toContain('__row')
+    stopDebugRun()
+  })
+})
+
+describe('调试会话归属与生命周期（docs/40 R5：E4/E7）', () => {
+  it('E4：会话运行另一文档时，AI 的读写操作报跨关卡串台错误；stop 后放行', async () => {
+    const docA = loaded()
+    const docB = { ...docA, id: 'res_other_level_000000000000000000' }
+    await tool('debug_control').exec({ action: 'start' }, harness(docA))
+    // ctx.levelId=B（AI 在处理 B 关）——读写操作应被守卫拦截
+    const readBlocked = (await tool('debug_read').exec({ part: 'state' }, harness(docB))) as string
+    expect(readBlocked).toContain('另一份文档')
+    const dispatchBlocked = (await tool('debug_dispatch').exec({ event: 'start_btn.clicked' }, harness(docB))) as string
+    expect(dispatchBlocked).toContain('另一份文档')
+    const varBlocked = (await tool('debug_set_var').exec({ name: 'score', value: 1 }, harness(docB))) as string
+    expect(varBlocked).toContain('另一份文档')
+    // stop 同样被拦（不允许 AI 停掉别的关卡/别人的会话）
+    const stopBlocked = (await tool('debug_control').exec({ action: 'stop' }, harness(docB))) as string
+    expect(stopBlocked).toContain('另一份文档')
+    // 本文档操作放行
+    expect(((await tool('debug_read').exec({ part: 'state' }, harness(docA))) as string)).toContain('模式=')
+    stopDebugRun()
+  })
+
+  it('E4：owner 标记——AI 启动 = ai，面板启动默认 human', async () => {
+    const doc = loaded()
+    await tool('debug_control').exec({ action: 'start' }, harness(doc))
+    expect(getDebugSnapshot().owner).toBe('ai')
+    stopDebugRun()
+    expect(getDebugSnapshot().owner).toBeNull()
+    await startDebugRun(doc) // 面板路径（默认 human）
+    expect(getDebugSnapshot().owner).toBe('human')
+    stopDebugRun()
+  })
+
+  it('E7 回归：stop 清 pendingStep/pendingPause——重启后不再第一个节点就暂停', async () => {
+    const doc = loaded()
+    await tool('debug_control').exec({ action: 'start' }, harness(doc))
+    stepDebug() // 请求单步（置 pendingStep）
+    stopDebugRun()
+    // 重启：残留的 pendingStep 若未清，首个节点边界即挂起
+    await tool('debug_control').exec({ action: 'start' }, harness(doc))
+    await tool('debug_dispatch').exec({ event: 'start_btn.clicked', waitMs: 250 }, harness(doc))
+    expect(getDebugSnapshot().mode).toBe('running') // 修复前：paused（残留标志）
+    expect(getDebugSnapshot().pausedAt).toBeNull()
     stopDebugRun()
   })
 })

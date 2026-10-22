@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
 import { unlockAudio } from './runtime/audio'
+import { ErrorBoundary } from './library/ErrorBoundary'
 import { HomePage } from './pages/HomePage'
 import { LevelPage } from './pages/LevelPage'
 import { LibraryPage } from './pages/LibraryPage'
@@ -158,6 +159,14 @@ export default function App() {
   } else {
     page = <HomePage />
   }
+
+  // C2（docs/40）：路由级错误边界——AI 面板/页面头部等五 Tab 边界之外的区域渲染异常、
+  // 部署后旧 lazy chunk 404（Hash SPA 常态）此前都会整页白屏无恢复入口
+  page = (
+    <ErrorBoundary title="页面出错" actions="page" key={hash}>
+      {page}
+    </ErrorBoundary>
+  )
 
   const isHome = hash === '' || hash === '#/' || hash === '#'
 

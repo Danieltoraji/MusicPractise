@@ -10,6 +10,7 @@ import type { AiTool } from './tools'
 import {
   dispatchDebugEvent,
   getDebugSnapshot,
+  isDebuggingDoc,
   pauseDebug,
   resumeDebug,
   setDebugBreakpoints,
@@ -21,6 +22,19 @@ import {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {})
+
+/**
+ * 会话归属守卫（docs/40 E4）：调试单例全局只有一个会话——已在运行但不属于本文档时，
+ * AI 的读写操作会把 A 关的变量/日志当作 B 关的诊断依据（跨关卡串台）。报错让模型先 stop。
+ * mode==='idle' 时放行（后续 start 由调用方决定）；start 也放行（重启当前关是合法操作）。
+ */
+function guardDoc(ctx: { levelId: string }): string | null {
+  const s = getDebugSnapshot()
+  if (s.mode !== 'idle' && !isDebuggingDoc(ctx.levelId)) {
+    return `调试会话正在运行另一份文档（${s.owner === 'ai' ? 'AI 启动' : '人工启动'}）——先 stop 再操作本文档，避免跨关卡串台`
+  }
+  return null
+}
 
 function stateSummary(): string {
   const s = getDebugSnapshot()
@@ -52,25 +66,37 @@ const debugControlTool: AiTool = {
     const action = str(args.action)
     switch (action) {
       case 'start': {
-        const err = await startDebugRun(ctx.getDoc())
+        const err = await startDebugRun(ctx.getDoc(), 'ai')
         if (err) return `调试启动失败：${err}`
-        return `✓ 调试会话已启动。\n${stateSummary()}`
+        return `✓ 调试会话已启动（AI 归属）。\n${stateSummary()}`
       }
-      case 'stop':
+      case 'stop': {
+        const blocked = guardDoc(ctx)
+        if (blocked) return blocked
         stopDebugRun()
         return '✓ 调试会话已停止。'
-      case 'resume':
+      }
+      case 'resume': {
+        const blocked = guardDoc(ctx)
+        if (blocked) return blocked
         resumeDebug()
         await new Promise((r) => setTimeout(r, 60))
         return `✓ 已继续。\n${stateSummary()}`
-      case 'step':
+      }
+      case 'step': {
+        const blocked = guardDoc(ctx)
+        if (blocked) return blocked
         stepDebug()
         await new Promise((r) => setTimeout(r, 60))
         return `✓ 单步执行。\n${stateSummary()}`
-      case 'pause':
+      }
+      case 'pause': {
+        const blocked = guardDoc(ctx)
+        if (blocked) return blocked
         pauseDebug()
         await new Promise((r) => setTimeout(r, 60))
         return `✓ 已请求暂停（将在下一个节点边界挂起）。\n${stateSummary()}`
+      }
       default:
         return `未知 action「${action}」`
     }
@@ -88,7 +114,9 @@ const debugReadTool: AiTool = {
     },
     required: ['part'],
   },
-  exec: (args) => {
+  exec: (args, ctx) => {
+    const blocked = guardDoc(ctx)
+    if (blocked) return blocked
     const s = getDebugSnapshot()
     if (s.mode === 'idle') return '调试会话未运行——先用 debug_control(action="start") 启动。'
     if (str(args.part) === 'log') {
@@ -127,7 +155,9 @@ const debugDispatchTool: AiTool = {
       },
     },
   },
-  exec: async (args) => {
+  exec: async (args, ctx) => {
+    const blocked = guardDoc(ctx)
+    if (blocked) return blocked
     // 批量剧本形态：顺序触发多个事件（前面的已触发即生效，中断时在错误里说明位置）
     if (Array.isArray(args.events)) {
       const events = (args.events as unknown[]).map(obj)
@@ -135,6 +165,7 @@ const debugDispatchTool: AiTool = {
       if (events.some((e) => !str(e.event))) return '触发失败：events 中存在空 event'
       const done: string[] = []
       for (const e of events) {
+        if (ctx.signal?.aborted) return `已停止：剧本完成 ${done.length}/${events.length}（${done.join(' → ') || '无'}），其余未触发`
         const err = await dispatchDebugEvent(str(e.event), (e.payload ?? {}) as Json)
         if (err) return `剧本第 ${done.length + 1} 个事件（${str(e.event)}）触发失败：${err}（前面 ${done.length} 个已触发）`
         done.push(str(e.event))
@@ -149,6 +180,7 @@ const debugDispatchTool: AiTool = {
     }
     const event = str(args.event)
     if (!event) return '触发失败：event 不能为空（或改用 events 剧本批量触发）'
+    if (ctx.signal?.aborted) return '已停止：事件未触发'
     const err = await dispatchDebugEvent(event, (args.payload ?? {}) as Json)
     if (err) return `触发失败：${err}`
     await new Promise((r) => setTimeout(r, Math.min(Number(args.waitMs) || 300, 2000)))
@@ -173,7 +205,9 @@ const debugSetVarTool: AiTool = {
       vars: { type: 'object', description: '批量形态：{变量名: 新值}，一次设置多个（与 name/value 二选一，多变量时优先用它）' },
     },
   },
-  exec: (args) => {
+  exec: (args, ctx) => {
+    const blocked = guardDoc(ctx)
+    if (blocked) return blocked
     // 批量形态：vars 一次设置多个（某个失败时已设置的保留，错误中说明位置）
     if (args.vars !== undefined) {
       const batch = obj(args.vars)
@@ -201,7 +235,9 @@ const debugBreakpointsTool: AiTool = {
     properties: { nodeIds: { type: 'array', items: { type: 'string' }, description: '节点 id 全集' } },
     required: ['nodeIds'],
   },
-  exec: (args) => {
+  exec: (args, ctx) => {
+    const blocked = guardDoc(ctx)
+    if (blocked) return blocked
     const ids = Array.isArray(args.nodeIds) ? (args.nodeIds as unknown[]).map(str).filter((x) => x !== '') : []
     setDebugBreakpoints(ids)
     return `✓ 断点已设置：${ids.join('、') || '（空）'}`

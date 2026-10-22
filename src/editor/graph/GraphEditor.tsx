@@ -60,7 +60,8 @@ import { clearRunLog, readRunLog } from '../../runtime/runLog'
 
 interface Props {
   doc: LevelDoc
-  onChange: (doc: LevelDoc) => void
+  /** tag 透传给 EditorPage.update（B6：AI 入坞面板写入合并为复合撤销事务） */
+  onChange: (doc: LevelDoc, tag?: string) => void
   /** AI 助手总开关（EditorPage 单一真源：工具栏「🤖 AI」与各 tab 面板共用） */
   aiOpen: boolean
   onToggleAi: () => void
@@ -786,7 +787,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
               doc={doc}
               selection={{ tab: 'graph', nodeId: selectedId }}
               onClose={onToggleAi}
-              onApplyDoc={onChange}
+              onApplyDoc={(next) => onChange(next, 'ai')}
               style={style}
               className={srcClass}
               headerDrag={{
@@ -911,14 +912,31 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     </div>
   )
 
+  // E16（docs/40）：调试画面跑的是启动时装载的快照（stage.doc）；此后文档被编辑
+  // 则画面/变量与当前文档脱节——检测逻辑签名变化给出重启提示（仅在调试中比较）
+  const docChangedSinceStart = useMemo(() => {
+    if (debugSnap.mode === 'idle') return false
+    const stageDoc = debugSnap.stage?.doc
+    if (!stageDoc) return false
+    return JSON.stringify(stageDoc.content.logic) !== JSON.stringify(doc.content.logic)
+  }, [debugSnap.mode, debugSnap.stage, doc.content.logic])
+
   // 调试布局（批次9 可视化）：会话激活时整体替换编辑布局——
   // 左区 = 调试画面/节点图二选一（画面为默认），右侧 = 调试面板 + AI 助手列（宽度可拖拽）
   if (debugSnap.mode !== 'idle') {
     return (
       <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`}>
         <div className="graph-toolbar">
-          <span className="gdb-live" title="调试会话运行中——画面上的点击即真实事件，AI 的调试操作也实时可见">
+          <span
+            className="gdb-live"
+            title={
+              debugSnap.owner === 'ai'
+                ? '调试会话运行中（AI 启动）——画面上的点击即真实事件，AI 的调试操作也实时可见'
+                : '调试会话运行中——画面上的点击即真实事件，AI 的调试操作也实时可见'
+            }
+          >
             {debugSnap.mode === 'paused' ? `⏸ 调试中（暂停于 ${debugSnap.pausedAt}）` : '▶ 调试运行中'}
+            {debugSnap.owner === 'ai' ? ' · AI' : ''}
           </span>
           <button
             type="button"
@@ -950,6 +968,11 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
           <span className="muted graph-toolbar-hint">变量/事件/断点/日志在右侧调试面板；AI 助手同列——AI 试玩全程可见</span>
         </div>
         {error && <div className="editor-errors">操作未生效：{error}</div>}
+        {docChangedSinceStart && (
+          <div className="editor-lint">
+            ⚠ 文档在调试启动后已被修改——画面与变量来自启动时的快照。停止并重新启动调试以应用新逻辑。
+          </div>
+        )}
         <div className="graph-layout gdb-layout">
           <div className="gdb-main">{dbgPane === 'stage' ? <DebugStage doc={doc} /> : graphCanvasArea}</div>
           <div
@@ -972,9 +995,13 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
                 startSplitDrag(e, 'y', (d) => setDbgDebugH(base + d))
               }}
             />
-            <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
-              <AiPanel doc={doc} selection={{ tab: 'graph', nodeId: selectedId }} onClose={onToggleAi} onApplyDoc={onChange} style={{ flex: 1, minHeight: 0 }} />
-            </Suspense>
+            {/* E6：调试布局的 AI 面板同样受 aiOpen 单一真源门控——此前无条件渲染，
+                关闭按钮形同虚设 */}
+            {aiOpen && (
+              <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
+                <AiPanel doc={doc} selection={{ tab: 'graph', nodeId: selectedId }} onClose={onToggleAi} onApplyDoc={(next) => onChange(next, 'ai')} style={{ flex: 1, minHeight: 0 }} />
+              </Suspense>
+            )}
           </div>
         </div>
       </div>

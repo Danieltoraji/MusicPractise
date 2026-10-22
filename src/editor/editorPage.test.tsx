@@ -8,6 +8,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { db } from '../library/db'
 import { blankLevelDoc } from './docState'
 import { EditorPage } from './EditorPage'
+import { getDebugSnapshot, startDebugRun, stopDebugRun } from './graph/debugRun'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -386,19 +387,19 @@ describe('EditorPage 草稿与内置副本（docs/40 R4：C1/C5）', () => {
     })
     await flush()
     // 建第二个视图
-    const addViewBtn = [...container!.querySelectorAll('button')].find((b) => b.textContent === '+ 视图')!
+    const addViewBtn = [...container!.querySelectorAll('button')].find((b) => b.textContent === '+ 视图') as HTMLButtonElement
     await act(async () => {
       addViewBtn.click()
     })
     await flush()
     // 选中「视图二」
-    const view2 = [...container!.querySelectorAll('.views-open')].find((b) => b.textContent?.includes('视图2')) as HTMLElement
+    const view2 = [...container!.querySelectorAll('.views-open')].find((b) => b.textContent?.includes('视图2')) as HTMLButtonElement
     await act(async () => view2.click())
     await flush()
     expect([...container!.querySelectorAll('.views-open')].find((b) => b.textContent?.startsWith('▸'))!.textContent).toContain('视图2')
     // 切 JSON 再切回画布
-    const jsonTab = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === 'JSON') as HTMLElement
-    const canvasTab = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === '画布') as HTMLElement
+    const jsonTab = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === 'JSON') as HTMLButtonElement
+    const canvasTab = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === '画布') as HTMLButtonElement
     await act(async () => jsonTab.click())
     await flush()
     await act(async () => canvasTab.click())
@@ -421,7 +422,7 @@ describe('EditorPage 草稿与内置副本（docs/40 R4：C1/C5）', () => {
     const rec = await db.resources.get(DOC_ID)
     await db.resources.put({ ...(rec as object), builtIn: 1 } as never)
     // 加组件产生历史
-    const addBtn = [...container!.querySelectorAll('.palette button')].find((b) => b.textContent!.startsWith('+ '))!
+    const addBtn = [...container!.querySelectorAll('.palette button')].find((b) => b.textContent!.startsWith('+ ')) as HTMLButtonElement
     await act(async () => addBtn.click())
     await flush()
     const undoBefore = [...container!.querySelectorAll('.editor-head button')].find((b) => b.textContent === '↶') as HTMLButtonElement
@@ -456,7 +457,7 @@ describe('EditorPage Inspector props（docs/40 R4 D7）', () => {
       root!.render(<EditorPage id={DOC_ID} />)
     })
     await flush()
-    const addBtn = [...container!.querySelectorAll('.palette button')].find((b) => b.textContent!.startsWith('+ '))!
+    const addBtn = [...container!.querySelectorAll('.palette button')].find((b) => b.textContent!.startsWith('+ ')) as HTMLButtonElement
     await act(async () => addBtn.click())
     await flush()
     await act(async () => {
@@ -473,5 +474,44 @@ describe('EditorPage Inspector props（docs/40 R4 D7）', () => {
       ta.dispatchEvent(new Event('input', { bubbles: true }))
     })
     expect(container!.querySelector('.inspector')!.textContent).toContain('必须是 JSON 对象')
+  })
+})
+
+describe('EditorPage 调试会话宿主生命周期（docs/40 R5：C3）', () => {
+  it('切离节点图 Tab / 卸载编辑器 → 调试会话停止（不再跨 Tab 播音频跑计时器）', async () => {
+    window.location.hash = '#/edit/new'
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root!.render(<EditorPage id="new" />)
+    })
+    await flush()
+    // 切到节点图 Tab 并启动调试（GraphEditor 懒加载不需要真正渲染——startDebugRun 是模块单例）
+    const graphTab = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === '节点图') as HTMLButtonElement
+    await act(async () => graphTab.click())
+    await flush()
+    const doc = blankLevelDoc()
+    await act(async () => {
+      await startDebugRun(doc)
+    })
+    expect(getDebugSnapshot().mode).toBe('running')
+    // 切画布 Tab → 会话停止（修复前：隐藏会话继续跑）
+    const canvasTab = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === '画布') as HTMLButtonElement
+    await act(async () => canvasTab.click())
+    await flush()
+    expect(getDebugSnapshot().mode).toBe('idle')
+    // 重启后再卸载编辑器 → 停止
+    await act(async () => {
+      await startDebugRun(doc)
+    })
+    expect(getDebugSnapshot().mode).toBe('running')
+    await act(async () => {
+      root?.unmount()
+    })
+    root = null
+    expect(getDebugSnapshot().mode).toBe('idle')
+    stopDebugRun()
+    window.location.hash = '#/library'
   })
 })

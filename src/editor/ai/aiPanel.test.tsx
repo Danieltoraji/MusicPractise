@@ -86,6 +86,44 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('运行归属（docs/40 R5：C4/F5）', () => {
+  function setKey(): void {
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
+    const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
+    stored.profiles.deepseek.apiKey = 'sk-t'
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
+  }
+
+  it('面板卸载即停止 agent 循环——不再「关面板后隐蔽运行/写入丢失但显示已应用」', async () => {
+    setKey()
+    clearSession(DOC.id)
+    // fetch 挂起：模拟一轮运行中的请求
+    vi.stubGlobal('fetch', vi.fn((_url: unknown, init?: { signal?: AbortSignal }) => new Promise((_res, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    })))
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await flushUntil(() => (c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement) !== null)
+    const ta = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+    act(() => {
+      setter.call(ta, '帮我改关卡')
+      ta.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const sendBtn = [...c.querySelectorAll('button')].find((b) => b.textContent === '发送') as HTMLButtonElement
+    act(() => sendBtn.click())
+    await flushUntil(() => getSession(DOC.id).busy)
+    expect(getSession(DOC.id).busy).toBe(true)
+    // 卸载面板（用户关闭面板 / 切 Tab）——renderEl 注册的 root 需手动出列
+    const idx = roots.length - 1
+    await act(async () => roots[idx].unmount())
+    roots.splice(idx, 1)
+    await flushUntil(() => !getSession(DOC.id).busy)
+    expect(getSession(DOC.id).busy).toBe(false) // 修复前：运行继续且无法停止
+    expect(getSession(DOC.id).error).toContain('已停止')
+    vi.unstubAllGlobals()
+  })
+})
+
 describe('AiPanel（jsdom）', () => {
   it('未配置 Key：显示去设置引导，发送被禁用', () => {
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)

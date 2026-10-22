@@ -31,6 +31,8 @@ export interface DebugStageSource {
 
 export interface DebugSnapshot {
   mode: DebugMode
+  /** 会话归属（docs/40 E4）：human=面板启动 / ai=AI 工具启动——徽标显示 + 工具守卫依据 */
+  owner: 'human' | 'ai' | null
   /** 暂停所在的节点 id（mode==='paused' 时非空） */
   pausedAt: string | null
   pausedEvent: string | null
@@ -109,6 +111,7 @@ function releaseAllSilently(): void {
 const listeners = new Set<() => void>()
 let snapshot: DebugSnapshot = {
   mode: 'idle',
+  owner: null,
   pausedAt: null,
   pausedEvent: null,
   breakpoints: [],
@@ -149,6 +152,10 @@ let session: LevelSession | null = null
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 let docIdRef: string | null = null
 let sessionNo = 0
+// 启动代次（docs/40 E9）：startDebugRun 在 session.start() 后有 await 窗口——
+// 窗口内 stopDebugRun 会把 session 置 null 并泄漏随后挂上的 interval 与仍在跑的实例。
+// await 返回后代次不一致 = 已被 newer start/stop 接管，本次收尾退出。
+let startGeneration = 0
 
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -169,17 +176,18 @@ export function isDebuggingDoc(docId: string): boolean {
   return snapshot.mode !== 'idle' && docIdRef === docId
 }
 
-/** 启动调试会话；返回 null = 成功，否则为装载错误文本 */
-export async function startDebugRun(doc: LevelDoc): Promise<string | null> {
+/** 启动调试会话；返回 null = 成功，否则为装载错误文本。owner 标记会话归属（docs/40 E4） */
+export async function startDebugRun(doc: LevelDoc, owner: 'human' | 'ai' = 'human'): Promise<string | null> {
   if (session) stopDebugRun()
   const check = loadLevelDoc(structuredClone(doc))
   if (!check.ok) {
     commit({ mode: 'idle', loadErrors: check.errors, stage: null })
     return check.errors.join('；')
   }
+  const generation = ++startGeneration
   docIdRef = doc.id
   sessionNo += 1
-  commit({ mode: 'running', events: [], finished: null, loadErrors: null, pausedAt: null, pausedEvent: null })
+  commit({ mode: 'running', owner, events: [], finished: null, loadErrors: null, pausedAt: null, pausedEvent: null })
 
   const host: SessionHost = {
     onRow: (index, total, rowData) => {
@@ -214,6 +222,12 @@ export async function startDebugRun(doc: LevelDoc): Promise<string | null> {
   commit({ stage })
   inst.start()
   await flush()
+  if (generation !== startGeneration) {
+    // await 窗口内已被 stop/新 start 接管：本次启动的实例必须就地销毁，否则
+    // session 引用已被清/换，这个实例带着音频与计时器「隐形运行」（docs/40 C3/E9）
+    inst.dispose()
+    return null
+  }
   refreshLive()
   notify()
   // 实时观察：运行期间低频刷新变量快照（wait/timer 推进的状态）
@@ -224,7 +238,10 @@ export async function startDebugRun(doc: LevelDoc): Promise<string | null> {
 }
 
 export function stopDebugRun(): void {
+  startGeneration += 1 // 作废在途启动（E9）
   controller.enabled = false
+  controller.pendingPause = false // E7：残留标志跨会话——不清会让下次启动第一个节点就暂停
+  controller.pendingStep = false
   releaseAllSilently()
   if (refreshTimer) {
     clearInterval(refreshTimer)
@@ -233,12 +250,17 @@ export function stopDebugRun(): void {
   session?.dispose()
   session = null
   docIdRef = null
-  commit({ mode: 'idle', pausedAt: null, pausedEvent: null, stage: null })
+  commit({ mode: 'idle', owner: null, pausedAt: null, pausedEvent: null, stage: null })
 }
 
-/** 重开当前调试会话（restart 语义：变量/组件/行复位重跑；断点与日志保留） */
+/** 重开当前调试会话（restart 语义：变量/组件/行复位重跑；断点与日志保留）。
+ *  E8：先放行全部挂起门 + 清暂停/结算暂态——暂停中重开会卡在旧门、结算横幅残留 */
 export function restartDebug(): string | null {
   if (!session) return '调试会话未运行'
+  releaseAllSilently()
+  controller.pendingPause = false
+  controller.pendingStep = false
+  commit({ finished: null, pausedAt: null, pausedEvent: null, mode: 'running' })
   session.restart()
   void Promise.resolve().then(async () => {
     await flush()

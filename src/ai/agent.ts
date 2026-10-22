@@ -116,6 +116,7 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
         opts.ctx.applyDoc(next)
       },
       emitImages: (imgs) => imageBuffer.push(...imgs),
+      signal: ctrl.signal, // F5/C4：本地工具可感知停止（长等待点提前收尾）
     }
 
     for (let turn = 0; turn < maxTurns; turn++) {

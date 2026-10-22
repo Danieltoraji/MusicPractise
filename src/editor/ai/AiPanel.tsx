@@ -86,6 +86,11 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     void hydrateSession(doc.id)
   }, [doc.id])
 
+  // C4/F5（docs/40）：运行归属面板——卸载即停止 agent 循环。此前关闭面板/切 Tab 后
+  // 运行继续：写通道指向已卸载组件的 setDoc（静默丢失但显示「✓ 已应用」、token 照扣），
+  // 或仍在改文档而用户不可见、无法停止
+  useEffect(() => () => stopAgent(doc.id), [doc.id])
+
   // 新消息/状态变化时滚到底部
   useEffect(() => {
     const el = listRef.current

@@ -31,6 +31,11 @@ export interface ToolContext {
   captureScreenshot?(target?: 'graph' | 'canvas' | 'debug'): Promise<string | null>
   /** 向对话追加图像（多模态模型可查看、创作者可见）——AI 截图后调用 */
   emitImages?(images: string[]): void
+  /**
+   * 运行中止信号（docs/40 F5/C4）：面板卸载/用户停止时 abort——长等待类工具
+   * （debug_dispatch 剧本等）在每个等待点检查后提前收尾，不再「停止后仍跑完并落盘」
+   */
+  signal?: AbortSignal
 }
 
 export interface AiTool {

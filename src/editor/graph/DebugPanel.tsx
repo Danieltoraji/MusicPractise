@@ -41,11 +41,12 @@ export function DebugPanel({ doc, onFocusNode }: Props) {
     if (snap.pausedAt) onFocusNode(snap.pausedAt)
   }, [snap.pausedAt, onFocusNode])
 
-  // 实时日志自动滚动到底部
+  // 实时日志自动滚动到底部——依赖数组用 events 引用而非 length（O5：满 100 条后
+  // length 不再变化，新日志到来不会触发滚动）
   useEffect(() => {
     const el = logRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [snap.events.length])
+  }, [snap.events])
 
   const trigger = async (): Promise<void> => {
     setTriggerError(null)
