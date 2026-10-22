@@ -13,6 +13,7 @@ import { ErrorBoundary } from '../library/ErrorBoundary'
 import { allContracts, ComponentStore, getDef } from '../runtime/store'
 import { ComponentView } from '../components/views'
 import { makeDirtyHashHandler } from './graph/dirtyGuard'
+import { undoTargetBlocked, deleteTargetBlocked } from './keyGuard'
 import { TableEditor } from './TableGrid'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentInstance, LevelDoc } from '../engine/level'
@@ -125,25 +126,31 @@ export function EditorPage({ id }: Props) {
   }, [onHashChangeCapture])
 
   // 装载：new = 空白模板；否则取库内文档（可能是 v1/v2 旧记录——装载即迁移出 v3，评审 P1-1）。
-  // loadedIdRef 语义：同一关卡不重复装载（保护未保存编辑）；换 id（#/edit/A → #/edit/B）强制重装
+  // loadedIdRef 语义：同一关卡不重复装载（保护未保存编辑）；换 id（#/edit/A → #/edit/B）强制重装。
+  // 迁移失败 → loadError 独立错误分支（docs/40 A4：此前写进 saveErrors 但 !doc 早退分支
+  // 永远渲染不到错误条，用户只见无限「编辑器加载中…」）；loadTick 支持失败后重试重跑。
   const loadedIdRef = useRef<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadTick, setLoadTick] = useState(0)
   useEffect(() => {
     if (record === 'loading' || record === undefined || record === null) return
     if (loadedIdRef.current === id) return
     loadedIdRef.current = id
     if (record === 'new') {
       setDoc(blankLevelDoc())
+      setLoadError(null)
       return
     }
     try {
       const migrated = migrateDocToV3((record as LibraryRecord).doc)
       setDoc(migrated)
+      setLoadError(null)
     } catch (err) {
-      setSaveErrors([`文档迁移失败: ${err instanceof Error ? err.message : String(err)}`])
+      setLoadError(err instanceof Error ? err.message : String(err))
       setDoc(null)
       loadedIdRef.current = null
     }
-  }, [record, id])
+  }, [record, id, loadTick])
 
   // ---------------------------------------------------------------------------
   // 撤销/重做栈（批次6c）：所有 update（手动+AI 写入）入栈，cap 50；
@@ -199,12 +206,12 @@ export function EditorPage({ id }: Props) {
   }, [histBump])
 
   // 快捷键（批次6c）：window 级监听——Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z（或 Ctrl+Y）重做。
-  // 输入框/文本域内不拦截（浏览器原生文本撤销优先）；编辑器卸载即移除。
+  // 输入框/文本域/下拉内不拦截（浏览器原生文本撤销优先）；弹窗打开期间短路（docs/40 B5：
+  // 此前 Ctrl+Z 穿透弹窗，弹窗草稿提交时会覆盖撤销结果）；编辑器卸载即移除。
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (!(e.ctrlKey || e.metaKey)) return
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (undoTargetBlocked(e.target)) return
       const key = e.key.toLowerCase()
       if (key === 'y') {
         e.preventDefault()
@@ -256,8 +263,44 @@ export function EditorPage({ id }: Props) {
     if (r.ok && r.savedId) window.location.hash = `#/level/${r.savedId}`
   }
 
+  // 装载失败独立分支（早于加载中判定）：可读错误 + 返回资源库/重试，不再是死胡同
+  if (loadError) {
+    return (
+      <div className="page editor">
+        <div className="editor-errors">
+          <b>无法打开这个关卡：</b>
+          <ul>
+            <li>文档迁移失败——{loadError}</li>
+          </ul>
+        </div>
+        <p className="action-row">
+          <a href="#/library">← 返回资源库</a>
+          <button
+            type="button"
+            onClick={() => {
+              setLoadError(null)
+              setLoadTick((t) => t + 1)
+            }}
+          >
+            重试
+          </button>
+        </p>
+      </div>
+    )
+  }
+
   if (record === 'loading' || record === undefined || !doc) {
-    return <p className="muted page">{record === null && id !== 'new' ? '库中没有这个关卡' : '编辑器加载中…'}</p>
+    return (
+      <p className="muted page">
+        {record === null && id !== 'new' ? (
+          <>
+            库中没有这个关卡 · <a href="#/library">返回资源库</a>
+          </>
+        ) : (
+          '编辑器加载中…'
+        )}
+      </p>
+    )
   }
 
   return (
@@ -412,14 +455,14 @@ function EditorCanvas({
   const [view, setView] = useState(doc.content.views[0]?.id ?? 'main')
   const currentView = doc.content.views.some((v) => v.id === view) ? view : (doc.content.views[0]?.id ?? 'main')
 
-  // Delete/Backspace 快捷删除选中组件（与节点图 deleteKeyCode 口径一致；走 onChange 入撤销栈）。
-  // 输入控件聚焦时不拦截——标题/属性等文本编辑优先（节点图侧 RF 键处理同规则）。
+  // Delete/Backspace 快捷删除选中组件（走 onChange 入撤销栈）。守卫统一走 keyGuard
+  // （docs/40 B5/E11）：弹窗打开短路；焦点在输入/下拉/按钮上放行给控件自身——
+  // 此前 SELECT 聚焦按 Delete 会误删组件。
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (deleteTargetBlocked(e.target)) return
       if (!selected || !doc.content.components.some((c) => c.id === selected)) return
       e.preventDefault()
       onChange(removeComponent(doc, selected))
@@ -592,11 +635,9 @@ function EditorCanvas({
           doc={doc}
           comp={selectedComp}
           onChange={(patch) => onChange(updateComponent(doc, selectedComp.id, patch))}
-          onRemove={() => {
-            onChange(removeComponent(doc, selectedComp.id))
-            onSelect(null)
-            onRemove()
-          }}
+          // 单次删除走外层 onRemove（EditorPage 闭包一次 update）——此前 Inspector 内再
+          // 调一次 onChange(removeComponent) 造成同事件两次入撤销栈（docs/40 B3 空撤销步）
+          onRemove={onRemove}
         />
       )}
     </div>

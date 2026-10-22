@@ -11,7 +11,7 @@ npm install
 npm run dev              # http://localhost:5173（纯前端；/api 走 vite 代理 → wrangler dev）
 npm run db:migrate:local # D1 迁移应用到本地模拟库（本地全栈流程一次）
 npm run dev:worker       # wrangler dev 全栈验证（先 npm run build 产出 dist/）
-npm test                 # Vitest：引擎/运行时/编辑器/AI/资源库/云盘/关卡库 + worker API（现行基线 805 项全绿）
+npm test                 # Vitest：引擎/运行时/编辑器/AI/资源库/云盘/关卡库 + worker API（现行基线 823 项全绿）
 npm run build            # tsc strict + Vite 生产构建
 ```
 
@@ -79,6 +79,8 @@ Remove-Item seed-admin.sql   # 内含密码哈希，执行后删除
 | [docs/37-运行时UI改造.md](docs/37-运行时UI改造.md) | 游玩页剧场化改造与主题裁决 |
 | [docs/38-编辑器界面改造.md](docs/38-编辑器界面改造.md) | 编辑器界面改造与移动端口径 |
 | [docs/39-云盘共享与关卡库迭代.md](docs/39-云盘共享与关卡库迭代.md) | 云盘文件夹化、公共/精选/官方/群组关卡库、审核流（H1–H6 已落地） |
+| [docs/40-编辑器前端开发坑位与风险清单.md](docs/40-编辑器前端开发坑位与风险清单.md) | 编辑器前端全量审计：30 P1 / 66 P2 / 20 观察，逐条 文件:行 证据与修复路线 |
+| [docs/41-编辑器修复批次落地记录.md](docs/41-编辑器修复批次落地记录.md) | docs/40 修复执行：批次 R1–R12 总表、裁决与逐批回填（commit/用例/实测） |
 
 ## 目录
 

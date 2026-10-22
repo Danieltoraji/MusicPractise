@@ -128,6 +128,31 @@ export function replaceLastMessage(docId: string, msg: ChatMessage): void {
   setSession(docId, { ...s, messages })
 }
 
+/**
+ * 流式中断/失败收尾（docs/40 F2）：末条若为 streaming 占位——空则整体移除，
+ * 已有半截内容则定稿（清 streaming 标记并加中断注记）；同时清未刷 delta。
+ * 不调用时：中止/网络错误会留下永久闪烁的幽灵占位，重试会把它发给严格供应商（4xx），
+ * 残留 pendingDelta 还会把旧尾巴拼进下一轮首帧。
+ */
+export function finalizeStreamingMessage(docId: string): void {
+  pendingDelta.delete(docId)
+  const s = getSession(docId)
+  const last = s.messages.at(-1)
+  if (!last || last.role !== 'assistant' || last.streaming !== true) return
+  if (last.content.trim() === '') {
+    setSession(docId, { ...s, messages: s.messages.slice(0, -1) })
+    return
+  }
+  const messages = [...s.messages]
+  messages[messages.length - 1] = { ...last, streaming: undefined, content: `${last.content}（已中断）` }
+  setSession(docId, { ...s, messages })
+}
+
+/** 持久化/下发前清洗：streaming 占位不是合法消息（docs/40 F2——旧档里可能残留） */
+function withoutStreamingGhost(messages: ChatMessage[]): ChatMessage[] {
+  return messages.filter((m) => m.streaming !== true)
+}
+
 export function clearSession(docId: string): void {
   setSession(docId, {
     messages: [],
@@ -166,7 +191,7 @@ function schedulePersist(docId: string): void {
         return
       }
       void db.aiSessions
-        .put({ docId, messages: s.messages, plan: s.plan, mode: s.mode, usage: s.usage, updatedAt: Date.now() })
+        .put({ docId, messages: withoutStreamingGhost(s.messages), plan: s.plan, mode: s.mode, usage: s.usage, updatedAt: Date.now() })
         .catch(() => {})
     }, 600),
   )
@@ -184,7 +209,7 @@ export async function hydrateSession(docId: string): Promise<void> {
     if (cur.messages.length > 0) return // 挂载期间已有新消息（kickoff 等），不覆盖
     setSession(docId, {
       ...cur,
-      messages: Array.isArray(rec.messages) ? (rec.messages as ChatMessage[]) : [],
+      messages: Array.isArray(rec.messages) ? withoutStreamingGhost(rec.messages as ChatMessage[]) : [],
       plan: (rec.plan as PlanState | null) ?? null,
       mode: rec.mode ?? 'ask',
       usage: rec.usage ?? undefined,

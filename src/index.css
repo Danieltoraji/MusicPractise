@@ -1550,6 +1550,12 @@ a.level-row:hover {
   display: flex;
   gap: 8px;
 }
+/* 纵向 flex：textarea flex:1 撑满剩余高度（docs/40 G7——此前无 display:flex，textarea 高度塌缩） */
+.json-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
 .json-tab textarea {
   width: 100%;
   flex: 1;
@@ -2555,7 +2561,8 @@ path.gedge-false {
   font-size: var(--fs-0);
   color: var(--muted);
 }
-.tlist-modal {
+/* 双类选择器抬特异性：tjson-modal（640px）声明在后，单类会被同特异性后写覆盖成死代码（docs/40 G7） */
+.tjson-modal.tlist-modal {
   width: min(520px, 92vw);
 }
 .tlist-rows {
@@ -5632,42 +5639,8 @@ a.lib-title:hover {
   color: var(--accent);
 }
 
-@media (max-width: 720px) {
-  .docs {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-  .docs-side {
-    position: static;
-  }
-  .docs-nav {
-    flex-direction: row;
-    overflow-x: auto;
-    gap: 10px;
-    padding-bottom: 4px;
-  }
-  .docs-group {
-    flex-direction: row;
-    align-items: center;
-    gap: 4px;
-    flex: none;
-  }
-  .docs-group-title {
-    margin-bottom: 0;
-    margin-right: 2px;
-    white-space: nowrap;
-  }
-  .docs-link {
-    white-space: nowrap;
-    border-left: none;
-  }
-  .docs-article {
-    padding: 18px 16px 16px;
-  }
-  .docs-pager-link {
-    max-width: 60%;
-  }
-}
+/* （docs 页 720px 媒体查询已移至文件尾——被 docs/36 令牌对齐块的同名 .docs-article
+   padding 覆盖成死规则，docs/40 G7；媒体查询必须放在被覆盖区块之后） */
 
 /* ---------- 皮肤系统（docs/35 §2-4）：背景图层 / 水印层 / 皮肤中心 ---------- */
 
@@ -6568,4 +6541,44 @@ progress {
 .skin-note-top {
   font-size: var(--fs-0);
   line-height: 1.6;
+}
+
+/* ================= 响应式覆盖层（文件尾） ================= */
+/* docs 页 720px 断点：从 docs/36 令牌对齐块之前迁至文件尾——同特异性后者胜，
+   此前 .docs-article 的移动端 padding 被文件尾令牌块无条件覆盖（docs/40 G7）。 */
+@media (max-width: 720px) {
+  .docs {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .docs-side {
+    position: static;
+  }
+  .docs-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 10px;
+    padding-bottom: 4px;
+  }
+  .docs-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+  }
+  .docs-group-title {
+    margin-bottom: 0;
+    margin-right: 2px;
+    white-space: nowrap;
+  }
+  .docs-link {
+    white-space: nowrap;
+    border-left: none;
+  }
+  .docs-article {
+    padding: 18px 16px 16px;
+  }
+  .docs-pager-link {
+    max-width: 60%;
+  }
 }

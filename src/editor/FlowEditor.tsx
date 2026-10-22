@@ -53,6 +53,8 @@ export function FlowEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: L
       .filter((n, i, arr) => arr.indexOf(n) === i)
       .filter((n) => !varNames.includes(n))
     setExprWarn(undeclared.length > 0 ? `引用了未声明的变量：v.${undeclared.join('、v.')}（可在节点图变量面板补声明）` : '')
+    // 值未变化不写 doc（docs/40 B4：聚焦再失焦曾把未修改的关卡标脏并入撤销栈）
+    if (flow.pass && flow.pass.expr === expr) return
     patchFlow({ pass: { expr } })
   }
 
@@ -95,7 +97,7 @@ export function FlowEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: L
           onBlur={(e) => {
             const raw = e.currentTarget.value.trim()
             if (raw === '') {
-              patchFlow({ count: null as never }) // 归一化为删键
+              if (count !== null) patchFlow({ count: null as never }) // 归一化为删键
               return
             }
             const n = Math.trunc(Number(raw))
@@ -103,7 +105,7 @@ export function FlowEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: L
               e.currentTarget.value = count !== null ? String(count) : '' // 非法：还原显示
               return
             }
-            patchFlow({ count: n })
+            if (n !== count) patchFlow({ count: n }) // 同值失焦不标脏（docs/40 B4）
           }}
         />
       </label>

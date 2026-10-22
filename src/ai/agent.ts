@@ -5,7 +5,7 @@
  */
 
 import { AiClientError, chatCompleteRaw, type AiProfileConfig, type AiToolSpec, type ChatMessage } from './client'
-import { addSessionUsage, appendMessage, beginStreamingMessage, getSession, patchSession, replaceLastMessage, streamAppendToLast } from './session'
+import { addSessionUsage, appendMessage, beginStreamingMessage, finalizeStreamingMessage, getSession, patchSession, replaceLastMessage, streamAppendToLast } from './session'
 import type { AiTool, ToolContext } from './tools'
 import type { LevelDoc } from '../engine/level'
 
@@ -26,23 +26,31 @@ function compressOld(msg: ChatMessage, index: number, arr: ChatMessage[]): ChatM
   return msg
 }
 
+/** 下发前清洗：流式中断残留的 streaming 占位与空 assistant（无内容也无 tool_calls）不发给模型（docs/40 F2） */
+function usableForModel(m: ChatMessage): boolean {
+  if (m.role !== 'assistant') return true
+  if (m.streaming === true) return false
+  return m.content.trim() !== '' || (m.toolCalls?.length ?? 0) > 0
+}
+
 /**
  * 组装发给模型的请求消息：system + 最近窗口。
  * 超限时窗口起点前进到第一条 user 消息——不能从 assistant(tool_calls)/tool 对中间切开，
  * 否则 tool 消息失去前置 tool_calls，严格供应商会 4xx。只影响下发副本，不动会话。
  */
 export function buildModelMessages(systemPrompt: string, history: ChatMessage[]): ChatMessage[] {
-  if (history.length <= MODEL_MSG_LIMIT) return [{ role: 'system', content: systemPrompt }, ...history.map(compressOld)]
-  let start = history.length - MODEL_MSG_LIMIT
-  while (start < history.length && history[start].role !== 'user') start++
-  if (start >= history.length) {
+  const usable = history.filter(usableForModel)
+  if (usable.length <= MODEL_MSG_LIMIT) return [{ role: 'system', content: systemPrompt }, ...usable.map(compressOld)]
+  let start = usable.length - MODEL_MSG_LIMIT
+  while (start < usable.length && usable[start].role !== 'user') start++
+  if (start >= usable.length) {
     // 窗口内没有 user 消息（极端情况）：保完整历史，宁可偏长不可断对
-    return [{ role: 'system', content: systemPrompt }, ...history.map(compressOld)]
+    return [{ role: 'system', content: systemPrompt }, ...usable.map(compressOld)]
   }
   return [
     { role: 'system', content: systemPrompt },
     { role: 'system', content: `（更早的 ${start} 条消息已省略以控制上下文长度；如需更早的细节请让用户重新提供。）` },
-    ...history.slice(start).map(compressOld),
+    ...usable.slice(start).map(compressOld),
   ]
 }
 
@@ -165,6 +173,9 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     })
     patchSession(opts.docId, { turnCapHit: true })
   } catch (err) {
+    // 流式中断/失败收尾：移除或定稿 streaming 占位、清未刷 delta（docs/40 F2），
+    // 否则幽灵占位留在会话（光标永久闪烁）且下次重试会把它发给供应商
+    if (opts.stream) finalizeStreamingMessage(opts.docId)
     let message: string
     if (ctrl.signal.aborted) message = '已停止。'
     else if (err instanceof AiClientError) message = err.message

@@ -355,6 +355,21 @@ describe('FlowEditor（批次10 推进与过关）', () => {
     }
   })
 
+  it('B4 回归：同值失焦不写 doc——「本局题数」聚焦再失焦不再把未修改的关卡标脏', () => {
+    const initial = baseDoc()
+    initial.content.flow = { count: 5 }
+    const { c, doc, restore } = renderFlow(initial)
+    try {
+      const countInput = c.querySelector('.flow-field input[type="number"]') as HTMLInputElement
+      expect(countInput.value).toBe('5')
+      const before = doc()
+      blur(countInput) // 未修改任何值直接失焦
+      expect(doc()).toBe(before) // onChange 未被调用（修复前：无脑 patchFlow → 标脏并入撤销栈）
+    } finally {
+      restore()
+    }
+  })
+
   it('取消勾选 = 删除 pass 键；重新勾选给种子表达式', () => {
     const initial = baseDoc()
     initial.content.flow = { pass: { expr: 'v.score >= 10' } }

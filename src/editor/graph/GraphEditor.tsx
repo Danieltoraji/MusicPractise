@@ -52,6 +52,7 @@ import { DebugStage } from './DebugStage'
 import { EventManagerPanel } from './EventManagerPanel'
 import { getAiHighlight, subscribeAiHighlight } from './aiHighlight'
 import { getDebugSnapshot, stopDebugRun, subscribeDebugRun, toggleDebugBreakpoint } from './debugRun'
+import { deleteTargetBlocked } from '../keyGuard'
 import { NodeInspector } from './NodeInspector'
 import { VariablesPanel } from './VariablesPanel'
 import { CanvasMap } from './CanvasMap'
@@ -377,7 +378,6 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
   const [showMap, setShowMap] = useState(true)
   const [mapFocus, setMapFocus] = useState<string | null>(null)
   const [logTick, setLogTick] = useState(0) // 手动刷新日志读取
-  const [scriptError, setScriptError] = useState<string | null>(null)
 
   const palette = useMemo(() => buildPalette(doc), [doc])
   // 调试状态（docs/30）：断点印在节点卡圆点、暂停节点高亮
@@ -456,16 +456,16 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     [doc, onChange],
   )
 
-  // Delete/Backspace 删除 RF 受控选中集（节点级联断边；输入控件聚焦时不拦截）。
-  // 不用 React Flow 内置 deleteKeyCode：受控模式下其键处理依赖内部 effect 时序，
-  // 真实浏览器实测不可靠；自有 window 监听与画布 tab 的组件删除口径一致。
-  // rfSelRef 为真源镜像，避免监听随选集变化反复重挂。
+  // Delete/Backspace 删除 RF 受控选中集（节点级联断边；走统一 keyGuard 守卫——弹窗打开短路、
+  // 输入/下拉/按钮聚焦放行，docs/40 B5/E11）。同时显式传 deleteKeyCode={null} 关闭 React Flow
+  // 内建删除通道（v12 默认 Backspace 删除仍启用，与自有监听构成双路径）；受控模式下
+  // 内建键处理依赖内部 effect 时序，真实浏览器实测不可靠——删除一律走这里。
+  // rfSelRef 为真源镜像，避免监听随选区变化反复重挂。
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (deleteTargetBlocked(e.target)) return
       const nodeIds = [...rfSelRef.current.nodes]
       const edgeIds = [...rfSelRef.current.edges]
       if (nodeIds.length === 0 && edgeIds.length === 0) return
@@ -553,7 +553,9 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
     })
     nodeCacheRef.current = { map: nextMap, sig: nextSig }
     return list
-  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, compsSig, relatedIds, breakpointSet, debugSnap.pausedAt, aiHlSet, rfSel.nodes])
+    // theme/summaryMode 是签名与 data 的组成部分却曾被漏出依赖数组——切主题/摘要后节点卡
+    // 拿旧 data（内联色带与摘要语言滞留旧值），docs/40 E2
+  }, [program, fallbackPos, issuesByNode, dragPos, compsInfo, compsSig, relatedIds, breakpointSet, debugSnap.pausedAt, aiHlSet, rfSel.nodes, theme, summaryMode])
 
   const rfEdges: Edge[] = useMemo(
     () =>
@@ -854,6 +856,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
           setMenu({ screen: { x: e.clientX, y: e.clientY }, flow })
         }}
         onEdgeDoubleClick={(_, edge) => apply((prog) => disconnect(prog, edge.id))}
+        deleteKeyCode={null}
         fitView
         minZoom={0.2}
         colorMode={theme}
@@ -888,18 +891,21 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         <div className="graph-script-overlay">
           <div className="graph-script-head">
             <b>伪代码视图（LevelScript）</b>
-            <span className="muted">只读——结构与图一一对应，双向无损</span>
+            <span className="muted">只读投影——按事件入口遍历生成；未接线节点不包含（脚本页可编辑并回写）</span>
             <button
               type="button"
               onClick={() => {
                 setShowScript(false)
-                setScriptError(null)
               }}
             >
               关闭
             </button>
           </div>
-          {scriptError ? <div className="ginsp-issues tone-error">{scriptError}</div> : <pre className="script-view">{scriptText?.text}</pre>}
+          {scriptText?.error ? (
+            <div className="ginsp-issues tone-error">{scriptText.error}</div>
+          ) : (
+            <pre className="script-view">{scriptText?.text}</pre>
+          )}
         </div>
       )}
     </div>

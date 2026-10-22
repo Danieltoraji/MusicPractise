@@ -8,10 +8,11 @@
  * - 列宽/行高为编辑器内存态（不进文档 JSON，会话内保持）
  * 约束延续：单元格受控写回（删行/插行后不残留旧文本，评审 P1-2）。
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ColumnType, LevelDoc } from '../engine/level'
 import { FlowEditor } from './FlowEditor'
 import { ListEditorModal, listEntriesFromCell } from './ListEditor'
+import { registerModalOpen } from './keyGuard'
 import type { Json } from '../engine/expr'
 import {
   addTableColumn,
@@ -421,6 +422,8 @@ function JsonCellEditor(props: {
   const cell = props.doc.content.table.rows[props.row]?.[props.colKey]
   const [text, setText] = useState(() => (cell === undefined ? 'null' : JSON.stringify(cell, null, 2)))
   const [err, setErr] = useState('')
+  // 模态打开期间短路编辑器全局快捷键（Ctrl+Z/Delete，docs/40 B5）
+  useEffect(registerModalOpen, [])
 
   const apply = (): void => {
     const t = text.trim()

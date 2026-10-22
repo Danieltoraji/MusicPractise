@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildModelMessages, runAgentTurn, stopAgent } from './agent'
 import type { AiProfileConfig, ChatMessage } from './client'
-import { appendMessage, clearSession, getSession } from './session'
+import { appendMessage, beginStreamingMessage, clearSession, finalizeStreamingMessage, getSession, streamAppendToLast } from './session'
 import type { AiTool, ToolContext } from './tools'
 import type { LevelDoc } from '../engine/level'
 
@@ -462,6 +462,75 @@ describe('agent 流式（批次6a）', () => {
     expect(msgs.at(-1)!.streaming).toBeUndefined()
   }, 15000)
 })
+describe('流式中断/失败收尾（docs/40 F2）', () => {
+  it('finalizeStreamingMessage：空占位整体移除；半截内容定稿（清 streaming 标记 + 中断注记）', () => {
+    clearSession('res_agent_f2a')
+    beginStreamingMessage('res_agent_f2a')
+    finalizeStreamingMessage('res_agent_f2a')
+    expect(getSession('res_agent_f2a').messages).toHaveLength(0)
+
+    beginStreamingMessage('res_agent_f2a')
+    streamAppendToLast('res_agent_f2a', '写到一半', true)
+    finalizeStreamingMessage('res_agent_f2a')
+    const last = getSession('res_agent_f2a').messages.at(-1)!
+    expect(last.role).toBe('assistant')
+    expect(last.streaming).toBeFalsy()
+    expect(last.content).toContain('写到一半')
+    expect(last.content).toContain('已中断')
+    clearSession('res_agent_f2a')
+  })
+
+  it('buildModelMessages 过滤 streaming 占位与空 assistant；纯 tool_calls 消息保留', () => {
+    const history: ChatMessage[] = [
+      { role: 'user', content: 'go' },
+      { role: 'assistant', content: '', streaming: true }, // 中断残留占位
+      { role: 'assistant', content: '' }, // 空幽灵（无内容也无 tool_calls）
+      { role: 'assistant', content: '', toolCalls: [{ id: 'c1', type: 'function', function: { name: 't', arguments: '{}' } }] },
+    ]
+    const out = buildModelMessages('S', history)
+    expect(out.map((m) => m.role)).toEqual(['system', 'user', 'assistant'])
+    expect(out.some((m) => m.streaming === true)).toBe(false)
+    expect(out[2].toolCalls).toHaveLength(1)
+  })
+
+  it('流中途断流（网络错误）：占位定稿收尾，会话不再留永久闪烁的 streaming 幽灵', async () => {
+    clearSession('res_agent_f2b')
+    const enc = new TextEncoder()
+    const chunk = (text: string): Uint8Array => enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`)
+    // SSE：两段 delta 间隔 120ms（第二段必过 40ms 合帧门、刷出半截内容），随后流报错——模拟网络中断
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(chunk('正在思'))
+        setTimeout(() => {
+          c.enqueue(chunk('考着'))
+          setTimeout(() => c.error(new Error('network dropped')), 80)
+        }, 120)
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })))
+    await runAgentTurn({
+      docId: 'res_agent_f2b',
+      profile,
+      systemPrompt: 'S',
+      userText: 'go',
+      tools: [fakeTool],
+      ctx,
+      stream: true,
+    })
+    const s = getSession('res_agent_f2b')
+    expect(s.error).toContain('network dropped')
+    // 修复前：末条永远带 streaming:true（面板光标常闪），重试还会把空 assistant 发给供应商
+    expect(s.messages.some((m) => m.streaming === true)).toBe(false)
+    const last = s.messages.at(-1)!
+    expect(last.content).toContain('正在思')
+    expect(last.content).toContain('已中断')
+    // 收尾后的消息是合法 assistant——重试下发不会再携带幽灵
+    const out = buildModelMessages('S', s.messages)
+    expect(out.some((m) => m.streaming === true)).toBe(false)
+    clearSession('res_agent_f2b')
+  }, 15000)
+})
+
 describe('历史预算 buildModelMessages（批次8c）', () => {
   const sys = 'SYS'
   const u = (i: number): ChatMessage => ({ role: 'user', content: `u${i}` })

@@ -64,11 +64,11 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
     if (cached) return cached
     return genDraft(program)
   })
-  // 挂载时判定：缓存基线 ≠ 当前 IR → 其它视图（节点图/JSON）改过逻辑，文本已过期
-  const [irStale, setIrStale] = useState<boolean>(() => {
-    const cached = drafts.get(doc.id)
-    return cached ? cached.baselineSig !== signatureOf(program) : false
-  })
+  // 每次渲染派生陈旧判定（docs/40 E3）：缓存基线签名 ≠ 当前 IR 签名 = 其它视图改过逻辑。
+  // 曾是一次性 useState 判定——AI 在脚本 Tab 保持挂载期间改逻辑时黄条永不出现，
+  // 点「应用」会用旧文本静默覆盖 AI 写入。
+  const curSig = useMemo(() => signatureOf(program), [program])
+  const irStale = draft.baselineSig !== curSig
   const [parseError, setParseError] = useState<ScriptError | null>(null)
   const [appliedTip, setAppliedTip] = useState<string | null>(null)
 
@@ -83,10 +83,8 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
   const regenerate = (): void => {
     const fresh = genDraft(program)
     setDraft(fresh)
-    setIrStale(false)
     setParseError(null)
     setAppliedTip(null)
-    void fresh
   }
 
   const apply = (): void => {
@@ -95,7 +93,6 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
       const next = parseScript(text, { variables: program.variables, idPrefix: ID_PREFIX })
       const nextSig = signatureOf(next)
       setDraft({ text, baseline: text, baselineSig: nextSig, genError: null })
-      setIrStale(false)
       setParseError(null)
       setAppliedTip(`已应用（${next.nodes.length} 节点 / ${next.edges.length} 连线；节点图已按脚本重建）`)
       onChange({ ...doc, content: { ...doc.content, logic: next } })

@@ -139,6 +139,80 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     expect(doc.content.logic.nodes).toHaveLength(2)
   })
 
+  it('E11 回归：焦点在 Inspector 的 SELECT（或按钮）上按 Backspace/Delete 不删节点', () => {
+    let doc = baseDoc()
+    const onChange = vi.fn((next: LevelDoc) => {
+      doc = next
+    })
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
+    const card = [...container.querySelectorAll('.react-flow__node')].find((n) => (n as HTMLElement).dataset.id === 'on1')!
+    act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    // 选中 on1 → Inspector 的事件下拉；聚焦下拉按删除键：修复前 SELECT 不在守卫清单，节点被误删
+    const select = container.querySelector('.ginsp select') as HTMLSelectElement | null
+    expect(select).toBeTruthy()
+    act(() => {
+      select!.focus()
+      select!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }))
+    })
+    expect(onChange).not.toHaveBeenCalled()
+    expect(doc.content.logic.nodes).toHaveLength(2)
+    // 焦点回到画布态（window）按 Delete 仍可删——守卫没有把删除功能关掉
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }))
+    })
+    expect(onChange).toHaveBeenCalled()
+  })
+
+  it('E2 回归：切 ☀/🌙 主题与 A/中 摘要即刻作用于节点卡（rfNodes 依赖曾漏 theme/summaryMode）', () => {
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    const band = () => container.querySelector('.gnode-band') as HTMLElement
+    // assign 节点的摘要在 en/zh 两模式必然不同（'v.score = …' vs '把 v.score 设为 …'）；
+    // on 节卡的事件中文名两种模式同文，不适合做断言锚点
+    const bodyText = () => [...container.querySelectorAll('.gnode-body')].map((b) => b.textContent).join('|')
+    const darkBand = band().style.background
+    const enText = bodyText()
+
+    const themeBtn = [...container.querySelectorAll('.graph-toolbar button')].find((b) =>
+      (b as HTMLElement).title.includes('切换为浅色主题'),
+    )!
+    act(() => (themeBtn as HTMLElement).click())
+    // 修复前：rfNodes useMemo 漏 theme 依赖——根类名已切浅色，节点卡仍持深色内联色带
+    expect(band().style.background).not.toBe(darkBand)
+    expect((themeBtn as HTMLButtonElement).title).toContain('切换为深色主题')
+
+    const sumBtn = [...container.querySelectorAll('.graph-toolbar button')].find((b) => b.textContent === 'A' || b.textContent === '中')!
+    act(() => (sumBtn as HTMLElement).click())
+    expect(bodyText()).not.toBe(enText) // 摘要语言随切换即时刷新（修复前要等下一次编辑/拖拽）
+  })
+
+  it('E5 回归：非结构化图「查看脚本」浮层显示错误信息而不是空白', () => {
+    const doc = baseDoc()
+    // 多路径汇入（branch 两臂汇到 z1 再回跳）：generateScript 抛错——修复前错误字段从未接线，
+    // 浮层只有空 <pre>，用户以为图没有逻辑
+    const logic = doc.content.logic as unknown as { nodes: unknown[]; edges: unknown[] }
+    logic.nodes = [
+      { id: 'on1', kind: 'on', event: 'level.started' },
+      { id: 'br', kind: 'branch', cond: 'v.go' },
+      { id: 'c1', kind: 'call', target: 'sound1', method: 'play', args: [] },
+      { id: 'c2', kind: 'call', target: 'sound1', method: 'stop', args: [] },
+      { id: 'z1', kind: 'assign', target: 'score', value: { expr: '2' } },
+    ]
+    logic.edges = [
+      { id: 'e1', from: 'on1', to: 'br' },
+      { id: 'e2', from: 'br', to: 'c1', port: 'true' },
+      { id: 'e3', from: 'br', to: 'c2', port: 'false' },
+      { id: 'e4', from: 'c1', to: 'z1' },
+      { id: 'e5', from: 'c2', to: 'z1' },
+      { id: 'e6', from: 'z1', to: 'c1' },
+    ]
+    const container = renderEl(<GraphEditor doc={doc} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    const btn = [...container.querySelectorAll('.graph-toolbar button')].find((b) => b.textContent === '查看脚本')!
+    act(() => (btn as HTMLElement).click())
+    const overlay = container.querySelector('.graph-script-overlay')
+    expect(overlay).toBeTruthy()
+    expect(overlay!.querySelector('.tone-error')?.textContent).toContain('多条路径汇入')
+  })
+
   it('崩溃回归：先选中 call 节点再切 assign 节点，首帧不因旧草稿崩溃且表达式可见', () => {
     // 回归背景：草稿曾用 useEffect 异步重置，切节点后的首渲染帧拿上一个节点的草稿，
     // assign 的 `'expr' in draft.value` 读到 undefined 直接白屏

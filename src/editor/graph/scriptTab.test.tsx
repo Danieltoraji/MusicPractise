@@ -162,10 +162,40 @@ describe('ScriptTab（jsdom）', () => {
     // Tab 切换 = 卸载重挂（新 container）：重新判定 irStale
     void first
     const container2 = renderEl(<ScriptTab doc={changed} onChange={() => {}} />)
-    console.log('[s5-debug]', JSON.stringify(container2.textContent.slice(0, 150)))
     expect(container2.querySelector('.script-stale')).toBeTruthy()
     const applyBtn = [...container2.querySelectorAll('button')].find((b) => b.textContent === '应用到节点图') as HTMLButtonElement
     expect(applyBtn.disabled).toBe(true)
+  })
+
+  it('E3 回归：同一挂载期间外部改 IR（AI 同屏写入路径）→ 黄条即时出现且应用禁用，不再等到重挂', () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    containers.push(container)
+    const rootEl = createRoot(container)
+    roots.push(rootEl)
+    const base = baseDoc('res_s7')
+    act(() => {
+      rootEl.render(<ScriptTab doc={base} onChange={() => {}} />)
+    })
+    expect(container.querySelector('.script-stale')).toBeNull()
+    // 脚本 Tab 保持挂载，doc prop 变化（AI/节点图改逻辑）——修复前 irStale 只在挂载时判定一次，
+    // 黄条永不出现，点「应用」会用旧文本静默覆盖 AI 写入
+    const changed = {
+      ...base,
+      content: {
+        ...base.content,
+        logic: {
+          ...base.content.logic,
+          nodes: [...base.content.logic.nodes, { id: 'on2', kind: 'on', event: 'app:tick' }],
+        },
+      },
+    } as unknown as LevelDoc
+    act(() => {
+      rootEl.render(<ScriptTab doc={changed} onChange={() => {}} />)
+    })
+    expect(container.querySelector('.script-stale')).toBeTruthy()
+    const applyBtn = [...container.querySelectorAll('button')].find((b) => b.textContent === '应用到节点图') as HTMLButtonElement
+    expect(applyBtn.disabled).toBe(true) // 文本干净 + 陈旧：防一键静默覆盖
   })
 
   it('P0 回归：非结构化图（多路径汇入）进入脚本页不白屏，显示可读降级错误并禁用编辑', () => {

@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
 import { durToQuarters, playNotes } from '../runtime/audio'
+import { registerModalOpen } from './keyGuard'
 import { DUR_OPTIONS, parseNoteTokens, type PlayNote } from './graph/NoteChipsEditor'
 
 // ---------------------------------------------------------------------------
@@ -255,6 +256,8 @@ export function StaffEditorModal(props: {
   const [importErr, setImportErr] = useState('')
   const [dur, setDur] = useState('4n')
   const [dot, setDot] = useState(false)
+  // 模态打开期间短路编辑器全局快捷键（Ctrl+Z/Delete，docs/40 B5）
+  useEffect(registerModalOpen, [])
   const [restMode, setRestMode] = useState(false)
   const [simultaneous, setSimultaneous] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)

@@ -153,3 +153,96 @@ describe('EditorPage 画布 Delete 快捷删除', () => {
     expect(container!.querySelectorAll('.editor-box')).toHaveLength(1)
   })
 })
+
+describe('EditorPage 快捷键守卫与删除单次入栈（docs/40 B3/B5）', () => {
+  beforeAll(() => {
+    Element.prototype.setPointerCapture = (): void => {}
+    Element.prototype.releasePointerCapture = (): void => {}
+  })
+
+  /** 挂载 + 添加并选中一个组件，返回 Inspector 根元素 */
+  async function mountWithSelectedComponent(): Promise<void> {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root!.render(<EditorPage id={DOC_ID} />)
+    })
+    await flush()
+    const addBtn = [...container!.querySelectorAll('.palette button')].find((b) => b.textContent!.startsWith('+ '))
+    await act(async () => {
+      ;(addBtn as HTMLElement).click()
+    })
+    await flush()
+    await act(async () => {
+      container!.querySelector('.editor-box')!.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, pointerId: 3 }),
+      )
+    })
+    expect(container!.querySelector('.inspector')).toBeTruthy()
+  }
+
+  it('B5 回归：焦点在 Inspector 的 SELECT 上按 Delete 不删除组件', async () => {
+    await mountWithSelectedComponent()
+    // 聚焦「所属视图」下拉——修复前：SELECT 不在守卫清单里，按 Delete 组件被误删
+    const select = container!.querySelector('.inspector select') as HTMLSelectElement
+    await act(async () => {
+      select.focus()
+      select.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+    })
+    expect(container!.querySelectorAll('.editor-box')).toHaveLength(1)
+
+    // 焦点回到画布态（body）按 Delete 仍可正常删除——守卫没有把功能一并关掉
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+    })
+    expect(container!.querySelectorAll('.editor-box')).toHaveLength(0)
+  })
+
+  it('B3 回归：Inspector「删除组件」只入一次撤销栈——连按两次 Ctrl+Z 依次回退删除与添加', async () => {
+    await mountWithSelectedComponent()
+    const delBtn = [...container!.querySelectorAll('.inspector button')].find((b) => b.textContent === '删除组件')!
+    await act(async () => {
+      ;(delBtn as HTMLElement).click()
+    })
+    await flush()
+    expect(container!.querySelectorAll('.editor-box')).toHaveLength(0)
+    // 撤销 #1：回退删除，组件恢复
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    })
+    expect(container!.querySelectorAll('.editor-box')).toHaveLength(1)
+    // 撤销 #2：回退添加（修复前这里是空撤销步，界面不变）
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    })
+    expect(container!.querySelectorAll('.editor-box')).toHaveLength(0)
+  })
+})
+
+describe('EditorPage 装载失败分支（docs/40 A4）', () => {
+  it('毒数据（不受支持的 schemaVersion）→ 可读错误页 + 返回资源库/重试，不再无限「加载中」', async () => {
+    const POISON_ID = 'res_01J9E000000000000000000001'
+    await db.resources.put({
+      id: POISON_ID,
+      kind: 'level',
+      version: '0.1.0',
+      title: '毒文档',
+      doc: { kind: 'level', schemaVersion: 99, id: POISON_ID, content: null },
+      importedAt: Date.now(),
+      builtIn: 0,
+    })
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    await act(async () => {
+      root = createRoot(container!)
+      root!.render(<EditorPage id={POISON_ID} />)
+    })
+    await flush()
+    expect(container!.textContent).toContain('无法打开这个关卡')
+    expect(container!.textContent).toContain('schemaVersion 99 不受支持')
+    expect(container!.querySelector('a[href="#/library"]')).toBeTruthy()
+    const retry = [...container!.querySelectorAll('button')].find((b) => b.textContent === '重试')
+    expect(retry).toBeTruthy()
+  })
+})

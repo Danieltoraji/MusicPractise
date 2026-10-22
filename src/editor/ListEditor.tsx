@@ -3,7 +3,8 @@
  * 窄格内联输入与 JSON 直编。listEntriesFromCell 对任意旧值尽力转为可编辑条目
  * （数字/布尔/对象逐项 JSON 文本化）——类型切换后不再落「编辑 JSON」死胡同。
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { registerModalOpen } from './keyGuard'
 
 /** 单元格任意 Json 值 → 可编辑字符串条目（尽力转换，永不失败；null/undefined → 空列表） */
 export function listEntriesFromCell(v: unknown): string[] {
@@ -21,6 +22,8 @@ export function ListEditorModal(props: {
   onClose: () => void
 }): React.ReactElement {
   const [items, setItems] = useState<string[]>(props.value)
+  // 模态打开期间短路编辑器全局快捷键（Ctrl+Z/Delete，docs/40 B5）
+  useEffect(registerModalOpen, [])
 
   const update = (i: number, text: string): void => setItems(items.map((x, j) => (j === i ? text : x)))
   const remove = (i: number): void => setItems(items.filter((_, j) => j !== i))
