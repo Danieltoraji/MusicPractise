@@ -42,6 +42,10 @@ jobs:
       - name: 测试（vitest 全量）
         run: npm test
 
+      # H4（docs/40）：构建门禁进 CI——tsc strict + vite 打包在合并前暴露类型/构建回归
+      - name: 构建（tsc + vite）
+        run: npm run build
+
   deploy:
     name: 发布 Cloudflare Workers
     needs: test

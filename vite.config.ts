@@ -10,10 +10,11 @@ export default defineConfig({
   base,
   plugins: [react()],
   build: {
-    // react 全家桶独立 vendor chunk：业务发版时浏览器缓存命中（批次11 Bundle 瘦身）
+    // react 全家桶独立 vendor chunk：业务发版时浏览器缓存命中（批次11 Bundle 瘦身）。
+    // advancedChunks 已被 Vite 8 弃用（构建警告），迁移到 codeSplitting（docs/40 H3）
     rolldownOptions: {
       output: {
-        advancedChunks: {
+        codeSplitting: {
           groups: [{ name: 'react-vendor', test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/ }],
         },
       },
@@ -32,5 +33,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // H6（docs/40）：全局 setup 基座——React ACT 标记/指针捕获兜底等 jsdom 通用 stub
+    // 对 node 环境测试无副作用；逐文件样板渐进迁移
+    setupFiles: ['./src/test/setup.ts'],
   },
 })
