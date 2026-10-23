@@ -1,6 +1,6 @@
 # AGENTS.md — MusicPractise（音乐练习 UGC 平台）
 
-> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-23 由 ZCode 会话修订（docs/40 编辑器审计、docs/41 R1–R12 修复、docs/42 独立验收、docs/43 R13 返工、docs/44 后续批次 R14 落地；测试基线 805 → 808 → 861 → 915 → **929 项 / 102 文件**）。
+> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-23 由 ZCode 会话修订（docs/40 编辑器审计、docs/41 R1–R12 修复、docs/42 独立验收、docs/43 R13 返工、docs/44 后续批次 R14/R15 落地；测试基线 805 → 808 → 861 → 915 → 929 → **938 项 / 104 文件**）。
 
 ## 项目定位
 
@@ -9,7 +9,7 @@
 ## 命令与工程基线
 
 - `npm run dev` 纯前端（5173，`/api` 代理到 wrangler 8787）；`npm run dev:worker` 全栈（先 `npm run build`）；`npm run db:migrate:local` 本地 D1 迁移；`npm test`（Vitest）；`npm run build` = `tsc --noEmit && vite build`。
-- 质量门禁：全量测试全绿（现行基线 **929 项 / 102 文件**，R14 后；历史见 docs/41/43/44）+ `tsc`/`build` 干净（build 以 exit 0 + 无新增告警为准；vexflow >500kB 警告为已知项）+ 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环。
+- 质量门禁：全量测试全绿（现行基线 **938 项 / 104 文件**，R15 后；历史见 docs/41/43/44）+ `tsc`/`build` 干净（build 以 exit 0 + 无新增告警为准；vexflow >500kB 警告为已知项）+ 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环。
 - 设计/评审/落地记录按编号归档 `docs/`（如 docs/02 数据结构契约、docs/27 数据表 2.0、docs/31 后端、docs/36 UI 全量重设计、docs/37 运行时 UI 改造、docs/38 编辑器界面改造）；数据模型或接口变更须同步对应文档与契约表。
 
 ## 目录与架构要点
@@ -80,7 +80,7 @@
 
 ## 待办与搁置（2026-10-23 修订）
 
-- **R13 后仍开放（后续批次见 docs/44）**：G2 完整 `.ge-dark` token 重映射、G3 视觉 smoke 与 data-testid 迁移、H2 canvas/失败门禁、R11 写路径 patch 化、编辑器移动端适配、F8/F9/F10/F13/F18/F19（edit_components props 深合并、token 预算、会话持久化版本治理、SSE 超时分类、read_doc 截断、工具 schema 派生）、E18 argv 单一真源、O2/O9。**D1 行虚拟化已由 R14 闭环**（docs/44）；R15–R18 批次计划见 docs/44。
+- **R13 后仍开放（后续批次见 docs/44）**：G2 完整 `.ge-dark` token 重映射、G3 视觉 smoke（data-testid 已起步 18 处锚点）、H2 视觉覆盖与全局 fail-on-console（canvas/滚动 not-implemented 已由 R15 清零，`consoleGuard` 仍为 opt-in）、R11 写路径 patch 化、编辑器移动端适配、F8/F9/F10/F13/F18/F19（edit_components props 深合并、token 预算、会话持久化版本治理、SSE 超时分类、read_doc 截断、工具 schema 派生）、E18 argv 单一真源、O2/O9。**D1 行虚拟化已由 R14 闭环**（docs/44）；R16–R18 批次计划见 docs/44。
 - **云盘共享与关卡库已全部落地（docs/39，H1–H6）**：资源库文件管理器、云盘文件夹化、公共/精选/官方/群组关卡库、申请公开审核、admin 审核队列与官方/群组管理。后续候选：下载排行榜/排序参数、通知系统、拖拽整理、移动端适配（延续 docs/38 口径）。
 - Bundle 瘦身已部分落地（vexflow/smplr/pitchy/fflate 惰性或动态 import、react vendor chunk，见 vite.config.ts；主包峰值曾 1.83MB/gzip ~906KB，目标 gzip ~450–550KB）；MusicXML 导入未启动。
 - 移动端适配：游玩舞台已适配（批次12 fit-scale + 触屏），**编辑器等重交互表面的移动端适配未启动**（docs/38 裁决不纳入，当前为 0）。

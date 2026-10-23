@@ -11,7 +11,7 @@ npm install
 npm run dev              # http://localhost:5173（纯前端；/api 走 vite 代理 → wrangler dev）
 npm run db:migrate:local # D1 迁移应用到本地模拟库（本地全栈流程一次）
 npm run dev:worker       # wrangler dev 全栈验证（先 npm run build 产出 dist/）
-npm test                 # Vitest：引擎/运行时/编辑器/AI/资源库/云盘/关卡库 + worker API（现行基线 929 项全绿 / 102 文件）
+npm test                 # Vitest：引擎/运行时/编辑器/AI/资源库/云盘/关卡库 + worker API（现行基线 938 项全绿 / 104 文件）
 npm run build            # tsc strict + Vite 生产构建
 ```
 
