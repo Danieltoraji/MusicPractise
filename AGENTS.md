@@ -1,6 +1,6 @@
 # AGENTS.md — MusicPractise（音乐练习 UGC 平台）
 
-> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-23 由 ZCode 会话修订（docs/40 编辑器审计 + docs/41 修复批次 R1 起落地，基线 805 → 861（R8））。
+> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-23 由 ZCode 会话修订（docs/40 编辑器审计 + docs/40 编辑器审计 + docs/41 修复批次 R1–R12 全部完成（R11 基准达标裁剪），基线 805 → 861）。
 
 ## 项目定位
 
@@ -14,7 +14,7 @@
 
 ## 目录与架构要点
 
-- `src/engine/`：`expr.ts` 沙箱表达式求值器（Pratt 解析；作用域根仅 `$q./$event./$v.`；函数白名单 21 个；步数预算 1000；拒绝赋值/循环/原型逃逸；`==` 即严格相等）；`graphProgram.ts` IR v2 + lint；`graphEngine.ts` 异步执行器（wait/branch/loop、预算防死循环、generation 竞态作废）；`script.ts` `generateScript`/`parseScript` 伪代码↔IR 往返恒等；`migrate.ts`/`migrateDoc.ts` 迁移器；`rhythm.ts` rhythmScore/rhythmMatch 纯函数。
+- `src/engine/`：`expr.ts` 沙箱表达式求值器（Pratt 解析；作用域根 `q./event./v.`——`$` 前缀仅 v1 迁移输入，新代码禁用；含 `checkExprText` 实时校验下沉；函数白名单 21 个；步数预算 1000；拒绝赋值/循环/原型逃逸；`==` 即严格相等）；`graphProgram.ts` IR v2 + lint；`graphEngine.ts` 异步执行器（wait/branch/loop、预算防死循环、generation 竞态作废）；`script.ts` `generateScript`/`parseScript` 伪代码↔IR 往返恒等；`migrate.ts`/`migrateDoc.ts` 迁移器；`rhythm.ts` rhythmScore/rhythmMatch 纯函数。
 - `src/runtime/`：`levelSession.ts` 完全解耦 DOM/React（无头可驱动、`session.dispatch` 注入事件、`SessionHost.budgets` 限步）；`LevelStage.tsx` 800×470 fit-scale 共享舞台（玩家页与编辑器调试画面单一真源，`viewportClassName`/`canvasClassName` 是被测试钩住的契约）；`LevelRunner.tsx` 渲染薄壳（题面 `.stage-prompt` 主视觉条 / 进度条 / 结算 `.result-bar`，重玩常驻）；`audio.ts` `scheduleNoteEvents` 统一调度；`audioHost.ts` 共享音频；`store.ts` ComponentStore（useSyncExternalStore + effect sink）；`componentDef.ts` 组件为纯函数 reducer，统一 `events/commands/state` 契约。
 - `src/editor/`：`EditorPage.tsx`（`#/edit/:id`）五 Tab = 画布/节点图/伪代码/数据表/JSON；`docState.ts` 唯一权威数据源（纯函数）；`graph/` 节点图编辑器与 Dock 五面板（组件库/事件管理/变量/属性/AI，第 6 个 DebugPanel）；`TableGrid.tsx` 数据表（一行 = 一题）；`StaffEditor.tsx` 五线谱弹窗；`ListEditor.tsx` 字符串列表弹窗。
 - `src/ai/` 编辑器内 AI 助手：`providers/settings/client/agent/tools/tools-write/tools-debug/tools-plan/plan/runHarness/session/vision/checkpoint`。ask/plan/agent 三模式；写七件套 `write_script/edit_table/edit_components/edit_meta/edit_views/edit_flow/set_variable` 全走 `applyAndCheck` 管线（mutate → `loadLevelDoc` 校验 → `applyDoc`；被拒回喂自纠）+ 检查点回滚。
@@ -35,6 +35,10 @@
 - 云盘共享契约（docs/39）：槽位合并口径 = 关卡槽位数 + Σ文件夹内含关卡数（上限 10）；系列/关卡同为可发布单元，发布为**快照制**（审核通过复制内容，更新需「更新发布」重审）；同 root_doc_id 在 public+official 视作同一命名空间（部分唯一索引，重复公开 409）；**源绑定锁定**——hub 条目 pending/published 期间云盘源删除 409 `publish_locked`（驳回/撤回/admin 移除解锁）；官方直传遇公共同内容 409 `already_in_public`，官方上限 200 条。
 - 群组契约（docs/39 §5.3）：暗号必填全局唯一（NOCASE）+ 密码可选 pbkdf2；建群 ≤3/人、群库 ≤100 关、单成员 ≤30 关、单条目 ≤20 关（不占个人云盘额度）；群库条目 = hub_items scope='group'，群主或审核员批准/驳回；封禁群对外 404、成员访问 403 `group_banned`；解散显式级联（群库 docs/条目/成员）。`worker/handlers/groups.ts` 的 `deleteGroupCascade` 是群删除的唯一入口。
 - React 纪律：Hooks 禁止放在条件早退之后（直接 URL 访问整页白屏）；高频交互以 ref 为真源 + 统一 commit 写入；全局快捷键用 window 级原生监听（Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y，历史栈 cap 50，手动与 AI 修改同栈）；嵌套状态变更必须 `patchSession` 整对象替换、禁原地 mutation。
+- **编辑器写路径纪律（docs/40 §12.1）**：所有文档修改走 `EditorPage.update` 单一入口（入撤销栈+标脏）；docState 变换恒返回新对象、全仓禁原地 mutation——历史栈因此按引用存档（勿加 clone）；update 的 `tag` 参数标记连续性（标题 'title'/单元格 'cell'/AI 写入 'ai'，同 tag 连续合并为一条撤销步）。
+- **编辑器历史语义（docs/40 §12.3）**：撤销栈引用 = cleanDocRef（保存基线）比对判脏，undo 回保存点自动清脏；AI run 复合事务（tag 'ai'）一次 Ctrl+Z 整段回退；checkpoint 是单级回滚（带 confirm+影响摘要，复位 plan）。新交互禁止逐帧/逐键无 tag 压栈。
+- **运行归属纪律（docs/40 §12.4）**：debugRun 与 AI run 都有宿主——graph Tab 不可见/编辑器卸载即 stopDebugRun；AiPanel 卸载即 stopAgent（ToolContext.signal 贯穿长等待工具）；调试工具按 isDebuggingDoc 守卫跨文档操作；新增运行类功能必须声明 owner 与清理时机。
+- **测试钩子纪律（docs/40 G3 渐进口径）**：新增交互契约优先加 `data-testid` 供测试查询，不再新增对样式类名/精确文案的断言；既有类名契约（`.tlist-modal`→Modal 沿用、`.stage-*`、`.editor-*`、`comp-*`）不得随意改名。
 
 ## 关键决策与理由
 
@@ -55,7 +59,7 @@
 - Shell 转义红线：批量修改含 `$expr` 的关卡 JSON 用 Write 工具写脚本文件，不走 bash/PowerShell 内联（shell 会损坏 `$expr`；PowerShell 双引号会展开 `$100000` 类片段，曾致播种 INSERT 整条失效）。
 - 数据表非标量值必须走 `JsonFallbackCell`、严禁 `String()` 兜底（曾泄漏 `[object Object]`）；新建列默认 text，先文本录入后切类型产生的脏数据曾是「编辑 JSON」死胡同根因（已全面弹窗化，紧凑记法 `C4 C#4 60 62:8n. r:4n` 由 `parseNoteTokens` 解析）。
 - Windows：Vite HMR 用 `usePolling`（vite.config.ts，300ms）；僵尸 dev server 互相抢占端口需 taskkill；`.gitattributes` 强制 eol=lf。
-- localStorage 键约定：`ai-settings`（AI 配置，Key 明文本地存）、`graph-panels/graph-panel-w-*`（面板宽）、`skin.prefs.v1`（皮肤元数据；二进制资产在 Dexie 库 skin-assets）。拖拽列宽每帧按「起始值 + 总位移」重算，逐帧累加会因 React 渲染滞后漂移。
+- localStorage 键约定：`ai-settings`（AI 配置，Key 明文本地存）、`graph-panels/graph-panel-w-*`（面板列宽）、`graph-dock/graph-dock-h/graph-dock-dbg-w/-h`（节点图 dock 布局与调试列尺寸）、`graph-theme`（节点图明暗，默认深色）、`graph-summary-mode`（节点摘要中英文）、`skin.prefs.v1`（皮肤元数据；二进制资产在 Dexie 库 skin-assets；index.html 内联脚本据其预置 data-skin 防 FOUC）；sessionStorage：`edit-notice:<docId>`（内置副本提示，原地换 id 后同挂载直显）、`ai-kickoff:<docId>`（AI 新建关卡开工指令）——均按 docId 键控。拖拽列宽每帧按「起始值 + 总位移」重算，逐帧累加会因 React 渲染滞后漂移。
 - 资源库树循环引用防护：`browse.ts` 硬编码 3 层深度截断。进度写入 `progress` 表事务只存最高分（只升不降）、通过保持、`attempts+1`。
 - CSS 同特异性「后者胜」两次实案：旧按钮基块写在组件层之后覆盖全站（已删，勿再在文件尾部补按钮基样式）；媒体查询里的规则会被文件尾同名区块覆盖——**媒体查询必须放在被覆盖区块之后**（theater 移动端规则实测踩坑）。
 - 内容层浅色岛必须钉**全套**语义 token：只钉旧 10 token 不够，语义扩展层（`--accent-soft` 系等）同样会漂移进舞台（深色皮肤下琴键 hover 曾漂移）。空文本组件注意残留观感：`.comp-label:empty` 已透明化（反馈位初始空串 + tone 软底曾渲染成无字色块）。
@@ -63,6 +67,8 @@
 - 浏览器实测（IAB/playwright）：transform 缩放容器（舞台）内 click 会卡 actionability，用 `locator.evaluate(el => el.click())`；localStorage 改皮肤后 hash 导航不重载页面，必须 `reload()`；`goto` 同 URL 是 no-op——**换构建后旧文档继续跑旧 bundle，必须显式 `reload()`**（H3 曾据此误判「新代码不生效」）。notes 列示例只在 synth-lab 关（其余示例关 data 列是 json），测五线谱弹窗别找错关。
 - IAB 原生 JS 对话框（prompt/confirm）会被自动吞掉，`getJsDialog` 轮询不可靠——浏览器实测统一在页面内 stub `window.prompt/confirm`；Playwright `evaluate` 传**字符串按表达式求值**（箭头函数串不会自动调用，须 IIFE 或传真实函数）；React 受控 input 直改 `.value` 不生效（需 native setter 或派发 input 事件后由 React value tracker 放行）。
 - 测试中 `{ ...sampleDoc }` 浅拷贝后改其 `content`/`meta` 会毒化模块级共享样本文档（import 是单例）——改 payload 必须 `JSON.parse(JSON.stringify())` 深拷贝；该坑曾致同文件用例顺序依赖的连环误报（docs/39 H2）。
+- Vite HMR 不推送「弹窗级/条件渲染级」组件的改动（如 Modal 化的 StaffEditor）：页面已挂载场景下模块缓存不更新，表现为改动「不生效」——浏览器实测这类改动必须显式 reload（docs/40 R8 实测）。
+- 合成事件（automation/测试）下 `setPointerCapture(假 pointerId)` 抛 InvalidPointerId 并中断后续处理器——EditorCanvas/GraphEditor 的拖拽入口已 try/catch 兜底；新写拖拽入口照 GraphEditor `startSplitDrag` 惯例（docs/40 R3）。
 - wrangler dev 的 TaskStop 杀不净子进程：8787 被热重载的旧实例占用时新实例被挤到 8789 且因本地 D1 SQLite 锁竞争崩溃，旧实例还可能在编辑中间态构建失败后带病服务——处置：`netstat -ano` 找 PID taskkill 清端口后重启（docs/39 H4）。
 - 对返回 Promise 的校验函数（如 `verifyPassword`，签名 (password, stored)）必须 await 且勿颠倒参数序——布尔语境漏 await 不报错、只会恒真放行（docs/39 H5 曾致加入密码校验被绕过，单测抓住）。
 
