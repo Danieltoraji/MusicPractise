@@ -107,9 +107,10 @@ describe('TableEditor 行虚拟化（D1/R14）', () => {
     act(() => {
       wrap.dispatchEvent(new Event('scroll'))
     })
-    const rownum = [...c.querySelectorAll('.tgrid-rownum')].find((el) => el.textContent === '101') as HTMLElement
-    const tr = rownum.closest('tr') as HTMLTableRowElement
-    const input = tr.querySelector('.tgrid-input') as HTMLInputElement
+    // G3 渐进口径：新断言优先使用 data-testid（不再锁样式类名/文案）
+    const tr = c.querySelector('[data-testid="tgrid-row-100"]') as HTMLTableRowElement
+    expect(tr).toBeTruthy()
+    const input = tr.querySelector('[data-testid="tgrid-cell-100-title"]') as HTMLInputElement
     expect(input.value).toBe('题目 101')
     act(() => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!

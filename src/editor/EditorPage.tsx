@@ -482,12 +482,14 @@ export function EditorPage({ id }: Props) {
         <a href="#/library">← 资源库</a>
         <input
           className="editor-title"
+          data-testid="editor-title"
           value={String(doc.meta.title ?? '')}
           onChange={(e) => update(setMeta(doc, { title: e.target.value }), 'title')} // tag：一次连续输入合并为一条撤销步（docs/40 B1）
         />
         <span className="editor-head-group">
           <button
             type="button"
+            data-testid="editor-undo"
             disabled={histRef.current.past.length === 0}
             title="撤销（Ctrl+Z）"
             onClick={() => undo()}
@@ -496,6 +498,7 @@ export function EditorPage({ id }: Props) {
           </button>
           <button
             type="button"
+            data-testid="editor-redo"
             disabled={histRef.current.future.length === 0}
             title="重做（Ctrl+Shift+Z）"
             onClick={() => redo()}
@@ -504,10 +507,10 @@ export function EditorPage({ id }: Props) {
           </button>
         </span>
         <span className="editor-head-group">
-          <button type="button" className="primary" onClick={() => void save()} disabled={saving}>
+          <button type="button" className="primary" data-testid="editor-save" onClick={() => void save()} disabled={saving}>
             {saving ? '保存中…' : `💾 保存${dirty ? ' *' : ''}`}
           </button>
-          <button type="button" onClick={tryRun}>
+          <button type="button" data-testid="editor-try-run" onClick={tryRun}>
             ▶ 试运行
           </button>
         </span>
@@ -570,12 +573,13 @@ export function EditorPage({ id }: Props) {
           ['table', '数据表'],
           ['json', 'JSON'],
         ] as [Tab, string][]).map(([t, label]) => (
-          <button key={t} type="button" className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
+          <button key={t} type="button" data-testid={`editor-tab-${t}`} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
             {label}
           </button>
         ))}
         <button
           type="button"
+          data-testid="editor-ai-toggle"
           className={`editor-ai-toggle${aiOpen ? ' active' : ''}`}
           title="AI 助手（统一对话，跨视图共享上下文）"
           onClick={() => setAiOpen((v) => !v)}

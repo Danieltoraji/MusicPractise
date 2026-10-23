@@ -196,6 +196,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
         </span>
         <button
           type="button"
+          data-testid="tgrid-add-row"
           disabled={table.rows.length >= SCHEMA_LIMITS.tableRows}
           title={table.rows.length >= SCHEMA_LIMITS.tableRows ? `已达上限 ${SCHEMA_LIMITS.tableRows} 行（schema 约束）` : undefined}
           onClick={() => onChange(addTableRow(doc))}
@@ -317,7 +318,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
             {table.rows.slice(virtual.start, virtual.end).map((row, offset) => {
               const i = virtual.start + offset
               return (
-                <tr key={i} style={{ height: heightOf(i) }}>
+                <tr key={i} style={{ height: heightOf(i) }} data-testid={`tgrid-row-${i}`}>
                   <td className="tgrid-rowhead">
                     <span className="tgrid-rownum" title={`第 ${i + 1} 题（v.__row = ${i}）`}>
                       {i + 1}
@@ -478,6 +479,7 @@ function CellEditorImpl(props: {
       <input
         type="number"
         className="tgrid-input"
+        data-testid={`tgrid-cell-${props.row}-${props.colKey}`}
         value={text}
         onChange={(e) => {
           const t = e.target.value
@@ -546,6 +548,7 @@ function CellEditorImpl(props: {
   return (
     <input
       className="tgrid-input"
+      data-testid={`tgrid-cell-${props.row}-${props.colKey}`}
       value={text}
       onChange={(e) => onCommit(e.target.value === '' ? null : e.target.value, 'cell')}
     />

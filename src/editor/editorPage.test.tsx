@@ -60,13 +60,14 @@ async function flush(): Promise<void> {
 }
 
 function saveButton(): HTMLButtonElement {
-  const btn = [...container!.querySelectorAll('button')].find((b) => b.textContent?.includes('保存'))
+  // G3 渐进口径（docs/44 R15）：关键交互锚点改 data-testid，不再锁按钮文案
+  const btn = container!.querySelector('[data-testid="editor-save"]')
   if (!btn) throw new Error('找不到保存按钮')
-  return btn
+  return btn as HTMLButtonElement
 }
 
 function titleInput(): HTMLInputElement {
-  return container!.querySelector('.editor-title') as HTMLInputElement
+  return container!.querySelector('[data-testid="editor-title"]') as HTMLInputElement
 }
 
 /** 受控标题输入：native setter + input 事件（React value tracker 放行） */
@@ -80,14 +81,22 @@ async function typeTitle(value: string): Promise<void> {
   await flush()
 }
 
+const HEAD_BUTTON_TESTID: Record<string, string> = { '↶': 'editor-undo', '↷': 'editor-redo' }
 function headButton(text: string): HTMLButtonElement {
-  const btn = [...container!.querySelectorAll('.editor-head button')].find((b) => b.textContent === text)
+  const testid = HEAD_BUTTON_TESTID[text]
+  const btn = testid
+    ? container!.querySelector(`[data-testid="${testid}"]`)
+    : [...container!.querySelectorAll('.editor-head button')].find((b) => b.textContent === text)
   if (!btn) throw new Error(`找不到头部按钮 ${text}`)
   return btn as HTMLButtonElement
 }
 
+const TAB_TESTID: Record<string, string> = { 画布: 'canvas', 节点图: 'graph', 脚本: 'script', 数据表: 'table', JSON: 'json' }
 function tabButton(label: string): HTMLButtonElement {
-  const btn = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === label)
+  const id = TAB_TESTID[label]
+  const btn = id
+    ? container!.querySelector(`[data-testid="editor-tab-${id}"]`)
+    : [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === label)
   if (!btn) throw new Error(`找不到 Tab ${label}`)
   return btn as HTMLButtonElement
 }

@@ -1013,7 +1013,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
   // 左区 = 调试画面/节点图二选一（画面为默认），右侧 = 调试面板 + AI 助手列（宽度可拖拽）
   if (debugSnap.mode !== 'idle') {
     return (
-      <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`}>
+      <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`} data-testid="graph-editor">
         <div className="graph-toolbar">
           <span
             className="gdb-live"
@@ -1097,7 +1097,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
   }
 
   return (
-    <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`}>
+    <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`} data-testid="graph-editor">
       <div className="graph-toolbar">
         <button type="button" className={`gtoggle${panelVisible('library') ? ' active' : ''}`} onClick={() => togglePanel('library')} title="组件库面板（节点/模板菜单）">
           🧩 组件库

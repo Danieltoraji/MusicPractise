@@ -78,6 +78,7 @@ export function Modal(props: {
         className={`tjson-modal${props.contentClassName ? ` ${props.contentClassName}` : ''}`}
         role="dialog"
         aria-modal="true"
+        data-testid="modal"
         tabIndex={-1}
       >
         <div className="tjson-modal-head">

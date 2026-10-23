@@ -332,7 +332,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
   const empty = session.messages.length === 0
 
   return (
-    <aside className={`ai-panel${className ? ` ${className}` : ''}`} style={style}>
+    <aside className={`ai-panel${className ? ` ${className}` : ''}`} style={style} data-testid="ai-panel">
       <div
         className={`ai-panel-head${headerDrag ? ' is-draggable' : ''}`}
         draggable={!!headerDrag}
@@ -580,6 +580,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
           📎
         </button>
         <textarea
+          data-testid="ai-input"
           rows={2}
           placeholder={
             profile
@@ -608,13 +609,14 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
           }}
         />
         {session.busy ? (
-          <button type="button" onClick={() => stopAgent(doc.id)}>
+          <button type="button" data-testid="ai-stop" onClick={() => stopAgent(doc.id)}>
             停止
           </button>
         ) : (
           <button
             type="button"
             className="primary"
+            data-testid="ai-send"
             disabled={!profile || (!input.trim() && pendingImages.length === 0)}
             onClick={() => void send()}
           >
