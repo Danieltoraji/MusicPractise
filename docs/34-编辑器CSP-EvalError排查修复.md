@@ -39,3 +39,4 @@
 
 - Playwright `evaluate` 走 CDP 通道豁免页面 CSP，不能用它做"eval 被拦"的对照组；要用页面自身的内联脚本探针 + `securitypolicyviolation` 事件。
 - 今后前端凡引入会动态生成代码的库（Ajv、部分模板引擎、某些 ORM query builder）须先过 CSP 审查：部署站点运行 `script-src 'self'`，`new Function` 一律不可用。
+- **补充（2026-10-23，docs/42 G6 / docs/43）**：本文已验证「内联脚本会被生产 CSP 拦截」，但 docs/41 R10 仍用 `index.html` 内联 `<script>` 做首帧皮肤预置（dev 无 CSP 所以“实测通过”）——R13 已改为外置 `public/skin-boot.js`（`%BASE_URL%` 引用、同白名单、CSP 不变），并新增 `src/test/bootstrapSecurity.test.ts` 静态互锁。今后**禁止在 `index.html` 写内联脚本**（含第三方片段），引导脚本一律放 `public/` 外置。
