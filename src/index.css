@@ -3110,7 +3110,9 @@ path.gedge-false {
 
 .graph-editor.ge-dark {
   /* 深色工作台色板：深海蓝底 + 青色选中 + 金色模板（千星奇域风格）。
-     docs/38 E5 裁决：深色板固定、跨皮肤一致；体系内衍生色全部走变量/color-mix。 */
+     docs/38 E5 裁决：深色板固定、跨皮肤一致；体系内衍生色全部走变量/color-mix。
+     G2 第一步（docs/40）：原生控件（滚动条/下拉/checkbox）随深色渲染，不再泄漏浅色 UA。 */
+  color-scheme: dark;
   --ge-bg0: #0b1120;
   --ge-bg1: #131e36;
   --ge-panel: #141e34;
@@ -3170,6 +3172,13 @@ path.gedge-false {
 }
 .ge-dark button {
   color: var(--ge-ink);
+}
+/* G2（docs/40）：深色工作台的 primary 按钮整体切 ge 色板——背景仍走皮肤 --accent、
+   前景却吃 --ge-ink 的组合在 liuhua 下对比度仅 1.66:1（审计 G2 实测）。
+   与 .ai-panel-form button.primary 的既有做法（:4248 一带）一致。 */
+.ge-dark button.primary {
+  background: var(--ge-accent);
+  color: var(--ge-accent-ink);
 }
 .ge-dark .graph-toolbar button,
 .ge-dark .graph-log-head button,
@@ -6580,5 +6589,61 @@ progress {
   }
   .docs-pager-link {
     max-width: 60%;
+  }
+}
+
+/* ================= 编辑器窄桌面断点（docs/40 G1/G16，R10） =================
+   放文件尾：同特异性后者胜——必须能覆盖正文的 .ai-panel/.palette/.inspector 宽度。 */
+
+/* ≤1280：常见窄笔记本起步——AI 侧栏收窄、面板列收窄，画布保持可用 */
+@media (max-width: 1280px) {
+  .editor-body > .ai-panel {
+    width: 300px;
+  }
+  .editor-canvas-layout > .palette {
+    width: 140px;
+  }
+  .editor-canvas-layout > .inspector {
+    width: 260px;
+  }
+}
+
+/* ≤1100：AI 侧栏抽屉化（绝对定位悬浮于画布右上，不再挤压工作区）；
+   关闭按钮（✕/🤖 AI）仍可用，交互口径不变 */
+@media (max-width: 1100px) {
+  .editor-body {
+    position: relative;
+  }
+  .editor-body > .ai-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: min(320px, 45vw);
+    z-index: 30;
+    box-shadow: var(--shadow-3);
+  }
+}
+
+/* 守卫提示条：默认隐藏（基础规则必须先于媒体查询——同特异性后者胜，G7 教训） */
+.editor-narrow-tip {
+  display: none;
+  margin: 0 0 var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--soft);
+  color: var(--ink);
+  font-size: var(--fs-1);
+}
+
+/* ≤900：左右固定列隐藏 + 守卫提示条（G16：低于阈值明示而非静默压扁） */
+@media (max-width: 900px) {
+  .editor-canvas-layout > .palette,
+  .editor-canvas-layout > .inspector {
+    display: none;
+  }
+  .editor-narrow-tip {
+    display: block;
   }
 }

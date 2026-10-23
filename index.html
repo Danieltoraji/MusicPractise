@@ -9,7 +9,17 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8E%B5%3C/text%3E%3C/svg%3E"
     />
-    <title>音乐练习 · POC</title>
+    <title>音乐练习 · UGC 平台</title>
+    <script>
+      // G6（docs/40）：首帧皮肤预置——App 的 IndexedDB 异步解析前先同步读 localStorage，
+      // 消除浅色闪白（FOUC）。宽松校验与 skin/prefs.ts 的白名单一致；解析失败保持默认。
+      try {
+        var skinId = JSON.parse(localStorage.getItem('skin.prefs.v1') || '{}').skinId
+        if (['dream', 'violet', 'liuhua'].indexOf(skinId) >= 0) {
+          document.documentElement.dataset.skin = skinId
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

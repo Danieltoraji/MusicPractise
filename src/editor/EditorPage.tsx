@@ -370,6 +370,10 @@ export function EditorPage({ id }: Props) {
 
   return (
     <div className="page editor">
+      {/* G16（docs/40）：窄桌面守卫——≤900px 显示明示条而非静默隐藏面板（CSS 控制显隐） */}
+      <div className="editor-narrow-tip">
+        ⚠ 当前窗口较窄：组件面板与属性检查器已隐藏。编辑器建议在 ≥1100px 宽的窗口使用。
+      </div>
       <div className="editor-head">
         <a href="#/library">← 资源库</a>
         <input
