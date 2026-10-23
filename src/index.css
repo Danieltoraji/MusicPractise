@@ -2514,6 +2514,15 @@ path.gedge-false {
 .tgrid-cell-add {
   border-right: none;
 }
+/* D1 行虚拟化（R14）：上下占位行只负责撑出滚动高度，不渲染边框/内边距 */
+.tgrid-spacer {
+  line-height: 0;
+}
+.tgrid-spacer td {
+  height: 0;
+  padding: 0;
+  border: 0;
+}
 .tgrid-input {
   width: 100%;
   border: none;

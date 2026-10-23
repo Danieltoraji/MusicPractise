@@ -8,7 +8,7 @@
  * - 列宽/行高为编辑器内存态（不进文档 JSON，会话内保持）
  * 约束延续：单元格受控写回（删行/插行后不残留旧文本，评审 P1-2）。
  */
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ColumnType, LevelDoc } from '../engine/level'
 import { FlowEditor } from './FlowEditor'
 import { ListEditorModal, listEntriesFromCell } from './ListEditor'
@@ -30,6 +30,7 @@ import {
 } from './docState'
 import { notesFromCell, notesToCell } from './graph/NoteChipsEditor'
 import { StaffEditorModal, StaffPreview } from './StaffEditor'
+import { buildRowMetrics, visibleRowRange } from './virtualRows'
 
 export const COLUMN_TYPES: { value: ColumnType; label: string }[] = [
   { value: 'text', label: '文本' },
@@ -80,6 +81,43 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
 
   const widthOf = (key: string, type: ColumnType): number => colW[key] ?? DEFAULT_COL_W[type]
   const heightOf = (index: number): number => rowH[index] ?? DEFAULT_ROW_H
+
+  // D1 行虚拟化（docs/43 §7 → R14）：只挂载可视区 + overscan 的行。
+  // 此前 512 行满配会挂载全部单元格（含每行 notes 的 VexFlow 迷你谱与输入框监听）。
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [viewport, setViewport] = useState<{ top: number; height: number }>({ top: 0, height: 0 })
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const measure = (): void => {
+      // 同值不更新：scroll/resize 高频触发时避免无意义重渲染
+      setViewport((prev) =>
+        prev.top === el.scrollTop && prev.height === el.clientHeight ? prev : { top: el.scrollTop, height: el.clientHeight },
+      )
+    }
+    measure()
+    el.addEventListener('scroll', measure, { passive: true })
+    let ro: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure)
+      ro.observe(el)
+    }
+    return () => {
+      el.removeEventListener('scroll', measure)
+      ro?.disconnect()
+    }
+  }, [])
+
+  const rowMetrics = useMemo(
+    () => buildRowMetrics(table.rows.length, (i) => rowH[i] ?? DEFAULT_ROW_H),
+    [table.rows.length, rowH],
+  )
+  // jsdom 无布局（clientHeight 恒 0）：给 600px 兜底，保证单测仍渲染合理窗口而非全表
+  const viewportHeight = viewport.height > 0 ? viewport.height : 600
+  const virtual = useMemo(
+    () => visibleRowRange(rowMetrics, viewport.top, viewportHeight, 4),
+    [rowMetrics, viewport.top, viewportHeight],
+  )
 
   const addColumn = (): void => {
     // A5（docs/40）：列数上限门禁——「+ 列」按钮虽 disabled，但列名输入框 Enter 是
@@ -168,7 +206,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
       <FlowEditor doc={doc} onChange={onChange} />
       {colErr && <div className="tone-error">{colErr}</div>}
 
-      <div className="tgrid-wrap">
+      <div className="tgrid-wrap" ref={wrapRef}>
         <table className="tgrid">
           <colgroup>
             <col style={{ width: 56 }} />
@@ -271,60 +309,78 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((row, i) => (
-              <tr key={i} style={{ height: heightOf(i) }}>
-                <td className="tgrid-rowhead">
-                  <span className="tgrid-rownum" title={`第 ${i + 1} 题（v.__row = ${i}）`}>
-                    {i + 1}
-                  </span>
-                  <button
-                    type="button"
-                    className="ginsp-argdel"
-                    title={`删除第 ${i + 1} 行`}
-                    onClick={() => {
-                      onChange(removeTableRow(doc, i))
-                      // D3（docs/40）：行高按行号键存——删行后整体前移一位，否则错位
-                      setRowH((cur) => {
-                        const next: Record<number, number> = {}
-                        for (const [k, v] of Object.entries(cur)) {
-                          const idx = Number(k)
-                          if (idx < i) next[idx] = v
-                          else if (idx > i) next[idx - 1] = v
-                        }
-                        return next
-                      })
-                    }}
-                  >
-                    ×
-                  </button>
-                  <span
-                    className="tgrid-rowresize"
-                    title="拖拽调整行高"
-                    onPointerDown={(e) => onRowResizeDown(e, i)}
-                    onPointerMove={onRowResizeMove}
-                    onPointerUp={onRowResizeUp}
-                    onPointerCancel={onRowResizeUp}
-                  />
-                </td>
-                {table.columns.map((c) => (
-                  <td key={c.key} className={`tgrid-cell tcell-${c.type ?? 'text'}`}>
-                    <CellEditor
-                      type={c.type ?? 'text'}
-                      row={i}
-                      colKey={c.key}
-                      value={row[c.key] ?? null}
-                      width={widthOf(c.key, c.type ?? 'text')}
-                      height={heightOf(i)}
-                      onCommit={commitCell}
-                      onOpenJson={openJson}
-                      onOpenStaff={openStaff}
-                      onOpenList={openList}
+            {virtual.start > 0 && (
+              <tr className="tgrid-spacer" data-spacer="top" aria-hidden="true" style={{ height: rowMetrics.offsets[virtual.start] }}>
+                <td colSpan={table.columns.length + 2} />
+              </tr>
+            )}
+            {table.rows.slice(virtual.start, virtual.end).map((row, offset) => {
+              const i = virtual.start + offset
+              return (
+                <tr key={i} style={{ height: heightOf(i) }}>
+                  <td className="tgrid-rowhead">
+                    <span className="tgrid-rownum" title={`第 ${i + 1} 题（v.__row = ${i}）`}>
+                      {i + 1}
+                    </span>
+                    <button
+                      type="button"
+                      className="ginsp-argdel"
+                      title={`删除第 ${i + 1} 行`}
+                      onClick={() => {
+                        onChange(removeTableRow(doc, i))
+                        // D3（docs/40）：行高按行号键存——删行后整体前移一位，否则错位
+                        setRowH((cur) => {
+                          const next: Record<number, number> = {}
+                          for (const [k, v] of Object.entries(cur)) {
+                            const idx = Number(k)
+                            if (idx < i) next[idx] = v
+                            else if (idx > i) next[idx - 1] = v
+                          }
+                          return next
+                        })
+                      }}
+                    >
+                      ×
+                    </button>
+                    <span
+                      className="tgrid-rowresize"
+                      title="拖拽调整行高"
+                      onPointerDown={(e) => onRowResizeDown(e, i)}
+                      onPointerMove={onRowResizeMove}
+                      onPointerUp={onRowResizeUp}
+                      onPointerCancel={onRowResizeUp}
                     />
                   </td>
-                ))}
-                <td className="tgrid-cell tgrid-cell-add" />
+                  {table.columns.map((c) => (
+                    <td key={c.key} className={`tgrid-cell tcell-${c.type ?? 'text'}`}>
+                      <CellEditor
+                        type={c.type ?? 'text'}
+                        row={i}
+                        colKey={c.key}
+                        value={row[c.key] ?? null}
+                        width={widthOf(c.key, c.type ?? 'text')}
+                        height={heightOf(i)}
+                        onCommit={commitCell}
+                        onOpenJson={openJson}
+                        onOpenStaff={openStaff}
+                        onOpenList={openList}
+                      />
+                    </td>
+                  ))}
+                  <td className="tgrid-cell tgrid-cell-add" />
+                </tr>
+              )
+            })}
+            {virtual.end < table.rows.length && (
+              <tr
+                className="tgrid-spacer"
+                data-spacer="bottom"
+                aria-hidden="true"
+                style={{ height: rowMetrics.totalHeight - rowMetrics.offsets[virtual.end] }}
+              >
+                <td colSpan={table.columns.length + 2} />
               </tr>
-            ))}
+            )}
             {table.rows.length === 0 && (
               <tr>
                 <td colSpan={table.columns.length + 2} className="tgrid-empty">
