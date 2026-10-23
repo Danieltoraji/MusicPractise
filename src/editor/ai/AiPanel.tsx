@@ -31,8 +31,23 @@ interface Props {
   doc: LevelDoc
   selection: AiSelectionContext
   onClose: () => void
-  /** 应用 AI 修改后的 doc（编辑器唯一写路径 update——全视图自动刷新+标脏）；agent 模式必经 */
-  onApplyDoc: (doc: LevelDoc) => void
+  /**
+   * 应用 AI 修改后的 doc（编辑器唯一写路径 update——全视图自动刷新+标脏）；agent 模式必经。
+   * 第二参 tag 是该次 run 的独立撤销 tag（`ai:<n>`）：不同 run 不合并为一条撤销步（B6），
+   * 回滚用 `rollback:<n>` 单独成步（F4：回滚可 Ctrl+Z）。缺省时编辑器回落旧 'ai' 合并语义。
+   */
+  onApplyDoc: (doc: LevelDoc, tag?: string) => void
+  /**
+   * 编辑器文档修订号（F1，docs/42 §4.3）：每次文档变更递增。agent 循环用它检测运行期间
+   * 创作者的手动编辑——写入前修订号变了就拒绝写入并要求模型先重读。缺省 = 不做冲突检测。
+   */
+  getRevision?: () => number
+  /**
+   * 编辑器实时文档读取（R13 运行归属）：面板随切 Tab/调试布局卸载后 agent run 仍继续，
+   * 读工具/懒检查点基线必须读编辑器实时 doc，而不是本面板最后一次渲染的快照。
+   * 缺省回落 docRef（单测/旧挂载方式）。
+   */
+  getLiveDoc?: () => LevelDoc | null
   /** 节点图入坞形态：列内定高（列内非末位面板） */
   style?: React.CSSProperties
   /** 追加到根（drag-src 拖拽源半透明等） */
@@ -55,7 +70,7 @@ function activeProfile(): AiProfileConfig | null {
 const MODE_META: Record<AiMode, { label: string; tip: string }> = {
   ask: { label: 'ask', tip: '只读问答：AI 可读取脚本/文档/校验/日志，不会修改关卡' },
   plan: { label: 'plan', tip: '规划模式：AI 调研后产出编号执行计划，确认后一键转 agent 执行' },
-  agent: { label: 'agent', tip: '代理修改：AI 可直接修改关卡（发送时自动存检查点，可一键回滚）' },
+  agent: { label: 'agent', tip: '代理修改：AI 可直接修改关卡（首次写入前自动存检查点，可一键回滚）' },
 }
 
 /** token 用量显示：万位以上缩写为 k（万以下原样，保留可对账的精确感） */
@@ -63,13 +78,17 @@ function fmtTokens(n: number): string {
   return n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 }
 
-export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className, headerDrag }: Props) {
+export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getLiveDoc, style, className, headerDrag }: Props) {
   const session = useSyncExternalStore(subscribeAiSession, () => getSession(doc.id))
   // 工具 ctx 走 ref：agent 循环跨 await 期间始终读到最新 doc（保存副本换 id 会重挂面板，无碍）
   const docRef = useRef(doc)
   docRef.current = doc
   const applyRef = useRef(onApplyDoc)
   applyRef.current = onApplyDoc
+  // B6（docs/40）：每次 run 独立撤销 tag——相邻两次 AI run 不再共用 'ai' 合并成一条撤销步；
+  // 回滚用独立的 rollback:<n>（F4：Ctrl+Z 能撤销回滚本身）。runSeq 同时给两类 tag 发号。
+  const runSeqRef = useRef(0)
+  const runTagRef = useRef('ai')
   // 输入草稿跨 Tab 存活（docs/40 C1）：面板随 Tab 条件渲染卸载，草稿经 draftStore 保留
   const [input, setInput] = useState(() => loadDraft<string>(doc.id, DRAFT_SLOTS.aiInput) ?? '')
   useEffect(() => {
@@ -86,10 +105,10 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     void hydrateSession(doc.id)
   }, [doc.id])
 
-  // C4/F5（docs/40）：运行归属面板——卸载即停止 agent 循环。此前关闭面板/切 Tab 后
-  // 运行继续：写通道指向已卸载组件的 setDoc（静默丢失但显示「✓ 已应用」、token 照扣），
-  // 或仍在改文档而用户不可见、无法停止
-  useEffect(() => () => stopAgent(doc.id), [doc.id])
+  // R5 运行归属（docs/42 §4.4）：卸载/切 Tab **不再** abort agent 循环——面板在节点图调试布局
+  // 下会随布局切换卸载，AI 启动调试后切走或拖拽 dock 不应打断自己的 run（docs/28「全 tab 常驻」）。
+  // 显式停止归宿主：EditorPage 在关闭面板/离开编辑器/内置副本保存时 stopAgent（W1 收口）；
+  // 本面板只保留「停止」按钮。工具写通道经 applyRef 指向宿主 update，面板卸载后写入依然落地。
 
   // 新消息/状态变化时滚到底部
   useEffect(() => {
@@ -154,8 +173,24 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
           ]
         : READONLY_TOOLS,
     ctx: {
-      getDoc: () => docRef.current,
-      applyDoc: (next: LevelDoc) => applyRef.current(next),
+      // R13：优先读编辑器实时 doc（面板卸载后 run 继续时快照已过期）；同 id 才采信
+      getDoc: () => {
+        const live = getLiveDoc?.()
+        return live && live.id === doc.id ? live : docRef.current
+      },
+      applyDoc: (next: LevelDoc) => {
+        // F14（docs/42 §5.1）：检查点懒存——只在 agent 模式「第一次真正 AI 写入」前快照。
+        // 纯问答/计划生成不产生检查点；已有检查点（本次任务基线）不重复覆盖，计划/续跑保留基线。
+        const cur = getSession(doc.id)
+        if (cur.mode === 'agent' && cur.checkpointAt === null) {
+          const live = getLiveDoc?.()
+          const at = saveCheckpoint(doc.id, live && live.id === doc.id ? live : docRef.current)
+          patchSession(doc.id, { checkpointAt: at })
+        }
+        applyRef.current(next, runTagRef.current)
+      },
+      // F1：修订号真源透传给 agent 循环（缺省 undefined = 该宿主未提供修订号，不做冲突检测）
+      getRevision,
       levelId: doc.id,
       // AI 截图（批次8b/9 目标）：graph=节点卡层（纯 HTML，避开 React Flow SVG 的已知捕获问题）；
       // canvas=编辑器画布的关卡预览；debug=调试运行的游玩画面（.gdb-stage-canvas，无可见会话时无此元素）
@@ -195,37 +230,33 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     const mode = getSession(doc.id).mode
     setInput('')
     setPendingImages([])
-    // agent 模式：发送即存检查点（回滚 = 回到本轮 AI 动手前）
-    if (mode === 'agent') {
-      const at = saveCheckpoint(doc.id, docRef.current)
-      patchSession(doc.id, { checkpointAt: at })
-    }
+    // B6：每次 run 独立撤销 tag（不同 run 的写入不合并成一条撤销步）；
+    // F14：检查点不在这里存——懒存于本次 run 第一次真正写入之前
+    runTagRef.current = `ai:${++runSeqRef.current}`
     const ctxText = formatSelectionContext(selection, docRef.current)
     const body = text || '（见图片）'
     const userText = ctxText ? `[上下文] ${ctxText}\n\n${body}` : body
     await runAgentTurn({ ...turnOptions(mode, prof), userText, images: images && images.length > 0 ? images : undefined })
   }
 
-  /** 失败重试（批次8c）：不重复插入刚才的消息，以现有历史续跑本轮；agent 模式尚无检查点时补存 */
+  /** 失败重试（批次8c）：不重复插入刚才的消息，以现有历史续跑本轮；检查点仍是懒存（首次写入前） */
   const retry = async (): Promise<void> => {
     if (session.busy || !session.error) return
     const prof = profile ?? activeProfile()
     if (!prof) return
     const mode = getSession(doc.id).mode
     patchSession(doc.id, { error: null })
-    if (mode === 'agent' && getSession(doc.id).checkpointAt === null) {
-      const at = saveCheckpoint(doc.id, docRef.current)
-      patchSession(doc.id, { checkpointAt: at })
-    }
+    runTagRef.current = `ai:${++runSeqRef.current}`
     await runAgentTurn(turnOptions(mode, prof))
   }
 
-  /** 撞限续跑：上次运行到轮数上限未完，以现有历史接着跑（预算重置；不重存检查点——保留任务前基线供 ↩ 回滚） */
+  /** 撞限续跑：上次运行到轮数上限未完，以现有历史接着跑（预算重置；检查点不动——保留任务前基线供 ↩ 回滚） */
   const continueAfterCap = async (): Promise<void> => {
     if (session.busy || !session.turnCapHit) return
     const prof = profile ?? activeProfile()
     if (!prof) return
     patchSession(doc.id, { turnCapHit: false })
+    runTagRef.current = `ai:${++runSeqRef.current}`
     await runAgentTurn(turnOptions(getSession(doc.id).mode, prof))
   }
 
@@ -252,14 +283,14 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       const items = draftPlan.items.map((it, i) => (excluded.has(i) ? { ...it, status: 'skipped' as const } : it))
       const enabled = items.filter((it) => it.status !== 'skipped')
       if (enabled.length === 0) return
-      const at = saveCheckpoint(doc.id, docRef.current)
-      patchSession(doc.id, { checkpointAt: at, mode: 'agent', plan: { ...draftPlan, items, status: 'executing' } })
+      // F14：执行计划不再预先存检查点——真写入时才懒存基线
+      patchSession(doc.id, { mode: 'agent', plan: { ...draftPlan, items, status: 'executing' } })
       await sendText(buildPlanExecutionPrompt(enabled))
       return
     }
     if (!lastAssistantText || session.busy) return
-    const at = saveCheckpoint(doc.id, docRef.current)
-    patchSession(doc.id, { checkpointAt: at, mode: 'agent' })
+    // F14：回退纯文本计划同样懒存检查点
+    patchSession(doc.id, { mode: 'agent' })
     await sendText(`请严格按以下计划执行修改（不要重新规划，逐项落实后汇报结果）：\n\n${lastAssistantText}`)
   }
 
@@ -269,8 +300,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
     if (!plan || plan.status !== 'executing' || session.busy) return
     const remaining = plan.items.filter((it) => it.status === 'pending' || it.status === 'in_progress')
     if (remaining.length === 0) return
-    const at = saveCheckpoint(doc.id, docRef.current)
-    patchSession(doc.id, { checkpointAt: at })
+    // F14：继续执行不再重存检查点（保留任务前基线供单级回滚）
     await sendText(buildPlanExecutionPrompt(remaining))
   }
 
@@ -289,7 +319,8 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
       ? `组件 ${diff(cur.content.components, cp.doc.content.components)} · 逻辑节点 ${diff(cur.content.logic.nodes, cp.doc.content.logic.nodes)} · 表行 ${diff(cur.content.table.rows, cp.doc.content.table.rows)}`
       : ''
     if (!window.confirm(`回滚到检查点（${new Date(cp.at).toLocaleTimeString()}）？这将覆盖检查点之后的全部修改（含手工编辑）：${summary}`)) return
-    applyRef.current(cp.doc)
+    // F4：回滚用独立 rollback:<n> tag——不与 AI 写入的 tag 合并，Ctrl+Z 可撤销回滚本身
+    applyRef.current(cp.doc, `rollback:${++runSeqRef.current}`)
     appendMessage(doc.id, {
       role: 'assistant',
       content: `↩ 已回滚到 AI 修改前的版本（检查点 ${new Date(cp.at).toLocaleTimeString()}；${summary}）。可用 Ctrl+Z 撤销本次回滚。`,
@@ -376,7 +407,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
             </ul>
             <p className="muted">
               {session.mode === 'agent'
-                ? 'agent 模式：AI 会直接修改关卡（每次写入都过校验；发送时已存检查点，可随时「↩ 回滚」）。'
+                ? 'agent 模式：AI 会直接修改关卡（每次写入都过校验；首次写入前已存检查点，可随时「↩ 回滚」）。'
                 : session.mode === 'plan'
                   ? 'plan 模式：AI 调研后产出编号执行计划，确认后一键转 agent 执行。'
                   : 'AI 可读取脚本、文档、校验结果与运行日志。先在画布/节点图/脚本页选中一个元素再提问，会自动附带上下文。'}
@@ -553,7 +584,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, style, className,
           placeholder={
             profile
               ? session.mode === 'agent'
-                ? '让 AI 修改关卡…（Enter 发送；发送时自动存检查点）'
+                ? '让 AI 修改关卡…（Enter 发送；首次写入前自动存检查点）'
                 : '询问当前关卡…（Enter 发送，Shift+Enter 换行；可粘贴截图提问）'
               : '请先在设置中配置 AI 供应商'
           }

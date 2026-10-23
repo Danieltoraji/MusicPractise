@@ -82,7 +82,7 @@ describe('validateEnvelope', () => {
   })
 })
 
-describe('D5 唯一性预检（docs/40）', () => {
+describe('D5 唯一性预检（docs/40 / docs/42 E1-b）', () => {
   it('重复组件 id / 视图 id / 列 key 在 loadLevelDoc 被拦截（保存/导入/AI 写入路径）', () => {
     const dupComp = JSON.parse(JSON.stringify(noteClickDoc)) as { content: { components: { id: string }[] } }
     dupComp.content.components.push(JSON.parse(JSON.stringify(dupComp.content.components[0])))
@@ -101,6 +101,62 @@ describe('D5 唯一性预检（docs/40）', () => {
     const r3 = loadLevelDoc(dupCol)
     expect(r3.ok).toBe(false)
     if (!r3.ok) expect(r3.errors.some((e) => e.includes('数据表列') && e.includes('重复'))).toBe(true)
+  })
+
+  it('E1-b：重复逻辑节点 id 被拦截并带可读位置（运行时 byId 后者覆盖前者 → 执行错节点）', () => {
+    const dupNode = JSON.parse(JSON.stringify(noteClickDoc)) as {
+      content: { logic: { nodes: { id: string }[] } }
+    }
+    dupNode.content.logic.nodes.push(JSON.parse(JSON.stringify(dupNode.content.logic.nodes[0])))
+    const r = loadLevelDoc(dupNode)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      const msg = r.errors.find((e) => e.includes('逻辑节点') && e.includes('重复'))
+      expect(msg).toBeTruthy()
+      expect(msg).toContain('第 1 项')
+      expect(msg).toContain('重复出现 2 次')
+    }
+  })
+
+  it('E1-b：重复逻辑连线 id 被拦截并带可读位置', () => {
+    const dupEdge = JSON.parse(JSON.stringify(noteClickDoc)) as {
+      content: { logic: { edges: { id: string }[] } }
+    }
+    dupEdge.content.logic.edges.push({ ...dupEdge.content.logic.edges[0] })
+    const r = loadLevelDoc(dupEdge)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      const msg = r.errors.find((e) => e.includes('逻辑连线') && e.includes('重复'))
+      expect(msg).toBeTruthy()
+      expect(msg).toContain('重复出现 2 次')
+    }
+  })
+})
+
+describe('E1-a：undefined 属性不再击穿校验（docs/42 §4.1）', () => {
+  it('validateEnvelope 遇 undefined 不抛裸异常，转成可读错误', () => {
+    // 复现：脚本合并曾给无坐标旧图写出显式 x: undefined → cfworker 抛
+    // 「Instances of "undefined" type are not supported」
+    const bad = JSON.parse(JSON.stringify(noteClickDoc)) as {
+      content: { logic: { nodes: Record<string, unknown>[] } }
+    }
+    bad.content.logic.nodes[0].x = undefined
+    expect(() => validateEnvelope('level', bad)).not.toThrow()
+    const r = validateEnvelope('level', bad)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(' ')).toContain('undefined')
+    expect(r.errors.join(' ')).toContain('无法处理的值')
+  })
+
+  it('loadLevelDoc（保存/导入/AI 写入同一路径）返回装载错误而非抛出', () => {
+    const bad = JSON.parse(JSON.stringify(noteClickDoc)) as {
+      content: { logic: { nodes: Record<string, unknown>[] } }
+    }
+    bad.content.logic.nodes[0].y = undefined
+    expect(() => loadLevelDoc(bad)).not.toThrow()
+    const r = loadLevelDoc(bad)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors.some((e) => e.includes('undefined'))).toBe(true)
   })
 })
 

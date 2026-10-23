@@ -108,17 +108,32 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     // 同轮多写入时后一个工具会读到旧快照互相覆盖；面板实例中途重挂（dock 拖拽/tab 切换/调试布局/
     // HMR）后其引用更是永久停摆。runDoc 让本轮读写始终基于最新已应用结果，不依赖外部引用的存活与提交时序。
     let runDoc: LevelDoc | null = null
-    // F1（docs/40）：外部（编辑器）doc 引用跟踪。applyDoc 是异步提交（React 渲染滞后），
-    // 写入瞬间的外部引用记为 lastSeenExternal——检测时 external 与「影子最新值」和
-    // 「最后一次写入时看到的值」都不同 = 创作者手动改过文档
-    let lastSeenExternal = opts.ctx.getDoc()
+    // F1（docs/42 §4.3）：冲突检测真源改为编辑器文档修订号（ctx.getRevision）。此前用
+    // 「外部 doc 引用 vs 最后一次 apply 瞬间看到的引用」，apply 时就把用户版本记成基准，
+    // 主场景（AI 写 → 用户手改 → AI 再写）恒检测不到。现在：
+    // - run 开始时记 lastAppliedRevision；每次 AI 写入成功后更新为最新修订号；
+    // - 写入前修订号变了 = 运行期间创作者手动改过 → 拒绝本次写入（不落盘、不改 runDoc），
+    //   并让 runDoc 置空使后续读工具读实时文档，模型重读后可在新状态上重试。
+    let lastAppliedRevision = opts.ctx.getRevision?.()
+    /** 停止检查（docs/42 §4.4）：循环每个 await 之后都查一次，已停止立即收尾，不再发起新请求/继续写文档 */
+    const abortIfStopped = (): void => {
+      if (ctrl.signal.aborted) throw new Error('已停止。')
+    }
     const ctx: ToolContext = {
       ...opts.ctx,
       getDoc: () => runDoc ?? opts.ctx.getDoc(),
       applyDoc: (next) => {
+        const rev = opts.ctx.getRevision?.()
+        if (lastAppliedRevision !== undefined && rev !== lastAppliedRevision) {
+          runDoc = null // 冲突态：后续读工具读编辑器实时文档（不再读影子副本）
+          lastAppliedRevision = rev
+          throw new Error(
+            '编辑器已被手动修改（AI 本次写入未应用）：请先 read_doc/read_script 重新读取现状后再修改。',
+          )
+        }
+        opts.ctx.applyDoc(next) // 先走编辑器写路径（可能抛校验/冲突错误），成功后才更新运行内基准
         runDoc = next
-        lastSeenExternal = opts.ctx.getDoc()
-        opts.ctx.applyDoc(next)
+        lastAppliedRevision = opts.ctx.getRevision?.()
       },
       emitImages: (imgs) => {
         // F15：工具产出图片设上限（会话随消息持久化 IndexedDB，无上限会撑爆配额）
@@ -129,6 +144,7 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     }
 
     for (let turn = 0; turn < maxTurns; turn++) {
+      abortIfStopped()
       // System prompt 每轮现算（函数形态）：runDoc 是运行内最新 doc——中途新增组件的契约当轮即可见
       const sys = typeof opts.systemPrompt === 'function' ? opts.systemPrompt(runDoc ?? opts.ctx.getDoc()) : opts.systemPrompt
       // 流式：先落一条 streaming 占位消息，delta 打字机填充，完成后用最终消息替换
@@ -139,6 +155,7 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
         stream: opts.stream === true,
         onDelta: opts.stream ? (d) => streamAppendToLast(opts.docId, d) : undefined,
       })
+      abortIfStopped() // fetch 期间被停止：不再记账/执行工具
       addSessionUsage(opts.docId, res.usage)
       patchSession(opts.docId, { turnCount: turn + 1 })
       const finalMsg: ChatMessage = { role: 'assistant', content: res.content, toolCalls: res.toolCalls }
@@ -148,6 +165,7 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
       if (!res.toolCalls || res.toolCalls.length === 0) return // 文本回复 = 本轮结束
 
       for (const call of res.toolCalls) {
+        abortIfStopped()
         const tool = opts.tools.find((t) => t.name === call.function.name)
         let result: string
         if (!tool) {
@@ -160,16 +178,7 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
             result = `工具执行出错：${err instanceof Error ? err.message : String(err)}`
           }
         }
-        // F1：写工具执行后检测创作者同栈手动编辑——检测到则附提醒，让模型先重读再继续，
-        // 而不是基于幻影状态继续写（此前静默覆盖用户改动）
-        if (runDoc !== null) {
-          const external = opts.ctx.getDoc()
-          if (external !== runDoc && external !== lastSeenExternal) {
-            lastSeenExternal = external
-            result += '\n⚠ 警告：检测到创作者刚刚在编辑器中手动修改了关卡（编辑器文档与你的工作副本已不一致）。' +
-              '你基于旧状态做的后续修改可能覆盖其改动——请先 read_doc / read_script 重新读取现状再继续，必要时向创作者说明。'
-          }
-        }
+        abortIfStopped() // 工具执行期间被停止：结果不落会话、不再发起下一轮请求
         const msg: ChatMessage = { role: 'tool', toolCallId: call.id, name: call.function.name, content: result }
         history.push(msg)
         appendMessage(opts.docId, msg)
@@ -187,6 +196,7 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
         appendMessage(opts.docId, msg)
       }
     }
+    abortIfStopped() // 撞限收尾前再查一次：已停止就不写「轮数上限」提示
     appendMessage(opts.docId, {
       role: 'assistant',
       content: `（已达单次任务轮数上限（${maxTurns} 轮），自动停止。任务未完可点「▶ 继续」接着当前进度跑，或直接补充新要求。）`,

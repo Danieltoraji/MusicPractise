@@ -6647,3 +6647,29 @@ progress {
     display: block;
   }
 }
+
+/* ================= 节点图窄桌面断点（docs/40 G1，docs/42 返工） =================
+   放文件尾：同特异性后者胜——必须覆盖正文 .graph-layout/.graph-canvas 的无条件规则。
+   ≤1280：Dock 三列挤压画布时工作台横向滚动、画布保底 520px（窄笔记本仍可看图）；
+   ≤1100：工具条显示守卫提示条（基础规则 display:none 先于媒体查询，G7 教训）。 */
+.graph-narrow-tip {
+  display: none;
+  color: var(--warn);
+  font-size: var(--fs-0);
+  white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+  .graph-layout {
+    overflow-x: auto;
+  }
+  .graph-canvas {
+    min-width: 520px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .graph-narrow-tip {
+    display: inline;
+  }
+}

@@ -14,6 +14,7 @@ import { durToQuarters, playNotes } from '../runtime/audio'
 import { Modal } from './Modal'
 import { registerModalOpen } from './keyGuard'
 import { DUR_OPTIONS, parseNoteTokens, type PlayNote } from './graph/NoteChipsEditor'
+import { SCHEMA_LIMITS } from '../library/schemaLimits'
 
 // ---------------------------------------------------------------------------
 // 纯函数：diatonic 换算与时序游标
@@ -310,6 +311,8 @@ export function StaffEditorModal(props: {
     setDraft(next)
     setCursorIndex(cursorRef.current)
     setSelected(nextSelected)
+    // 成功变更后清掉上一次的导入/上限提示（提示只对触发它的操作有效）
+    setImportErr('')
   }
 
   /** 光标处的时间拍（「与上一音同时」勾选时取前一音起始拍） */
@@ -323,6 +326,14 @@ export function StaffEditorModal(props: {
     simultaneousRef.current && cursorRef.current > 0 ? startBeats(draftRef.current)[cursorRef.current - 1] : plainBeatAtCursor()
 
   const insert = (note: PlayNote): void => {
+    // A5（docs/40）：单元格音符上限门禁——键盘（C–G/0）与点击谱线是独立于「文本导入」
+    // 快捷路径，此前只有导入查 64，手动连续加音可越过 schema maxItems 到保存才被拒。
+    if (draftRef.current.length >= SCHEMA_LIMITS.notesPerCell) {
+      setImportErr(
+        `单元格音符数已达上限 ${SCHEMA_LIMITS.notesPerCell}（schema 约束）——请先删除音符或分段录入`,
+      )
+      return
+    }
     const prev = draftRef.current
     const ci = Math.min(cursorRef.current, prev.length)
     const next = [...prev.slice(0, ci), note, ...prev.slice(ci)]
@@ -407,8 +418,8 @@ export function StaffEditorModal(props: {
       setImportErr('无法解析——请检查记法（音名或 MIDI 号，可带 :时值；r = 休止符）')
       return
     }
-    if (parsed.length > 64) {
-      setImportErr(`导入 ${parsed.length} 个音符超过单元格上限 64（schema 约束）——请分段录入`)
+    if (parsed.length > SCHEMA_LIMITS.notesPerCell) {
+      setImportErr(`导入 ${parsed.length} 个音符超过单元格上限 ${SCHEMA_LIMITS.notesPerCell}（schema 约束）——请分段录入`)
       return
     }
     setImportErr('')
@@ -519,6 +530,9 @@ export function StaffEditorModal(props: {
             <code>{JSON.stringify(props.importRaw)}</code>
           </div>
         )}
+        {/* 导入/上限提示放在导入面板外：键盘加音撞 64 上限时导入面板通常是收起的，
+            提示必须在弹窗内始终可见（此前只在 details 内，收起即看不到） */}
+        {importErr && <div className="tone-error">{importErr}</div>}
         <details className="staff-import">
           <summary>从文本导入（快速录入/粘贴旋律）</summary>
           <div className="staff-import-row">
@@ -540,7 +554,6 @@ export function StaffEditorModal(props: {
               导入
             </button>
           </div>
-          {importErr && <div className="tone-error">{importErr}</div>}
           <p className="muted">记法：C4 / C#4 / Db3 / 60 = 音高；后接 :1n–32n（可带附点 .）= 时值，缺省 4n；r / 0 = 休止符。</p>
         </details>
         <div className="staff-toolbar">

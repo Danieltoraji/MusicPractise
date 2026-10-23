@@ -48,6 +48,15 @@ const MIN_ROW_H = 28
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 const clip = (s: string, n = 60): string => (s.length > n ? `${s.slice(0, n)}…` : s)
 
+/**
+ * D2（docs/40）：list 列原始单元格值是否需要「将转换为文本列表」提示。
+ * 非数组（字符串/对象/标量）与「非全字符串数组」（数字/对象数组，应用即逐项 JSON 文本化）
+ * 都会改变数据形态，必须提示；此前只判 `!Array.isArray` 漏掉 [1,2] 这类 docs/40 点名场景。
+ */
+export function needsListConversion(v: unknown): boolean {
+  return !Array.isArray(v) || v.some((x) => typeof x !== 'string')
+}
+
 export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: LevelDoc, tag?: string) => void }) {
   const table = doc.content.table
   // 列宽/行高布局态跨 Tab 存活（docs/40 C1/D3 部分）：经 draftStore 按列 key / 行号保留——
@@ -73,6 +82,12 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
   const heightOf = (index: number): number => rowH[index] ?? DEFAULT_ROW_H
 
   const addColumn = (): void => {
+    // A5（docs/40）：列数上限门禁——「+ 列」按钮虽 disabled，但列名输入框 Enter 是
+    // 独立快捷路径（不经按钮），必须在入口处拦下，否则越过 schema maxItems 到保存才被拒。
+    if (table.columns.length >= SCHEMA_LIMITS.tableColumns) {
+      setColErr(`列数已达上限 ${SCHEMA_LIMITS.tableColumns} 列（schema 约束）——请先删除现有列`)
+      return
+    }
     const key = newCol.trim()
     try {
       onChange(addTableColumn(doc, key))
@@ -190,6 +205,8 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
                         className="tgrid-label"
                         defaultValue={c.label ?? ''}
                         placeholder="显示名"
+                        maxLength={SCHEMA_LIMITS.columnLabelMaxLength}
+                        title={`列显示名（≤${SCHEMA_LIMITS.columnLabelMaxLength} 字符，schema 约束）`}
                         onBlur={(e) => {
                           if (e.currentTarget.value !== (c.label ?? '')) onChange(updateTableColumnLabel(doc, c.key, e.currentTarget.value))
                         }}
@@ -343,7 +360,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
       {listCell && (
         <ListEditorModal
           title={`编辑字符串列表 · 第 ${listCell.row + 1} 行 / ${listCell.key}`}
-          converting={!Array.isArray(doc.content.table.rows[listCell.row]?.[listCell.key])}
+          converting={needsListConversion(doc.content.table.rows[listCell.row]?.[listCell.key])}
           value={listEntriesFromCell(doc.content.table.rows[listCell.row]?.[listCell.key] ?? null)}
           onCommit={(items) => {
             // 全部清空 → null（与 text 列「清空 = 无数据」语义一致）

@@ -70,6 +70,8 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
   const curSig = useMemo(() => signatureOf(program), [program])
   const irStale = draft.baselineSig !== curSig
   const [parseError, setParseError] = useState<ScriptError | null>(null)
+  /** 非解析类应用错误（合并结构自检失败等）：阻止应用并就地显示，不再静默吞掉 */
+  const [applyError, setApplyError] = useState<string | null>(null)
   const [appliedTip, setAppliedTip] = useState<string | null>(null)
 
   // 草稿持久缓存（卸载/切 Tab 不丢）；经 effect 同步，避免渲染期副作用。
@@ -89,6 +91,7 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
     const fresh = genDraft(program)
     setDraft(fresh)
     setParseError(null)
+    setApplyError(null)
     setAppliedTip(null)
   }
 
@@ -97,20 +100,28 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
     try {
       const parsed = parseScript(text, { variables: program.variables, idPrefix: ID_PREFIX })
       // E1（docs/40）：锚点合并——按语句特征回填旧节点 id 与 x/y，不再整块重建。
-      // 断点/AI 高亮/选中/布局不再因一次脚本应用而全部悬空丢失
-      const { prog, dropped } = mergeScriptAnchors(parsed, program)
+      // 断点/AI 高亮/选中/布局不再因一次脚本应用而全部悬空丢失。
+      // 返工（docs/42 §4.1/4.2）：未配对语句拿唯一新 id，旧节点无坐标时不写 undefined；
+      // 合并自检失败会抛错 → 阻止应用并显示原因。
+      const { prog, kept, unmatched, dropped } = mergeScriptAnchors(parsed, program)
       const nextSig = signatureOf(prog)
       setDraft({ text, baseline: text, baselineSig: nextSig, genError: null })
       setParseError(null)
-      setAppliedTip(
-        `已应用（${prog.nodes.length} 节点 / ${prog.edges.length} 连线；节点 id 与坐标已保留${
-          dropped > 0 ? `；丢弃了 ${dropped} 个未接线节点` : ''
-        }）`,
-      )
+      setApplyError(null)
+      const summary = [`保留 ${kept} 节点 id/坐标`]
+      if (unmatched > 0) summary.push(`${unmatched} 条改写语句获得新 id、坐标不保留`)
+      if (dropped > 0) summary.push(`丢弃 ${dropped} 个未接线节点`)
+      setAppliedTip(`已应用（${prog.nodes.length} 节点 / ${prog.edges.length} 连线；${summary.join('；')}）`)
       onChange({ ...doc, content: { ...doc.content, logic: prog } })
     } catch (e) {
-      if (e instanceof ScriptError) setParseError(e)
-      else setParseError(null)
+      setAppliedTip(null)
+      if (e instanceof ScriptError) {
+        setParseError(e)
+        setApplyError(null)
+      } else {
+        setParseError(null)
+        setApplyError(e instanceof Error ? e.message : String(e))
+      }
     }
   }
 
@@ -165,6 +176,23 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
     return program.nodes.length - seen.size
   }, [program])
 
+  // E1-b（docs/42 返工）：应用前预览「改写/新增语句」数量（按未配对=将获得新 id）。
+  // 解析失败（打字中间态）返回 null——此时应用本身会被解析错误拦截，只保留丢弃提示。
+  const previewUnmatched = useMemo(() => {
+    try {
+      const parsed = parseScript(text, { variables: program.variables, idPrefix: ID_PREFIX })
+      return mergeScriptAnchors(parsed, program).unmatched
+    } catch {
+      return null
+    }
+  }, [text, program])
+
+  const preApplyHints: string[] = []
+  if (droppedCount > 0) preApplyHints.push(`将丢弃 ${droppedCount} 个未接线节点（脚本只表达接线的执行链）`)
+  if (previewUnmatched !== null && previewUnmatched > 0) {
+    preApplyHints.push(`${previewUnmatched} 条改写/新增语句将获得新 id、坐标不保留`)
+  }
+
   const stats = useMemo(() => {
     const handlers = (text.match(/^on /gm) ?? []).length
     return { handlers, lines: text.split('\n').length }
@@ -191,6 +219,11 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
           解析失败：第 {parseError.line} 行第 {parseError.col} 列——{parseError.message.replace(/^第 \d+ 行第 \d+ 列: /, '')}
         </div>
       )}
+      {applyError && (
+        <div className="editor-errors script-error">
+          应用未生效：{applyError}
+        </div>
+      )}
       {irStale && !genError && (
         <div className="editor-lint script-stale">
           {textDirty
@@ -209,9 +242,9 @@ export function ScriptTab({ doc, onChange, onSelectionReport }: Props) {
           当前逻辑图超出伪代码能表达的结构（{genError}）——请在节点图中简化该结构，或查看 JSON。
         </div>
       )}
-      {!genError && droppedCount > 0 && (
+      {!genError && preApplyHints.length > 0 && (
         <div className="editor-lint script-stale">
-          当前图中有 {droppedCount} 个未接线节点——脚本只表达接线的执行链，应用后它们将被移除（如需保留请先在节点图中接线或删除）。
+          应用预览：{preApplyHints.join('；')}。（如需保留旧 id/坐标，请先在节点图中接线或调整）
         </div>
       )}
       {appliedTip && <div className="editor-saved">{appliedTip}</div>}

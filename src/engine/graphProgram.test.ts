@@ -486,4 +486,43 @@ describe('E19 契约白名单 lint（docs/40）', () => {
     expect(issues.some((i) => i.message.includes('没有命令'))).toBe(false)
     expect(issues.some((i) => i.message.includes('没有事件'))).toBe(false)
   })
+
+  it('契约白名单按组件类型索引（docs/42 E19 返工）：同类型多实例共享；未知类型省略不误报', () => {
+    const ctx = {
+      componentIds: ['btn1', 'btn2', 'myst1'],
+      componentTypes: { btn1: 'button', btn2: 'button', myst1: 'mystery-widget' },
+      // 键是类型而非实例 id（GraphEditor 按 allContracts().type 建 map）
+      componentMethods: { button: ['setText', 'setEnabled', 'setVisible'] },
+      componentEvents: { button: ['clicked'] },
+    }
+    const valid: GraphProgram = {
+      logicVersion: 2,
+      variables: {},
+      nodes: [
+        { id: 'on1', kind: 'on', event: 'btn2.clicked' },
+        { id: 'c1', kind: 'call', target: 'btn2', method: 'setVisible', args: ['{visible: true}'] },
+      ],
+      edges: [{ id: 'e1', from: 'on1', to: 'c1' }],
+    }
+    const ok = lintGraphProgramDetailed(valid, ctx)
+    expect(ok.some((i) => i.message.includes('没有命令') || i.message.includes('没有事件'))).toBe(false)
+    // 同类型第二个实例也命中白名单：未知方法仍红标
+    const bad: GraphProgram = {
+      ...valid,
+      nodes: [valid.nodes[0], { id: 'c1', kind: 'call', target: 'btn2', method: 'setVisibel', args: [] }],
+    }
+    expect(lintGraphProgramDetailed(bad, ctx).some((i) => i.message.includes('没有命令 "setVisibel"'))).toBe(true)
+    // 未知类型（未写进 map）：整条 call/on 不校验，避免未知组件实例全量误报
+    const unknown: GraphProgram = {
+      logicVersion: 2,
+      variables: {},
+      nodes: [
+        { id: 'on1', kind: 'on', event: 'myst1.zapped' },
+        { id: 'c1', kind: 'call', target: 'myst1', method: 'anything', args: [] },
+      ],
+      edges: [{ id: 'e1', from: 'on1', to: 'c1' }],
+    }
+    const unknownIssues = lintGraphProgramDetailed(unknown, ctx)
+    expect(unknownIssues.some((i) => i.message.includes('没有命令') || i.message.includes('没有事件'))).toBe(false)
+  })
 })

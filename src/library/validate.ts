@@ -65,9 +65,22 @@ export function validateEnvelope(
   if (!KNOWN_KINDS.includes(kind as ResourceKind)) {
     return { ok: false, errors: [`未知的文档 kind: ${String(kind)}`] }
   }
-  const result = validatorFor(kind as ResourceKind).validate(doc)
-  if (result.valid) return { ok: true, errors: [] }
-  return { ok: false, errors: formatSchemaErrors(result.errors) }
+  try {
+    const result = validatorFor(kind as ResourceKind).validate(doc)
+    if (result.valid) return { ok: true, errors: [] }
+    return { ok: false, errors: formatSchemaErrors(result.errors) }
+  } catch (err) {
+    // cfworker 遇到 undefined 属性值会直接抛「Instances of "undefined" type are not supported」
+    // （docs/42 §4.1：脚本合并曾写出显式 x: undefined，保存/AI 写入全被裸异常击穿）。
+    // 校验器异常一律转成可读装载错误，不向上抛。
+    const detail = err instanceof Error ? err.message : String(err)
+    return {
+      ok: false,
+      errors: [
+        `文档包含校验器无法处理的值（常见原因是字段值为 undefined，例如旧图合并残留的坐标）——${detail}`,
+      ],
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -151,22 +164,48 @@ function formatSchemaErrors(errors: { keyword: string; instanceLocation: string;
 }
 
 /**
- * D5 唯一性预检（schema 无法表达的约束）：组件 id / 视图 id / 表列 key 重复。
+ * D5 唯一性预检（schema 无法表达的约束）：组件 id / 视图 id / 表列 key /
+ * 逻辑节点 id / 逻辑连线 id 重复（docs/42 E1-b：重复节点 id 会被 graphEngine 的 byId
+ * 后者覆盖前者，静默执行错节点；重复边 id 会令选中/断点/删除定位错乱）。
  * 重复后果：ComponentStore 后者覆盖前者、React key 冲突、按 id 删除一次删掉全部同 id。
  * 保存/导入/AI 写入走 loadLevelDoc 时作为错误拦截；编辑器装载走宽松告警（见 EditorPage）。
  */
 export function findDuplicateIdErrors(doc: LevelDoc): string[] {
   const errors: string[] = []
-  const dup = (ids: string[], what: string, nameOf?: (id: string) => string): void => {
+  /** 同 id 出现位置（1 起）：重复消息带上「第 N 项」，作者可直接按序号定位 */
+  const positionsOf = (ids: string[], id: string): string => {
+    const at: number[] = []
+    ids.forEach((x, i) => {
+      if (x === id) at.push(i + 1)
+    })
+    const shown = at.slice(0, 5).map((n) => `第 ${n} 项`).join('、')
+    return at.length > 5 ? `${shown} 等 ${at.length} 处` : shown
+  }
+  const dup = (
+    ids: string[],
+    what: string,
+    opts: { nameOf?: (id: string) => string; consequence?: string } = {},
+  ): void => {
     const counts = new Map<string, number>()
     for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1)
     for (const [id, n] of counts) {
-      if (n > 1) errors.push(`${what} id「${nameOf ? nameOf(id) : id}」重复出现 ${n} 次——同 id 实例会互相覆盖，请改为唯一 id`)
+      if (n <= 1) continue
+      const name = opts.nameOf ? opts.nameOf(id) : id
+      const consequence = opts.consequence ?? '同 id 实例会互相覆盖，请改为唯一 id'
+      errors.push(`${what} id「${name}」重复出现 ${n} 次（${positionsOf(ids, id)}）——${consequence}`)
     }
   }
   dup(doc.content.components.map((c) => c.id), '组件')
   dup(doc.content.views.map((v) => v.id), '视图')
-  dup(doc.content.table.columns.map((c) => c.key), '数据表列', (k) => `key:${k}`)
+  dup(doc.content.table.columns.map((c) => c.key), '数据表列', {
+    nameOf: (k) => `key:${k}`,
+  })
+  dup(doc.content.logic.nodes.map((n) => n.id), '逻辑节点', {
+    consequence: '同 id 节点会被运行时按后者覆盖（执行错节点），请改为唯一 id',
+  })
+  dup(doc.content.logic.edges.map((e) => e.id), '逻辑连线', {
+    consequence: '同 id 连线会令选中/断点/删除定位错乱，请改为唯一 id',
+  })
   return errors
 }
 

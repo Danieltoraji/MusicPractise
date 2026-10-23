@@ -3,6 +3,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { describe, expect, it } from 'vitest'
 import type { LevelDoc } from '../engine/level'
+import { SCHEMA_LIMITS } from '../library/schemaLimits'
 import { checkExprText } from './EditorPage'
 import { TableEditor } from './TableGrid'
 
@@ -257,7 +258,7 @@ describe('TableEditor（jsdom 渲染）', () => {
       act(() => {
         ;[...details.querySelectorAll('button')].find((b) => b.textContent === '导入')!.click()
       })
-      expect(details.querySelector('.tone-error')?.textContent).toContain('无法解析')
+      expect(modal.querySelector('.tone-error')?.textContent).toContain('无法解析')
       // 应用 → 原字符串被标准音符数组替换
       act(() => {
         ;[...modal.querySelectorAll('button')].find((b) => b.textContent === '应用')!.click()
@@ -269,6 +270,133 @@ describe('TableEditor（jsdom 渲染）', () => {
     } finally {
       act(() => root.unmount())
       container.remove()
+    }
+  })
+})
+
+describe('D2/A5 门禁（docs/42 §5.1 残余）', () => {
+  /** 挂 TableEditor，模拟 EditorPage：onChange 更新 doc 后立即以新 props 重渲染 */
+  function mountTable(initial: LevelDoc): { c: HTMLElement; calls: () => number; restore: () => void } {
+    let doc = initial
+    let calls = 0
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    let root!: Root
+    const rerender = (): void => {
+      act(() => root.render(<TableEditor doc={doc} onChange={(next) => { calls++; doc = next; rerender() }} />))
+    }
+    act(() => {
+      root = createRoot(container)
+      rerender()
+    })
+    return {
+      c: container,
+      calls: () => calls,
+      restore: () => {
+        act(() => root.unmount())
+        container.remove()
+      },
+    }
+  }
+
+  const closeModal = (c: HTMLElement): void => {
+    act(() => {
+      ;([...c.querySelectorAll('.tjson-modal button')].find((b) => b.textContent === '取消') as HTMLElement).click()
+    })
+  }
+
+  it('D2：list 列数字数组/对象数组打开弹窗即提示「原数据将转换为文本列表」（纯字符串数组不提示）', () => {
+    const doc = baseDoc()
+    doc.content.table = {
+      columns: [{ key: 'options', label: '选项', type: 'list' }],
+      rows: [{ options: [1, 2] }, { options: [{ a: 1 }] }, { options: ['A', 'B'] }],
+    }
+    const { c, restore } = mountTable(doc)
+    try {
+      const openRow = (i: number): HTMLElement => {
+        const cell = c.querySelectorAll('.tcell-list')[i]
+        act(() => {
+          ;(cell.querySelector('.tlist-open') as HTMLElement).click()
+        })
+        return c.querySelector('.tjson-modal-head') as HTMLElement
+      }
+      // 数字数组（docs/40 D2 点名场景）：应用会把 [1,2] 文本化为 ['1','2']，必须先提示
+      expect(openRow(0).textContent).toContain('原数据将转换为文本列表')
+      closeModal(c)
+      // 对象数组同理（逐项 JSON 文本化）
+      expect(openRow(1).textContent).toContain('原数据将转换为文本列表')
+      closeModal(c)
+      // 已合规的 string[] 不打扰
+      const head = openRow(2)
+      expect(head.textContent).not.toContain('原数据将转换为文本列表')
+      expect(head.textContent).toContain('第 3 行')
+    } finally {
+      restore()
+    }
+  })
+
+  it('A5：列显示名输入框带 maxLength=columnLabelMaxLength', () => {
+    const { c, restore } = mountTable(baseDoc())
+    try {
+      const labels = [...c.querySelectorAll('.tgrid-label')] as HTMLInputElement[]
+      expect(labels.length).toBe(2)
+      for (const el of labels) expect(el.maxLength).toBe(SCHEMA_LIMITS.columnLabelMaxLength)
+    } finally {
+      restore()
+    }
+  })
+
+  it('A5：32 列上限——「+ 列」disabled，列名输入回车快捷路径也被拦下并提示（不写 doc）', () => {
+    const doc = baseDoc()
+    doc.content.table = {
+      columns: Array.from({ length: SCHEMA_LIMITS.tableColumns }, (_, i) => ({ key: `c${i}`, label: `列${i}` })),
+      rows: [{}],
+    }
+    const { c, calls, restore } = mountTable(doc)
+    try {
+      const addBtn = c.querySelector('.tgrid-addcol button') as HTMLButtonElement
+      expect(addBtn.disabled).toBe(true)
+      // Enter 绕过 disabled 按钮：走上限门禁而非 addTableColumn
+      const input = c.querySelector('.tgrid-addcol input') as HTMLInputElement
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      act(() => {
+        setter.call(input, 'extra')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      const before = calls()
+      act(() => {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+      expect(calls()).toBe(before)
+      expect(c.querySelector('.tone-error')?.textContent).toContain('列数已达上限')
+    } finally {
+      restore()
+    }
+  })
+
+  it('A5：五线谱键盘手动加音 64 上限——撞限提示且不新增音符', () => {
+    const notes = Array.from({ length: SCHEMA_LIMITS.notesPerCell }, () => ({ midi: 60, dur: '4n' }))
+    const doc = baseDoc()
+    doc.content.table = {
+      columns: [{ key: 'notes', label: '音符', type: 'notes' }],
+      rows: [{ notes }],
+    }
+    const { c, restore } = mountTable(doc)
+    try {
+      act(() => {
+        ;(c.querySelector('.tcell-notes .tstaff') as HTMLElement).click()
+      })
+      const modal = c.querySelector('.staff-modal') as HTMLElement
+      const atLimit = (): number => modal.querySelectorAll('svg > g.vf-stavenote').length
+      expect(atLimit()).toBe(SCHEMA_LIMITS.notesPerCell)
+      // 键盘 C = 加音（MuseScore 流）：第 65 个必须被入口拦下，而不是等保存才被 schema 拒
+      act(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }))
+      })
+      expect(modal.querySelector('.tone-error')?.textContent).toContain(`上限 ${SCHEMA_LIMITS.notesPerCell}`)
+      expect(atLimit()).toBe(SCHEMA_LIMITS.notesPerCell)
+    } finally {
+      restore()
     }
   })
 })

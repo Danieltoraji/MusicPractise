@@ -39,7 +39,8 @@ export interface AiProfileConfig {
   apiKey: string
 }
 
-export type AiErrorKind = 'bad-config' | 'network' | 'auth' | 'rate-limit' | 'server' | 'bad-request' | 'response'
+/** aborted = 调用方已停止（R5/F5：进入 fetch 前预检 signal，避免「停止后仍发起新请求」） */
+export type AiErrorKind = 'bad-config' | 'network' | 'auth' | 'rate-limit' | 'server' | 'bad-request' | 'response' | 'aborted'
 
 export class AiClientError extends Error {
   readonly kind: AiErrorKind
@@ -179,6 +180,9 @@ export async function chatCompleteRaw(
   opts: ChatCompleteOptions = {},
 ): Promise<ChatCompletionResult> {
   assertConfig(profile)
+  // R5/F5（docs/42 §4.4）：停止信号可能在两次请求之间到达——必须在 fetch 前预检，
+  // 否则已停止的 run 仍会发起新请求（AI 调试工作流被生命周期修复打断的路径之一）。
+  if (opts.signal?.aborted) throw new AiClientError('aborted', '已停止。')
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000)

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { LevelDoc } from '../../engine/level'
 import { loadLevelDoc } from '../../library/validate'
 import {
+  clearDebugBreakpoints,
   dispatchDebugEvent,
   getDebugSnapshot,
   restartDebug,
@@ -115,6 +116,39 @@ describe('debugRun（编辑器调试会话）', () => {
     expect(snap.breakpoints).toContain('some_node')
     toggleDebugBreakpoint('some_node') // 清理
   })
+})
+
+describe('E10 断点与文档绑定（docs/42 返工）', () => {
+  afterEach(() => {
+    stopDebugRun()
+    clearDebugBreakpoints()
+  })
+
+  it('A→B 启动清断点；同关重开/停止后重开保留', async () => {
+    const a = loaded()
+    // 另一文档 = 同内容不同 id（E10 归属键就是 doc.id；避免真实音频副作用干扰用例）
+    const b = structuredClone(a)
+    b.id = `${a.id.slice(0, -1)}${a.id.endsWith('0') ? '1' : '0'}`
+    expect(a.id).not.toBe(b.id)
+
+    await startDebugRun(a)
+    toggleDebugBreakpoint('bp_a')
+    expect(getDebugSnapshot().breakpoints).toContain('bp_a')
+
+    // 运行中切换到另一文档启动：旧图断点必须清空（快照同步刷新，节点卡不再误发光）
+    expect(await startDebugRun(b)).toBeNull()
+    expect(getDebugSnapshot().breakpoints).toEqual([])
+
+    // 同关重开（运行中再次 start）：断点保留
+    toggleDebugBreakpoint('bp_b')
+    await startDebugRun(b)
+    expect(getDebugSnapshot().breakpoints).toContain('bp_b')
+
+    // 停止后重开同一关：断点仍保留（stopDebugRun 清 docIdRef，不应误判为换文档）
+    stopDebugRun()
+    await startDebugRun(b)
+    expect(getDebugSnapshot().breakpoints).toContain('bp_b')
+  }, 15000)
 })
 
 describe('debugRun 可视化地基（批次9）', () => {

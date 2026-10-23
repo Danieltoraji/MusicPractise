@@ -67,18 +67,24 @@ export async function runLevelHeadless(
     return report
   }
   const runDoc = check.doc
-  // F12（docs/40）：超时「中止」此前只放弃等待——session 继续在后台跑且不 dispose。
-  // 外层持引用，超时侧主动 dispose 终止计时器/音频
+  // F12（docs/42 §5.1）：超时「中止」此前只放弃等待——驱动循环继续注入事件并改写
+  // 已返回的 report（return 后报告仍在变）。aborted 由超时分支置位：循环每个 await 后检查
+  // 提前返回、所有 report 写入都在检查之后，保证函数返回后 report 冻结；session 由超时侧 dispose。
+  let aborted = false
   let activeSession: LevelSession | null = null
 
   const run = async (): Promise<void> => {
     const events: LogicRunEvent[] = []
     const effects: Effect[] = []
     const host: SessionHost = {
-      onRow: (index) => report.rowsVisited.push(index),
-      onView: (id) => report.viewsVisited.push(id),
+      onRow: (index) => {
+        if (!aborted) report.rowsVisited.push(index)
+      },
+      onView: (id) => {
+        if (!aborted) report.viewsVisited.push(id)
+      },
       onFinished: (r) => {
-        report.finished = r
+        if (!aborted) report.finished = r
       },
       runEffects: (efs) => effects.push(...efs),
       onLogicEvent: (e) => events.push(e),
@@ -88,20 +94,27 @@ export async function runLevelHeadless(
     try {
       session.start()
       await flush()
+      if (aborted) return
       for (const step of opts.events ?? []) {
+        if (aborted) return
         report.steps += 1
         session.dispatch(step.event, step.payload ?? {})
         await flush()
+        if (aborted) return
         await sleep(Math.min(step.waitMs ?? 120, 2000))
+        if (aborted) return
         await flush()
+        if (aborted) return
       }
       await flush()
+      if (aborted) return
       // 终态必须在 dispose 前采集——engine.reset 会把变量复位
       report.finalVars = { ...session.engine.vars } as Record<string, Json>
     } finally {
       if (activeSession === session) activeSession = null
       session.dispose()
     }
+    if (aborted) return
     for (const e of events) {
       if (e.kind === 'error') report.errors.push({ message: e.message, nodeId: e.nodeId, event: e.event })
       else report.commands.push(e.path)
@@ -109,16 +122,23 @@ export async function runLevelHeadless(
   }
 
   const timeoutMs = opts.timeoutMs ?? 5000
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
     await Promise.race([
       run(),
-      sleep(timeoutMs).then(() => {
-        report.timedOut = true
-        activeSession?.dispose()
+      new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+          aborted = true
+          report.timedOut = true
+          activeSession?.dispose() // 立即停掉计时器/音频，不再有事件流入
+          resolve()
+        }, timeoutMs)
       }),
     ])
-    report.ran = !report.timedOut
+    if (!aborted) report.ran = true
   } finally {
+    if (timer !== undefined) clearTimeout(timer) // 正常完成时取消超时回调，防其在返回后置 timedOut
+    aborted = true // 返回后任何在途续行都不再写 report（安全网）
     report.durationMs = Date.now() - started
   }
   return report

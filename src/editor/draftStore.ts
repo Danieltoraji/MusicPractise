@@ -23,7 +23,7 @@ export function clearDraft(docId: string, slot: string): void {
 
 /** 草稿槽位常量（消费方与测试共用，防拼写漂移） */
 export const DRAFT_SLOTS = {
-  /** JSON Tab 未应用文本 */
+  /** JSON Tab 未应用文本（值为 {@link JsonDraft}：文本 + 挂载基线签名） */
   jsonText: 'json-text',
   /** 数据表列宽/行高布局态 */
   tableLayout: 'table-layout',
@@ -32,3 +32,33 @@ export const DRAFT_SLOTS = {
   /** 画布当前视图 */
   canvasView: 'canvas-view',
 } as const
+
+/**
+ * 带基线签名的文本草稿（JSON Tab，docs/42 §5.1-13 草稿 stale）：
+ * baselineSig = 挂载时文档结构签名；当前文档签名与之不一致 = 文档已被其它操作
+ * （AI 写入/undo/其它 Tab）修改过 → 黄条提示 + 禁用应用，须显式「从当前文档重新生成」。
+ */
+export interface JsonDraft {
+  text: string
+  baselineSig: string
+}
+
+/** 草稿基线是否陈旧：基线签名 ≠ 当前文档结构签名（渲染期派生，挂载后外部修改同样能检测） */
+export function isDraftStale(draft: Pick<JsonDraft, 'baselineSig'>, currentSig: string): boolean {
+  return draft.baselineSig !== currentSig
+}
+
+/**
+ * 草稿换档（docs/42 §4.6 C5）：内置示例另存副本后 doc.id 变更，按 `docId:slot` 键控的
+ * 全部草稿（JSON 文本/表格布局/AI 输入框/画布视图）迁移到新 id，避免同挂载内草稿失联。
+ * 其它文档的草稿不受影响。
+ */
+export function renameDrafts(oldDocId: string, newDocId: string): void {
+  if (oldDocId === newDocId) return
+  const prefix = `${oldDocId}:`
+  for (const key of [...drafts.keys()]) {
+    if (!key.startsWith(prefix)) continue
+    drafts.set(`${newDocId}:${key.slice(prefix.length)}`, drafts.get(key))
+    drafts.delete(key)
+  }
+}

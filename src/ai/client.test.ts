@@ -93,16 +93,32 @@ describe('chatComplete', () => {
     expect((err as AiClientError).message).toContain('跨域')
   })
 
-  it('外部 signal 已中止：透传 AbortError 而非包装成 network', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, _init?: RequestInit) => {
-        throw new DOMException('Aborted', 'AbortError')
-      }),
-    )
+  it('外部 signal 已中止：fetch 前预检直接抛 aborted，不发网络请求（R5/F5）', async () => {
+    const fn = vi.fn()
+    vi.stubGlobal('fetch', fn)
     const ctrl = new AbortController()
     ctrl.abort()
-    await expect(chatComplete(profile, [], { signal: ctrl.signal })).rejects.toMatchObject({ name: 'AbortError' })
+    await expect(chatComplete(profile, [], { signal: ctrl.signal })).rejects.toMatchObject({
+      kind: 'aborted',
+      message: '已停止。',
+    })
+    expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('请求进行中外部 signal 中止：透传 AbortError 而非包装成 network', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: unknown, init?: RequestInit) =>
+          new Promise((_res, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+          }),
+      ),
+    )
+    const ctrl = new AbortController()
+    const pending = chatComplete(profile, [], { signal: ctrl.signal })
+    ctrl.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   })
 })
 

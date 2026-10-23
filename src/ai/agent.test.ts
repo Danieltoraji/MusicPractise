@@ -4,6 +4,7 @@ import type { AiProfileConfig, ChatMessage } from './client'
 import { appendMessage, beginStreamingMessage, clearSession, finalizeStreamingMessage, getSession, streamAppendToLast } from './session'
 import type { AiTool, ToolContext } from './tools'
 import type { LevelDoc } from '../engine/level'
+import { blankLevelDoc, setMeta } from '../editor/docState'
 
 const profile: AiProfileConfig = { baseUrl: 'https://api.example.com/v1', model: 'm', apiKey: 'sk-t' }
 
@@ -622,37 +623,158 @@ describe('token 用量累计（批次8c）', () => {
   })
 })
 
-describe('F1 创作者手动编辑冲突检测（docs/40 R7）', () => {
-  it('写工具执行期间编辑器 doc 被手动修改 → 工具结果附警告，模型被引导重读', async () => {
-    clearSession('res_agent_f1')
-    let external = { id: 'L' } as LevelDoc
-    const ctxMut: ToolContext = {
+describe('F1 创作者手动编辑冲突（docs/42 §4.3 返工：修订号基准确认）', () => {
+  /** 简化编辑器：external doc 为真源，revision 每次文档变更 +1（AI 写入与用户手改同一计数器） */
+  function editorHarness(initial: LevelDoc) {
+    let external = initial
+    let revision = 0
+    const applied: LevelDoc[] = []
+    const ctx: ToolContext = {
       getDoc: () => external,
-      applyDoc: () => {},
+      applyDoc: (next) => {
+        applied.push(next)
+        external = next
+        revision += 1
+      },
+      getRevision: () => revision,
       levelId: 'L',
     }
-    const write: AiTool = {
-      name: 'write_mark',
-      description: '',
-      parameters: { type: 'object', properties: {} },
-      exec: (_a, c) => {
-        c.applyDoc({ ...c.getDoc(), tag: 'w' } as LevelDoc)
-        // 写入提交后、本轮检测前：创作者手动编辑（编辑器 doc 换新引用——
-        // 既不等于 runDoc 也不等于写入瞬间看到的 lastSeenExternal）
-        external = { id: 'L', touched: true } as unknown as LevelDoc
-        return 'ok'
-      },
+    /** 模拟创作者手动编辑标题（编辑器 update 的等价：换引用 + 修订号 +1） */
+    const userEdit = (title: string): void => {
+      external = { ...external, meta: { ...external.meta, title } }
+      revision += 1
     }
-    scriptFetch([
-      {
-        choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'write_mark', arguments: '{}' } }] } }],
-      },
-      { choices: [{ message: { content: 'done' } }] },
-    ])
-    await runAgentTurn({ docId: 'res_agent_f1', profile, systemPrompt: 'S', userText: 'go', tools: [write], ctx: ctxMut })
-    const msgs = getSession('res_agent_f1').messages
-    expect(msgs[2].content).toContain('手动修改')
-    expect(msgs[2].content).toContain('read_doc')
-    clearSession('res_agent_f1')
+    return { ctx, applied, userEdit, getExternal: () => external }
+  }
+
+  const writeDesc: AiTool = {
+    name: 'write_desc',
+    description: '',
+    parameters: { type: 'object', properties: { desc: { type: 'string' } } },
+    exec: (args, c) => {
+      const doc = c.getDoc()
+      c.applyDoc({ ...doc, meta: { ...doc.meta, description: String(args.desc ?? '') } })
+      return `✓ 已写描述 ${String(args.desc ?? '')}`
+    },
+  }
+
+  const readState: AiTool = {
+    name: 'read_state',
+    description: '',
+    parameters: { type: 'object', properties: {} },
+    exec: (_a, c) => {
+      const doc = c.getDoc()
+      return `title=${String(doc.meta.title)} desc=${String(doc.meta.description ?? '无')}`
+    },
+  }
+
+  function reply(payload: unknown): Response {
+    return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  function callResponse(id: string, name: string, args: Record<string, unknown> = {}): unknown {
+    return {
+      choices: [
+        {
+          message: {
+            content: '',
+            tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }],
+          },
+        },
+      ],
+    }
+  }
+
+  /** 用户先手改、AI 后写（真实场景，非微窗口）：AI 写 #1 成功后创作者手改标题，AI 写 #2 必须被拒绝 */
+  it('AI 写后用户手改标题 → 下一次写入被拒绝（不落盘），结果含冲突提示且用户修改保留', async () => {
+    clearSession('res_agent_f1a')
+    const base = setMeta(blankLevelDoc(), { title: '原始标题' }) as LevelDoc
+    const h = editorHarness(base)
+    let call = 0
+    const fn = vi.fn(async () => {
+      const i = call++
+      if (i === 0) return reply(callResponse('c1', 'write_desc', { desc: 'AI说明' }))
+      if (i === 1) {
+        h.userEdit('用户改的标题') // 两次请求之间：创作者手动编辑
+        return reply(callResponse('c2', 'write_desc', { desc: 'AI第二次' }))
+      }
+      return reply({ choices: [{ message: { content: '完成' } }] })
+    })
+    vi.stubGlobal('fetch', fn)
+
+    await runAgentTurn({ docId: 'res_agent_f1a', profile, systemPrompt: 'S', userText: 'go', tools: [writeDesc], ctx: h.ctx })
+    expect(fn).toHaveBeenCalledTimes(3)
+
+    const msgs = getSession('res_agent_f1a').messages
+    const toolMsgs = msgs.filter((m) => m.role === 'tool')
+    // 第一笔写入成功、第二笔在工具层被拒（错误回喂模型，附重读指引）
+    expect(toolMsgs[0].content).toContain('✓ 已写描述 AI说明')
+    expect(toolMsgs[1].content).toContain('编辑器已被手动修改')
+    expect(toolMsgs[1].content).toContain('请先 read_doc/read_script 重新读取现状后再修改')
+    // 用户修改保留：第二笔未落盘（applied 只有第一笔；标题仍是用户的）
+    expect(h.applied).toHaveLength(1)
+    expect(h.getExternal().meta.title).toBe('用户改的标题')
+    expect(h.getExternal().meta.description).toBe('AI说明')
+    clearSession('res_agent_f1a')
+  })
+
+  it('冲突后读工具读编辑器实时文档；重读后基于新状态重试成功（用户修改不丢）', async () => {
+    clearSession('res_agent_f1b')
+    const base = setMeta(blankLevelDoc(), { title: '原始标题' }) as LevelDoc
+    const h = editorHarness(base)
+    let call = 0
+    const fn = vi.fn(async () => {
+      const i = call++
+      if (i === 0) return reply(callResponse('c1', 'write_desc', { desc: 'AI说明' }))
+      if (i === 1) {
+        h.userEdit('用户改的标题')
+        return reply(callResponse('c2', 'write_desc', { desc: 'AI第二次' }))
+      }
+      if (i === 2) return reply(callResponse('c3', 'read_state'))
+      if (i === 3) return reply(callResponse('c4', 'write_desc', { desc: 'AI重读后' }))
+      return reply({ choices: [{ message: { content: '完成' } }] })
+    })
+    vi.stubGlobal('fetch', fn)
+
+    await runAgentTurn({
+      docId: 'res_agent_f1b',
+      profile,
+      systemPrompt: 'S',
+      userText: 'go',
+      tools: [writeDesc, readState],
+      ctx: h.ctx,
+    })
+    const toolMsgs = getSession('res_agent_f1b').messages.filter((m) => m.role === 'tool')
+    // 冲突态下 read_state 读到的是编辑器实时文档（不是影子 runDoc）
+    expect(toolMsgs[2].content).toBe('title=用户改的标题 desc=AI说明')
+    // 重读后（无新的手动修改）写入放行：基于实时文档合并，用户标题保留
+    expect(toolMsgs[3].content).toContain('✓ 已写描述 AI重读后')
+    expect(h.applied).toHaveLength(2)
+    expect(h.getExternal().meta.title).toBe('用户改的标题')
+    expect(h.getExternal().meta.description).toBe('AI重读后')
+    clearSession('res_agent_f1b')
   })
 })
+
+describe('停止信号的循环内收尾（R5/F5）', () => {
+  it('工具执行期间停止：不再发起下一轮请求，工具结果不落会话，错误为「已停止」', async () => {
+    clearSession('res_agent_stop_tool')
+    const fn = scriptFetch([toolCall('c1', 'slow_tool')])
+    const slowTool: AiTool = {
+      name: 'slow_tool',
+      description: '',
+      parameters: { type: 'object', properties: {} },
+      exec: async () => {
+        stopAgent('res_agent_stop_tool') // 工具执行中显式停止（宿主关闭面板/点停止）
+        return '工具完成'
+      },
+    }
+    await runAgentTurn({ docId: 'res_agent_stop_tool', profile, systemPrompt: 'S', userText: 'go', tools: [slowTool], ctx })
+    expect(fn).toHaveBeenCalledTimes(1) // 停止后不再发起下一轮
+    const s = getSession('res_agent_stop_tool')
+    expect(s.error).toBe('已停止。')
+    expect(s.busy).toBe(false)
+    expect(s.messages.some((m) => m.role === 'tool')).toBe(false)
+    clearSession('res_agent_stop_tool')
+  })
+})
+

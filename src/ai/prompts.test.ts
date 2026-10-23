@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { addComponent, blankLevelDoc, setMeta, setVariable } from '../editor/docState'
 import type { GNode } from '../engine/graphProgram'
 import type { LevelDoc } from '../engine/level'
-import { buildEditorSystemPrompt, buildPlanExecutionPrompt, describeGNode, formatSelectionContext } from './prompts'
+import { buildEditorSystemPrompt, buildPlanExecutionPrompt, clipContractText, describeGNode, formatSelectionContext } from './prompts'
 
 function makeDoc(): LevelDoc {
   let doc = setMeta(blankLevelDoc(), { title: '测试关' })
@@ -40,6 +40,31 @@ describe('buildEditorSystemPrompt', () => {
     expect(text).toContain('scoring(')
     expect(text).toContain('main')
     expect(text).toContain('pass=')
+  })
+
+  it('F3：组件段附 props 契约（name/type/options/default + propsDoc）与生命周期事件目录', () => {
+    let doc = blankLevelDoc()
+    doc = addComponent(doc, 'synth', 'main')
+    const text = buildEditorSystemPrompt(doc)
+    // 结构化 props 字段：name:type[选项]=默认
+    expect(text).toContain('wave:string[')
+    expect(text).toContain(']="sawtooth"')
+    expect(text).toContain('gain:number=0.35')
+    // 自由说明 propsDoc
+    expect(text).toContain('纯振荡器')
+    // 生命周期事件目录（on 入口可用 + payload 提示）
+    expect(text).toContain('生命周期事件目录')
+    expect(text).toContain('level.started')
+    expect(text).toContain('question.loaded')
+    expect(text).toContain('view.entered')
+  })
+
+  it('F3：契约长文本单条截断到 ≤200 字符', () => {
+    const long = 'x'.repeat(500)
+    const clipped = clipContractText(long)
+    expect(clipped.length).toBe(201) // 200 + 省略号
+    expect(clipped.endsWith('…')).toBe(true)
+    expect(clipContractText('短文本')).toBe('短文本')
   })
 })
 

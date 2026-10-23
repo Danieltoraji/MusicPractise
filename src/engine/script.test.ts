@@ -309,7 +309,7 @@ describe('P0 回归：块内 if/loop 的顺序后继（端口协议）', () => {
   })
 })
 
-describe('mergeScriptAnchors（docs/40 E1：脚本应用保留 id/x/y）', () => {
+describe('mergeScriptAnchors（docs/40 E1 + docs/42 返工：安全锚点合并）', () => {
   const baseProg = () => ({
     logicVersion: 2 as const,
     variables: { score: 0 } as Record<string, unknown>,
@@ -324,15 +324,94 @@ describe('mergeScriptAnchors（docs/40 E1：脚本应用保留 id/x/y）', () =>
     ],
   }) as never as Parameters<typeof mergeScriptAnchors>[1]
 
+  /** 合并结果自洽：id 唯一、无悬空边/自环、无 undefined 自有属性（JSON 往返严格相等） */
+  function assertSane(prog: GraphProgram): void {
+    const ids = prog.nodes.map((n) => n.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    const idSet = new Set(ids)
+    for (const e of prog.edges) {
+      expect(idSet.has(e.from)).toBe(true)
+      expect(idSet.has(e.to)).toBe(true)
+      expect(e.from).not.toBe(e.to)
+    }
+    expect(JSON.parse(JSON.stringify(prog))).toStrictEqual(prog)
+  }
+
   it('未改动往返：全部节点保 id/x/y，unmatched=0', () => {
     const prev = baseProg()
     const text = generateScript(prev)
     const next = parseScript(text, { variables: prev.variables })
-    const { prog, unmatched } = mergeScriptAnchors(next, prev)
+    const { prog, kept, unmatched, dropped } = mergeScriptAnchors(next, prev)
+    expect(kept).toBe(3)
     expect(unmatched).toBe(0)
+    expect(dropped).toBe(0)
     expect(prog.nodes.map((n) => n.id)).toEqual(['on1', 'c1', 'a1'])
     expect(prog.nodes.find((n) => n.id === 'c1')?.x).toBe(200)
     expect(prog.nodes.find((n) => n.id === 'a1')?.y).toBe(80)
+    assertSane(prog)
+  })
+
+  it('E1-a：旧节点无坐标时不写 x/y 自有属性（否则 cfworker 校验抛 undefined）', () => {
+    // 迁移旧关/组件库新建的图没有 x/y：脚本原样应用也必须可保存
+    const prev = parseScript('on level.started {\n  v.score = 1\n}', { variables: { score: 0 } })
+    expect(prev.nodes.every((n) => !('x' in n) && !('y' in n))).toBe(true)
+    const next = parseScript(generateScript(prev), { variables: prev.variables })
+    const { prog, kept, unmatched, dropped } = mergeScriptAnchors(next, prev)
+    expect(kept).toBe(prev.nodes.length)
+    expect(unmatched).toBe(0)
+    expect(dropped).toBe(0)
+    for (const n of prog.nodes) {
+      expect(Object.prototype.hasOwnProperty.call(n, 'x')).toBe(false)
+      expect(Object.prototype.hasOwnProperty.call(n, 'y')).toBe(false)
+    }
+    // JSON 往返严格相等 = 没有任何 undefined 自有属性（JSON.stringify 会丢弃它们）
+    assertSane(prog)
+  })
+
+  it('E1-b：s 前缀旧图二次应用（重排+插入+删除）→ id 唯一、无自环/悬空边', () => {
+    const text1 = ['on level.started {', '  v.a = 1', '  v.b = 2', '  v.c = 3', '}'].join('\n')
+    const p1 = parseScript(text1, { variables: { a: 0, b: 0, c: 0 } })
+    const prev = { ...p1, nodes: p1.nodes.map((n, i) => ({ ...n, x: 40 + i * 120, y: 60 })) }
+    // 第二次编辑：重排 + 插入 v.x = 9 + 删除 v.c = 3。parse id 是 s1..s4，与旧图 s 前缀 id 撞车
+    const text2 = ['on level.started {', '  v.b = 2', '  v.x = 9', '  v.a = 1', '}'].join('\n')
+    const p2 = parseScript(text2, { variables: prev.variables })
+    const { prog, unmatched, dropped } = mergeScriptAnchors(p2, prev)
+    expect(unmatched).toBe(1)
+    expect(dropped).toBe(0)
+    // 撞车的改写节点必须改用唯一 id（s3 已被映射给 v.b = 2）
+    expect(prog.nodes.map((n) => n.id)).toContain('s3_2')
+    const xAssign = prog.nodes.find((n) => n.kind === 'assign' && n.target === 'x')!
+    expect(xAssign.id).toBe('s3_2')
+    expect(Object.prototype.hasOwnProperty.call(xAssign, 'x')).toBe(false)
+    // 配对成功的节点仍继承旧坐标
+    const bPrev = prev.nodes.find((n) => n.kind === 'assign' && n.target === 'b')!
+    const bAssign = prog.nodes.find((n) => n.kind === 'assign' && n.target === 'b')!
+    expect(bAssign.x).toBe(bPrev.x)
+    expect(bAssign.y).toBe(bPrev.y)
+    // 边端点同步改写：b→x 的边终点是 s3_2，不再指向被映射的 s3
+    const bToX = prog.edges.find((e) => e.from === bAssign.id && e.to === xAssign.id)
+    expect(bToX).toBeTruthy()
+    assertSane(prog)
+  })
+
+  it('重复语句/多入口：同特征按出现序配对，不共享 id；改写只影响对应语句', () => {
+    const text = ['on level.started {', '  v.score = 1', '  v.score = 1', '}', 'on app:tick {', '  v.score = 2', '}'].join('\n')
+    const p1 = parseScript(text, { variables: { score: 0 } })
+    const prev = { ...p1, nodes: p1.nodes.map((n, i) => ({ ...n, x: 40 + i * 100, y: 20 })) }
+    const p2 = parseScript(generateScript(prev), { variables: prev.variables })
+    const same = mergeScriptAnchors(p2, prev)
+    expect(same.kept).toBe(prev.nodes.length)
+    expect(same.unmatched).toBe(0)
+    expect(same.dropped).toBe(0)
+    expect([...same.prog.nodes.map((n) => n.id)].sort()).toEqual([...prev.nodes.map((n) => n.id)].sort())
+    assertSane(same.prog)
+
+    // 只改第二个入口的表达式：其余节点（含重复语句）仍配对，唯一改写语句拿新 id
+    const p3 = parseScript(generateScript(prev).replace('v.score = 2', 'v.score = 3'), { variables: prev.variables })
+    const changed = mergeScriptAnchors(p3, prev)
+    expect(changed.unmatched).toBe(1)
+    expect(changed.prog.nodes.filter((n) => n.id === 's2')).toHaveLength(1)
+    assertSane(changed.prog)
   })
 
   it('改一行表达式：其余节点保 id/x/y，被改写节点拿新 id；id 替换同步边端点', () => {
@@ -340,7 +419,8 @@ describe('mergeScriptAnchors（docs/40 E1：脚本应用保留 id/x/y）', () =>
     // 改 a1 的表达式 → 其特征串变化 → 新 id；on1/c1 保留
     const text = generateScript(prev).replace('v.score + 1', 'v.score + 5')
     const next = parseScript(text, { variables: prev.variables })
-    const { prog, unmatched } = mergeScriptAnchors(next, prev)
+    const { prog, kept, unmatched } = mergeScriptAnchors(next, prev)
+    expect(kept).toBe(2)
     expect(prog.nodes.find((n) => n.id === 'on1')).toBeTruthy()
     expect(prog.nodes.find((n) => n.id === 'c1')?.x).toBe(200)
     const assign = prog.nodes.find((n) => n.kind === 'assign')!
@@ -349,6 +429,7 @@ describe('mergeScriptAnchors（docs/40 E1：脚本应用保留 id/x/y）', () =>
     expect(unmatched).toBe(1)
     // 边端点已映射回旧 id
     expect(prog.edges.some((e) => e.from === 'c1' && e.to === assign.id)).toBe(true)
+    assertSane(prog)
   })
 
   it('不可达节点计入 dropped；边与坐标不影响特征匹配', () => {
@@ -362,6 +443,25 @@ describe('mergeScriptAnchors（docs/40 E1：脚本应用保留 id/x/y）', () =>
     const { prog, dropped } = mergeScriptAnchors(next, withDangling)
     expect(dropped).toBe(1)
     expect(prog.nodes.some((n) => n.id === 'orphan')).toBe(false)
+    assertSane(prog)
+  })
+
+  it('防御性自检：已损坏的输入（重复 id / 悬空边 / 自环）合并时抛错而非静默入库', () => {
+    const empty = prog([], [])
+    const dupIds = prog(
+      [
+        { id: 'x', kind: 'on', event: 'level.started' },
+        { id: 'x', kind: 'assign', target: 'score', value: { expr: '1' } },
+      ],
+      [],
+    )
+    expect(() => mergeScriptAnchors(dupIds, empty)).toThrow(/结构自检失败.*重复/)
+
+    const dangling = prog([{ id: 'a', kind: 'on', event: 'level.started' }], [{ id: 'e1', from: 'a', to: 'ghost' }])
+    expect(() => mergeScriptAnchors(dangling, empty)).toThrow(/结构自检失败.*端点不存在/)
+
+    const selfLoop = prog([{ id: 'a', kind: 'on', event: 'level.started' }], [{ id: 'e1', from: 'a', to: 'a' }])
+    expect(() => mergeScriptAnchors(selfLoop, empty)).toThrow(/结构自检失败.*自环/)
   })
 
   it('prev 也是脚本产物（s 前缀同 id 场景）往返安全', () => {
@@ -377,8 +477,10 @@ describe('mergeScriptAnchors（docs/40 E1：脚本应用保留 id/x/y）', () =>
     expect(assigns[0].id).toBe(p1x.nodes[1].id)
     expect(assigns[0].x).toBe(p1x.nodes[1].x)
     expect(assigns[0].value).toEqual({ expr: '1' })
-    // 改动的语句 unmatched：不继承坐标（走 dagre 兜底布局）；id 恰与旧节点同名无妨——旧图整体被替换
+    // 改动的语句 unmatched：不继承坐标（走 dagre 兜底布局）
     expect(assigns[1].x).toBeUndefined()
+    expect(Object.prototype.hasOwnProperty.call(assigns[1], 'x')).toBe(false)
     expect(assigns[1].value).toEqual({ expr: '3' })
+    assertSane(prog)
   })
 })

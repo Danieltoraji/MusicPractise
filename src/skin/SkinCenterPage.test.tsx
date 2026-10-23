@@ -54,7 +54,13 @@ describe('SkinCenterPage', () => {
     const card = [...c.querySelectorAll('.skin-card')].find((el) => el.textContent!.includes(target.name)) as HTMLButtonElement
     await act(async () => {
       card.click()
-      await new Promise((r) => setTimeout(r, 30))
+      // 轮询等待而非固定 30ms：换肤经 store → IndexedDB 资产解析 → applyPrefsToDom 异步链路，
+      // 并行负载（多路 vitest/审计）下 30ms 可能不够（docs/42 §5.1-17 flake）。
+      // 最多 1s，每 20ms 检查一次，命中即 break（安静环境下首个 tick 即通过）。
+      for (let i = 0; i < 50; i++) {
+        if (document.documentElement.dataset.skin === target.id) break
+        await new Promise((r) => setTimeout(r, 20))
+      }
     })
     expect(document.documentElement.dataset.skin).toBe(target.id)
     expect(JSON.parse(localStorage.getItem('skin.prefs.v1')!).skinId).toBe(target.id)

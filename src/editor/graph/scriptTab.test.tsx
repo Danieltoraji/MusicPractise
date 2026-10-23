@@ -3,7 +3,23 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LevelDoc } from '../../engine/level'
+import { blankLevelDoc } from '../docState'
+import { loadLevelDoc } from '../../library/validate'
 import { ScriptTab } from './ScriptTab'
+
+// docs/42 E1-b：合并结构自检失败在正常 parseScript 产物上不可达（防御性检查），
+// 用模块桩注入异常验证 ScriptTab「阻止应用 + 显示错误」的分支。
+const mergeFail = vi.hoisted(() => ({ message: null as string | null }))
+vi.mock('../../engine/script', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../engine/script')>()
+  return {
+    ...actual,
+    mergeScriptAnchors: (...args: Parameters<typeof actual.mergeScriptAnchors>) => {
+      if (mergeFail.message) throw new Error(mergeFail.message)
+      return actual.mergeScriptAnchors(...args)
+    },
+  }
+})
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -24,6 +40,7 @@ function renderEl(ui: React.ReactElement): HTMLElement {
 }
 
 afterEach(() => {
+  mergeFail.message = null
   roots.splice(0).forEach((r) => act(() => r.unmount()))
   containers.splice(0).forEach((c) => c.remove())
 })
@@ -231,6 +248,43 @@ describe('ScriptTab（jsdom）', () => {
     expect(applyBtn.disabled).toBe(true)
   })
 
+  it('E1-b 回归：应用前黄条预告丢弃/改写数量，应用提示如实区分保留/改写/丢弃', () => {
+    const doc = baseDoc('res_s8')
+    // 未接线节点：脚本不表达，应用即丢弃
+    doc.content.logic.nodes.push({ id: 'orphan', kind: 'wait', ms: '500' } as never)
+    const onChange = vi.fn()
+    const container = renderEl(<ScriptTab doc={doc} onChange={onChange} />)
+    const ta = textarea(container)
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+      setter.call(ta, ta.value.replace('v.score = 0', 'v.score = 7'))
+      ta.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const stale = container.querySelector('.script-stale')?.textContent ?? ''
+    expect(stale).toContain('将丢弃 1 个未接线节点')
+    expect(stale).toContain('1 条改写/新增语句将获得新 id')
+    const applyBtn = [...container.querySelectorAll('button')].find((b) => b.textContent === '应用到节点图')!
+    act(() => (applyBtn as HTMLElement).click())
+    expect(onChange).toHaveBeenCalled()
+    const tip = container.querySelector('.editor-saved')?.textContent ?? ''
+    expect(tip).toContain('保留 1 节点 id/坐标')
+    expect(tip).toContain('1 条改写语句获得新 id、坐标不保留')
+    expect(tip).toContain('丢弃 1 个未接线节点')
+  })
+
+  it('E1-b 回归：合并结构自检失败 → 阻止应用并显示可读错误（doc 不变）', () => {
+    mergeFail.message = '脚本合并结构自检失败：节点 id「s3」重复——已阻止应用，请重新生成脚本后重试'
+    const onChange = vi.fn()
+    const container = renderEl(<ScriptTab doc={baseDoc('res_s9')} onChange={onChange} />)
+    const applyBtn = [...container.querySelectorAll('button')].find((b) => b.textContent === '应用到节点图') as HTMLButtonElement
+    expect(applyBtn.disabled).toBe(false)
+    act(() => applyBtn.click())
+    expect(onChange).not.toHaveBeenCalled()
+    const err = container.querySelector('.script-error')
+    expect(err?.textContent).toContain('应用未生效')
+    expect(err?.textContent).toContain('结构自检失败')
+  })
+
   it('Tab 键插入两空格', () => {
     const container = renderEl(<ScriptTab doc={baseDoc('res_s1')} onChange={() => {}} />)
     const ta = textarea(container)
@@ -244,5 +298,28 @@ describe('ScriptTab（jsdom）', () => {
     })
     expect(ta.value).toBe('abc  ')
     expect(ta.selectionStart).toBe(5)
+  })
+
+  it('E1-a 端到端：无坐标旧图应用脚本后 loadLevelDoc 通过（脚本应用不再阻断保存）', () => {
+    // 用合法的 v3 空白文档（可在 ScriptTab 里直接应用）模拟「迁移旧关/组件库新建」的无坐标图
+    const doc = blankLevelDoc()
+    for (const n of doc.content.logic.nodes) {
+      delete (n as { x?: number }).x
+      delete (n as { y?: number }).y
+    }
+    let next: LevelDoc | null = null
+    const container = renderEl(<ScriptTab doc={doc} onChange={(d) => { next = d }} />)
+    const applyBtn = [...container.querySelectorAll('button')].find((b) => b.textContent === '应用到节点图') as HTMLButtonElement
+    act(() => applyBtn.click())
+    expect(next).not.toBeNull()
+    const merged = next as unknown as LevelDoc
+    // 不得写出显式 x: undefined / y: undefined（cfworker 校验器会抛异常 → 保存失败）
+    for (const n of merged.content.logic.nodes) {
+      expect(Object.prototype.hasOwnProperty.call(n, 'x')).toBe(false)
+      expect(Object.prototype.hasOwnProperty.call(n, 'y')).toBe(false)
+    }
+    // 保存预检（与 EditorPage.save / AI 写入同一 loadLevelDoc 管线）必须通过
+    const check = loadLevelDoc(JSON.parse(JSON.stringify(merged)))
+    expect(check.ok, check.ok ? '' : check.errors.join('；')).toBe(true)
   })
 })

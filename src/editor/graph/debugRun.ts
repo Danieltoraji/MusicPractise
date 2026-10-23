@@ -178,6 +178,9 @@ export function isDebuggingDoc(docId: string): boolean {
 
 /** 启动调试会话；返回 null = 成功，否则为装载错误文本。owner 标记会话归属（docs/40 E4） */
 export async function startDebugRun(doc: LevelDoc, owner: 'human' | 'ai' = 'human'): Promise<string | null> {
+  // E10（docs/42 返工）：断点集与文档绑定必须在 stopDebugRun 清 docIdRef **之前**取旧文档 id，
+  // 否则恒为 null、换文档清断点的判定是死代码（旧断点残留永不命中还会误发光）。
+  const prevDocId = docIdRef
   if (session) stopDebugRun()
   const check = loadLevelDoc(structuredClone(doc))
   if (!check.ok) {
@@ -185,10 +188,10 @@ export async function startDebugRun(doc: LevelDoc, owner: 'human' | 'ai' = 'huma
     return check.errors.join('；')
   }
   const generation = ++startGeneration
-  // E10（docs/40）：断点集与文档绑定——运行中切换到不同文档时清空（旧图的节点 id
-  // 对新图无意义，残留断点永不命中还会误发光）；无会话时的预设备点与同关重开保留
-  if (docIdRef !== null && docIdRef !== doc.id) {
+  // 运行中（或被上一次启动占用）切换到不同文档时清空断点；无会话时的预设备点与同关重开保留
+  if (prevDocId !== null && prevDocId !== doc.id) {
     controller.breakpoints.clear()
+    commit({ breakpoints: [] })
   }
   docIdRef = doc.id
   sessionNo += 1

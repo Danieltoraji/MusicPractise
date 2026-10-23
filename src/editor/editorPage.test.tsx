@@ -1,18 +1,51 @@
 // @vitest-environment jsdom
 // EditorPage 保存回归：同一编辑会话可连续保存多次（防重入标记 try/finally 释放——
 // 此前 savingRef 置 true 后从未复位，首次保存后「保存/试运行」整会话失效）
+// R13（docs/42 §4.5/§4.6/§5.1）：A1 内置分支竞态、C5 状态收口（假横幅/undo 身份/状态迁移）、
+// revision 接口、R5 归属、D7 Inspector key、JSON 草稿 stale。
 import 'fake-indexeddb/auto'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../library/db'
+import type { LibraryRecord } from '../library/db'
+import type { LevelDoc } from '../engine/level'
 import { blankLevelDoc } from './docState'
 import { EditorPage } from './EditorPage'
 import { getDebugSnapshot, startDebugRun, stopDebugRun } from './graph/debugRun'
+import { getSession, patchSession, appendMessage, clearSession } from '../ai/session'
+import { getCheckpoint, saveCheckpoint, clearCheckpoint } from '../ai/checkpoint'
+import { appendRunLog, clearRunLog, readRunLog } from '../runtime/runLog'
+import { clearDraft, DRAFT_SLOTS, loadDraft, saveDraft } from './draftStore'
+import type { JsonDraft } from './draftStore'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+/** AiPanel 桩捕获的 props（R13 P1 接口：getRevision / onApplyDoc(next, tag) / onClose） */
+interface AiPanelMockProps {
+  doc: LevelDoc
+  getRevision?: () => number
+  onApplyDoc: (doc: LevelDoc, tag?: string) => void
+  onClose: () => void
+}
+
+// R5：stopAgent 用 module mock 断言 EditorPage 的归属（静态导入无法用 spy 替换 ESM 绑定）；
+// AiPanel 换桩：编辑器默认开 AI 面板，桩记录 props 供 revision/onApplyDoc 接口测试。
+const aiHarness = vi.hoisted(() => ({
+  panelProps: { current: null as AiPanelMockProps | null },
+  stopAgent: vi.fn(),
+}))
+vi.mock('../ai/agent', () => ({ stopAgent: aiHarness.stopAgent }))
+vi.mock('./ai/AiPanel', () => ({
+  AiPanel: (props: AiPanelMockProps) => {
+    aiHarness.panelProps.current = props
+    return null
+  },
+}))
+
 const DOC_ID = 'res_01J9E000000000000000000000'
+/** 内置示例专用 id（C5/A1 用例独立建档，避免与其它用例的 session/draft 状态串台） */
+const BUILTIN_ID = 'res_01J9E0000000000000000000B1'
 
 let root: Root | null = null
 let container: HTMLElement | null = null
@@ -32,9 +65,75 @@ function saveButton(): HTMLButtonElement {
   return btn
 }
 
+function titleInput(): HTMLInputElement {
+  return container!.querySelector('.editor-title') as HTMLInputElement
+}
+
+/** 受控标题输入：native setter + input 事件（React value tracker 放行） */
+async function typeTitle(value: string): Promise<void> {
+  await act(async () => {
+    const input = titleInput()
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+    setter.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await flush()
+}
+
+function headButton(text: string): HTMLButtonElement {
+  const btn = [...container!.querySelectorAll('.editor-head button')].find((b) => b.textContent === text)
+  if (!btn) throw new Error(`找不到头部按钮 ${text}`)
+  return btn as HTMLButtonElement
+}
+
+function tabButton(label: string): HTMLButtonElement {
+  const btn = [...container!.querySelectorAll('.editor-tabs button')].find((b) => b.textContent === label)
+  if (!btn) throw new Error(`找不到 Tab ${label}`)
+  return btn as HTMLButtonElement
+}
+
+/** 当前 hash 指向的编辑文档 id */
+function hashEditId(): string {
+  return window.location.hash.replace('#/edit/', '')
+}
+
+/** 建一条独立关卡记录（内置/普通由 builtIn 指定），返回其 doc */
+async function putLevelDoc(id: string, title: string, builtIn: boolean): Promise<LevelDoc> {
+  const base = blankLevelDoc()
+  const doc: LevelDoc = { ...base, id, meta: { ...base.meta, title } }
+  await db.resources.put({
+    id,
+    kind: 'level',
+    version: doc.version,
+    title,
+    doc,
+    importedAt: Date.now(),
+    builtIn: builtIn ? 1 : 0,
+  })
+  return doc
+}
+
+async function mountEditor(id: string): Promise<void> {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  await act(async () => {
+    root = createRoot(container!)
+    root!.render(<EditorPage id={id} />)
+  })
+  await flush()
+}
+
+function currentPanelProps(): AiPanelMockProps {
+  const p = aiHarness.panelProps.current
+  if (!p) throw new Error('AiPanel 尚未挂载——检查 aiOpen/tab 条件渲染')
+  return p
+}
+
 beforeEach(async () => {
   await db.resources.clear()
   await db.progress.clear()
+  await db.aiSessions.clear()
+  window.location.hash = ''
   const doc = { ...blankLevelDoc(), id: DOC_ID, meta: { ...blankLevelDoc().meta, title: '测试关卡' } }
   await db.resources.put({
     id: DOC_ID,
@@ -57,6 +156,12 @@ afterEach(async () => {
   root = null
   container?.remove()
   container = null
+  // 模块级单例跨用例清理（draftStore/session/checkpoint/runLog 按 docId 驻留内存）
+  for (const slot of Object.values(DRAFT_SLOTS)) clearDraft(DOC_ID, slot)
+  clearSession(DOC_ID)
+  clearCheckpoint(DOC_ID)
+  clearRunLog(DOC_ID)
+  await db.aiSessions.clear()
 })
 
 describe('EditorPage 保存（防重入标记释放）', () => {
@@ -513,5 +618,394 @@ describe('EditorPage 调试会话宿主生命周期（docs/40 R5：C3）', () =>
     expect(getDebugSnapshot().mode).toBe('idle')
     stopDebugRun()
     window.location.hash = '#/library'
+  })
+})
+
+// ---------------------------------------------------------------------------
+// R13 返工（docs/42 §4.5/§4.6/§5.1）：W1 编辑器核心
+// ---------------------------------------------------------------------------
+
+describe('EditorPage revision 接口（R13 P1：W2 F1 冲突检测契约）', () => {
+  it('getRevision 随编辑/撤销/AI 应用/保存递增；onApplyDoc(next, tag) 走 update', async () => {
+    await mountEditor(DOC_ID)
+    const first = currentPanelProps()
+    expect(typeof first.getRevision).toBe('function')
+    const r0 = first.getRevision!()
+
+    await typeTitle('手动改名')
+    const r1 = currentPanelProps().getRevision!()
+    expect(r1).toBeGreaterThan(r0)
+
+    // AI 写入通道：双参 onApplyDoc(next, tag)——W2 每次 run 传独立撤销 tag
+    const props = currentPanelProps()
+    const next = { ...props.doc, meta: { ...props.doc.meta, title: 'AI 写入' } }
+    const beforeApply = props.getRevision!()
+    await act(async () => {
+      props.onApplyDoc(next, 'ai:1')
+    })
+    await flush()
+    expect(titleInput().value).toBe('AI 写入')
+    const r2 = currentPanelProps().getRevision!()
+    expect(r2).toBeGreaterThan(beforeApply)
+
+    // undo 也是手动修改：修订号递增（AI 运行期创作者撤销 → agent 写入前检测到冲突）
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    })
+    await flush()
+    expect(titleInput().value).toBe('手动改名')
+    const r3 = currentPanelProps().getRevision!()
+    expect(r3).toBeGreaterThan(r2)
+
+    // 保存成功回写规范化 doc（新版本）→ 修订号递增
+    await act(async () => {
+      saveButton().click()
+    })
+    await flush()
+    const r4 = currentPanelProps().getRevision!()
+    expect(r4).toBeGreaterThan(r3)
+    expect(container!.textContent).toContain('已保存')
+  })
+})
+
+describe('EditorPage R5 AI run 归属（EditorPage 侧兜底）', () => {
+  it('关闭 AI 面板 / 面板 onClose / 卸载编辑器 → stopAgent(当前 doc id)', async () => {
+    await mountEditor(DOC_ID)
+    expect(aiHarness.panelProps.current).not.toBeNull()
+    aiHarness.stopAgent.mockClear()
+
+    // 🤖 总开关关闭（外置面板与节点图 Dock 共用 aiOpen 单一真源）
+    await act(async () => {
+      ;(container!.querySelector('.editor-ai-toggle') as HTMLButtonElement).click()
+    })
+    await flush()
+    expect(aiHarness.stopAgent).toHaveBeenCalledWith(DOC_ID)
+
+    // 重新打开 → 面板 onClose 显式停止（AiPanel 卸载本身不再 abort，由 EditorPage 兜）
+    await act(async () => {
+      ;(container!.querySelector('.editor-ai-toggle') as HTMLButtonElement).click()
+    })
+    await flush()
+    aiHarness.stopAgent.mockClear()
+    await act(async () => {
+      currentPanelProps().onClose()
+    })
+    await flush()
+    expect(aiHarness.stopAgent).toHaveBeenCalledWith(DOC_ID)
+
+    // 离开编辑器（卸载）→ 停止当前文档的 run（docRef 为真源）
+    aiHarness.stopAgent.mockClear()
+    await act(async () => {
+      root?.unmount()
+    })
+    root = null
+    expect(aiHarness.stopAgent).toHaveBeenCalledWith(DOC_ID)
+  })
+})
+
+describe('EditorPage A1 内置示例保存竞态（docs/42 §4.5）', () => {
+  it('慢速 put 期间的编辑按副本身份保留：不回滚标题、脏标保留、提示再次保存；随后保存不新建副本', async () => {
+    await putLevelDoc(BUILTIN_ID, '内置示例', true)
+    const realPut = db.resources.put.bind(db.resources)
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    const putSpy = vi
+      .spyOn(db.resources, 'put')
+      .mockImplementation(((rec: LibraryRecord) => gate.then(() => realPut(rec))) as never)
+    await mountEditor(BUILTIN_ID)
+
+    await typeTitle('保存前标题')
+    await act(async () => {
+      saveButton().click()
+    })
+    // put 挂起：save 已走到 await putResource（saving 态已提交）
+    expect(saveButton().textContent).toContain('保存中')
+
+    // 保存 await 窗口里的编辑
+    await typeTitle('窗口期编辑')
+
+    await act(async () => {
+      release()
+    })
+    await flush()
+
+    const copyId = hashEditId()
+    expect(copyId).toMatch(/^res_/)
+    expect(copyId).not.toBe(BUILTIN_ID)
+    // 窗口期编辑未被无条件 setDoc(saved) 回滚；脏标保留并提示再次保存
+    expect(titleInput().value).toBe('窗口期编辑')
+    expect(saveButton().textContent).toContain(' *')
+    expect(container!.textContent).toContain('保存期间又有新的修改')
+    // 写库对象 = 点击时刻内容（标题带副本后缀），且无假外部修改横幅
+    const firstPut = putSpy.mock.calls[0][0] as { doc: LevelDoc }
+    expect(firstPut.doc.meta.title).toBe('保存前标题（副本）')
+    expect(container!.textContent).not.toContain('文档已在其他窗口被修改')
+
+    // 立即再保存：已是副本记录（builtIn=0）→ 同 id 更新，不再另建第二份副本
+    await act(async () => {
+      saveButton().click()
+    })
+    await flush()
+    const secondPut = putSpy.mock.calls[1][0] as { id: string; doc: LevelDoc }
+    expect(secondPut.id).toBe(copyId)
+    expect(secondPut.doc.meta.title).toBe('窗口期编辑')
+    const all = await db.resources.toArray()
+    // beforeEach 的 DOC_ID 普通档 + 内置原档 + 一份副本 = 3（第二份副本会再多一条）
+    expect(all.filter((r) => r.id !== BUILTIN_ID && r.id !== DOC_ID)).toHaveLength(1)
+    expect((await db.resources.get(copyId))?.title).toBe('窗口期编辑')
+    expect(saveButton().textContent).not.toContain(' *') // 第二次无竞态 → 正常清脏
+  })
+})
+
+describe('EditorPage C5 内置副本状态收口（docs/42 §4.6）', () => {
+  it('假横幅不出现；Ctrl+Z 身份不回退（标题仍含（副本）、doc.id 与 hash 一致）；再保存不新建副本', async () => {
+    await putLevelDoc(BUILTIN_ID, '内置示例', true)
+    const putSpy = vi.spyOn(db.resources, 'put')
+    await mountEditor(BUILTIN_ID)
+    await typeTitle('改过标题') // 制造历史（撤销栈非空）
+    expect(headButton('↶').disabled).toBe(false)
+
+    await act(async () => {
+      saveButton().click()
+    })
+    await flush()
+    const copyId = hashEditId()
+    expect(copyId).not.toBe(BUILTIN_ID)
+    expect(titleInput().value).toBe('改过标题（副本）')
+    // C5 假横幅：record/版本基线已前移到副本，不再误报「文档已在其他窗口被修改」
+    expect(container!.textContent).not.toContain('文档已在其他窗口被修改')
+
+    // 保存后 Ctrl+Z：历史栈身份已重映射——doc.id 不回退到内置 id，标题仍带副本后缀
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    })
+    await flush()
+    expect(hashEditId()).toBe(copyId)
+    expect(currentPanelProps().doc.id).toBe(copyId) // doc.id 与 hash 一致
+    expect(titleInput().value).toContain('（副本）')
+    expect(titleInput().value).not.toBe('内置示例') // 不是内置原档标题
+
+    // 再保存：同 id 更新，不因 existing.builtIn=1 另建副本
+    await act(async () => {
+      saveButton().click()
+    })
+    await flush()
+    expect(hashEditId()).toBe(copyId)
+    const savedIds = putSpy.mock.calls.map((c) => (c[0] as { id: string }).id)
+    expect(savedIds).toEqual([copyId, copyId])
+    // beforeEach 的 DOC_ID + 内置原档 + 一份副本 = 3（若另建第二份副本会变成 4）
+    expect(await db.resources.toArray()).toHaveLength(3)
+  })
+
+  it('保存内置副本时迁移 session/checkpoint/draft/runLog/aiSessions 到副本 id（同挂载内状态保持）', async () => {
+    const builtin = await putLevelDoc(BUILTIN_ID, '内置示例', true)
+    await mountEditor(BUILTIN_ID)
+    // 旧 id 上的运行时状态
+    appendMessage(BUILTIN_ID, { role: 'user', content: '旧对话' })
+    patchSession(BUILTIN_ID, { mode: 'agent', busy: true, checkpointAt: 123 })
+    saveCheckpoint(BUILTIN_ID, builtin)
+    const drafted: JsonDraft = { text: '{"kind":"level"}', baselineSig: 'sig-old' }
+    saveDraft(BUILTIN_ID, DRAFT_SLOTS.jsonText, drafted)
+    saveDraft(BUILTIN_ID, DRAFT_SLOTS.aiInput, '待发提问')
+    // canvasView 槽由挂载中的画布组件在换 id 后以实时视图状态重写（活状态优先），
+    // 迁移正确性以未挂载消费方的三槽 + draftStore 单测（四槽）为准
+    saveDraft(BUILTIN_ID, DRAFT_SLOTS.tableLayout, { colW: { data: 120 } })
+    appendRunLog(BUILTIN_ID, { kind: 'command', path: 'x.play', t: 1 })
+    await db.aiSessions.put({
+      docId: BUILTIN_ID,
+      messages: [{ role: 'user', content: '持久化对话' }],
+      plan: null,
+      mode: 'agent',
+      updatedAt: 1,
+    })
+
+    await act(async () => {
+      saveButton().click()
+    })
+    await flush()
+    const copyId = hashEditId()
+    expect(copyId).not.toBe(BUILTIN_ID)
+
+    // AI 会话（消息/plan/mode/checkpointAt）跟到副本 id；显式停止旧 run 后不残留 busy
+    const moved = getSession(copyId)
+    expect(moved.messages.map((m) => m.content)).toContain('旧对话')
+    expect(moved.mode).toBe('agent')
+    expect(moved.checkpointAt).toBe(123)
+    expect(moved.busy).toBe(false)
+    expect(getSession(BUILTIN_ID).messages).toHaveLength(0)
+    // checkpoint Map
+    expect(getCheckpoint(copyId)).toBeTruthy()
+    expect(getCheckpoint(BUILTIN_ID)).toBeNull()
+    // draftStore 三槽（canvasView 由挂载中的画布以实时状态重写，见上）
+    expect(loadDraft<JsonDraft>(copyId, DRAFT_SLOTS.jsonText)).toEqual(drafted)
+    expect(loadDraft(copyId, DRAFT_SLOTS.aiInput)).toBe('待发提问')
+    expect(loadDraft(copyId, DRAFT_SLOTS.tableLayout)).toEqual({ colW: { data: 120 } })
+    expect(loadDraft(BUILTIN_ID, DRAFT_SLOTS.jsonText)).toBeUndefined()
+    // runLog
+    expect(readRunLog(copyId)).toHaveLength(1)
+    expect(readRunLog(BUILTIN_ID)).toHaveLength(0)
+    // IndexedDB aiSessions 记录也换 id
+    const rec = await db.aiSessions.get(copyId)
+    expect(rec?.docId).toBe(copyId)
+    expect(await db.aiSessions.get(BUILTIN_ID)).toBeUndefined()
+    // 面板 doc 身份已是副本
+    expect(currentPanelProps().doc.id).toBe(copyId)
+  })
+
+  it('A8 外部修改横幅仍生效（record 与 activeId 一致才显示）；加载走 confirm + update（可 Ctrl+Z）', async () => {
+    await mountEditor(DOC_ID)
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+    const rec = (await db.resources.get(DOC_ID)) as LibraryRecord
+    const recDoc = rec.doc as LevelDoc
+    await db.resources.put({
+      ...rec,
+      version: '0.9.9',
+      title: '外部版本',
+      doc: { ...recDoc, meta: { ...recDoc.meta, title: '外部版本' } },
+    })
+    await flush()
+    expect(container!.textContent).toContain('文档已在其他窗口被修改')
+
+    const loadBtn = () =>
+      [...container!.querySelectorAll('.editor-lint button')].find((b) =>
+        b.textContent?.includes('加载外部版本'),
+      ) as HTMLButtonElement
+    // 取消 confirm → 不加载、仍保留横幅（旧实现一次点击即覆盖，无确认）
+    await act(async () => {
+      loadBtn().click()
+    })
+    await flush()
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(titleInput().value).toBe('测试关卡')
+    expect(container!.textContent).toContain('文档已在其他窗口被修改')
+
+    // 确认 → 加载外部版本（走 update 入撤销栈）；与库内版本对齐后不算未保存修改
+    confirmSpy.mockReturnValueOnce(true)
+    await act(async () => {
+      loadBtn().click()
+    })
+    await flush()
+    expect(titleInput().value).toBe('外部版本')
+    expect(container!.textContent).not.toContain('文档已在其他窗口被修改')
+    expect(saveButton().textContent).not.toContain(' *')
+    // Ctrl+Z 撤回加载（旧实现直接 setDoc 不可撤销）
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    })
+    await flush()
+    expect(titleInput().value).toBe('测试关卡')
+    expect(saveButton().textContent).toContain(' *')
+  })
+})
+
+describe('EditorPage D7 切换组件重置 props 草稿（docs/42 §5.1-14）', () => {
+  beforeAll(() => {
+    Element.prototype.setPointerCapture = (): void => {}
+    Element.prototype.releasePointerCapture = (): void => {}
+  })
+
+  it('组件 A 的非法 props 报错不残留到组件 B；B 的 props 文本正确', async () => {
+    await mountEditor(DOC_ID)
+    const paletteBtn = (i: number): HTMLButtonElement =>
+      [...container!.querySelectorAll('.palette button')].filter((b) =>
+        b.textContent!.startsWith('+ '),
+      )[i] as HTMLButtonElement
+    await act(async () => paletteBtn(0).click())
+    await flush()
+    await act(async () => paletteBtn(1).click())
+    await flush()
+    const boxes = () => [...container!.querySelectorAll('.editor-box')]
+    expect(boxes()).toHaveLength(2)
+    const selectBox = async (i: number): Promise<void> => {
+      await act(async () => {
+        boxes()[i].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 3 }))
+      })
+      await flush()
+    }
+    const summary = (): HTMLElement =>
+      [...container!.querySelectorAll('.inspector details summary')].find((el) =>
+        el.textContent?.includes('props JSON'),
+      ) as HTMLElement
+    const textarea = (): HTMLTextAreaElement => container!.querySelector('.inspector details textarea') as HTMLTextAreaElement
+
+    await selectBox(0)
+    await act(async () => summary().click())
+    await flush()
+    await act(async () => {
+      const ta = textarea()
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+      setter.call(ta, 'null')
+      ta.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(container!.querySelector('.inspector')!.textContent).toContain('必须是 JSON 对象')
+
+    // 切换组件 B：Inspector 按组件 id 重挂——A 的报错草稿不残留
+    await selectBox(1)
+    expect(container!.querySelector('.inspector')!.textContent).not.toContain('必须是 JSON 对象')
+    await act(async () => summary().click())
+    await flush()
+    expect(textarea().value).toBe('{}') // B 自己的 props，而不是 A 的报错草稿文本
+  })
+})
+
+describe('EditorPage JSON 草稿 stale（docs/42 §5.1-13）', () => {
+  it('文档被其它操作修改后：黄条提示 + 禁用应用；从当前文档重新生成后恢复', async () => {
+    await mountEditor(DOC_ID)
+    await act(async () => tabButton('JSON').click())
+    await flush()
+    const textarea = (): HTMLTextAreaElement => container!.querySelector('.json-tab textarea') as HTMLTextAreaElement
+    // 编辑 JSON 草稿（不应用）：改标题
+    const draftDoc = JSON.parse(textarea().value) as { meta: { title: string } }
+    draftDoc.meta.title = '草稿标题'
+    await act(async () => {
+      const ta = textarea()
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+      setter.call(ta, JSON.stringify(draftDoc, null, 2))
+      ta.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await flush()
+    // 切回画布，从标题输入框修改同一文档（模拟 AI/undo/其它 Tab 修改）
+    await act(async () => tabButton('画布').click())
+    await flush()
+    await typeTitle('外部操作修改')
+    // 回 JSON Tab：草稿仍在（C1）但基线签名失配 → 黄条 + 禁用应用
+    await act(async () => tabButton('JSON').click())
+    await flush()
+    expect(textarea().value).toContain('草稿标题')
+    expect(container!.textContent).toContain('文档已被其它操作修改')
+    const applyBtn = () =>
+      [...container!.querySelectorAll('.json-tab button')].find((b) =>
+        b.textContent?.includes('应用 JSON'),
+      ) as HTMLButtonElement
+    expect(applyBtn().disabled).toBe(true)
+
+    // 从当前文档重新生成 → 对齐当前文档、黄条消失、应用恢复可用
+    const regenBtn = [...container!.querySelectorAll('.json-tab button')].find(
+      (b) => b.textContent === '从当前文档重新生成',
+    ) as HTMLButtonElement
+    expect(regenBtn).toBeTruthy()
+    await act(async () => regenBtn.click())
+    await flush()
+    expect(container!.textContent).not.toContain('文档已被其它操作修改')
+    expect(textarea().value).toContain('外部操作修改')
+    expect(applyBtn().disabled).toBe(false)
+  })
+
+  it('保存 bump version 不应触发 JSON 草稿陈旧误报（基线签名只取内容，排除 id/version）', async () => {
+    await mountEditor(DOC_ID)
+    await act(async () => tabButton('JSON').click())
+    await flush()
+    const applyBtn = () =>
+      [...container!.querySelectorAll('.json-tab button')].find((b) =>
+        b.textContent?.includes('应用 JSON'),
+      ) as HTMLButtonElement
+    expect(applyBtn().disabled).toBe(false)
+    // 保存只改 version（A3 bump），内容未变——草稿基线不得被判陈旧
+    await act(async () => saveButton().click())
+    await flush()
+    expect(container!.textContent).not.toContain('文档已被其它操作修改')
+    expect(applyBtn().disabled).toBe(false)
   })
 })

@@ -14,7 +14,13 @@ import { allContracts, ComponentStore, getDef } from '../runtime/store'
 import { ComponentView } from '../components/views'
 import { makeDirtyHashHandler } from './graph/dirtyGuard'
 import { stopDebugRun } from './graph/debugRun'
+import { clearAiHighlight } from './graph/aiHighlight'
 import { undoTargetBlocked, deleteTargetBlocked } from './keyGuard'
+import { HISTORY_CAP, remapHistoryForCopy, type EditorHistory } from './history'
+import { stopAgent } from '../ai/agent'
+import { getSession, patchSession, renameSession } from '../ai/session'
+import { renameCheckpoint } from '../ai/checkpoint'
+import { renameRunLog } from '../runtime/runLog'
 import { TableEditor } from './TableGrid'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentInstance, LevelDoc } from '../engine/level'
@@ -33,7 +39,8 @@ import {
 } from './docState'
 import { findDuplicateIdErrors } from '../library/validate'
 import { SCHEMA_LIMITS } from '../library/schemaLimits'
-import { DRAFT_SLOTS, clearDraft, loadDraft, saveDraft } from './draftStore'
+import { DRAFT_SLOTS, isDraftStale, loadDraft, renameDrafts, saveDraft } from './draftStore'
+import type { JsonDraft } from './draftStore'
 
 type Tab = 'canvas' | 'graph' | 'script' | 'table' | 'json'
 
@@ -62,12 +69,20 @@ interface Props {
 }
 
 export function EditorPage({ id }: Props) {
+  // activeId 语义（docs/42 §4.6 C5）：当前实际编辑的文档 id，初值 = 路由 prop id。
+  // 内置示例另存副本 / #/edit/new 首存成功后切到真实 id——db 查询与 A8 版本基线必须
+  // 指向副本记录，否则「假外部修改横幅」会拿旧内置记录（v0.1.0）误报并一键覆盖。
+  const [activeId, setActiveId] = useState(id)
+  // 路由 id 变化时同步（App 以 hash 为 key 重挂，这里是兜底；换档后同挂载内不覆盖）
+  useEffect(() => {
+    setActiveId(id)
+  }, [id])
   const record = useLiveQuery(async () => {
-    if (id === 'new') return 'new'
+    if (activeId === 'new') return 'new'
     // App 层已有 seeded 门控（App.tsx 渲染前等待 ensureSeeded 完成），
     // 此处不再需要 150ms 重试补丁（docs/40 A9）
-    return (await db.resources.get(id)) ?? null
-  }, [id], 'loading')
+    return (await db.resources.get(activeId)) ?? null
+  }, [activeId], 'loading')
   const [doc, setDoc] = useState<LevelDoc | null>(null)
   const [tab, setTab] = useState<Tab>('canvas')
   const [selected, setSelected] = useState<string | null>(null)
@@ -79,6 +94,17 @@ export function EditorPage({ id }: Props) {
   // 一次性提示（C5 后内置副本原地换 id，同挂载内 setSavedTip 直接展示，无需跨重挂通道）
   const [savedTip, setSavedTip] = useState('')
   const [dirty, setDirty] = useState(false)
+
+  // 文档修订号（R13 返工，docs/42 §4.3 F1）：编辑器写路径的同步计数器。
+  // 每次文档变更（手动 update / undo / redo / 保存回写 / 外部装载）自增——作为
+  // AiPanel→agent 的 getRevision() 接口：agent 记录 run 起点的修订号，每次 AI 写入前
+  // 比对，运行期间创作者手改过则拒绝整文档回写（不依赖 React 提交时序，ref 同步递增）。
+  const revisionRef = useRef(0)
+  const bumpRevision = useCallback((): void => {
+    revisionRef.current += 1
+  }, [])
+  /** 稳定的修订号读取函数（props 传给 AiPanel/GraphEditor；引用稳定避免面板重渲染） */
+  const getEditorRevision = useCallback((): number => revisionRef.current, [])
 
   // dirty-guard：刷新/关闭前浏览器原生确认；站内 hash 跳转在捕获阶段确认，取消则回滚 hash。
   // 回滚会再触发一次 hashchange——回声抑制：location.hash 已等于 prevHash 时直接放行。
@@ -116,6 +142,8 @@ export function EditorPage({ id }: Props) {
   // loadedIdRef 语义：同一关卡不重复装载（保护未保存编辑）；换 id（#/edit/A → #/edit/B）强制重装。
   // 迁移失败 → loadError 独立错误分支（docs/40 A4：此前写进 saveErrors 但 !doc 早退分支
   // 永远渲染不到错误条，用户只见无限「编辑器加载中…」）；loadTick 支持失败后重试重跑。
+  // R13：以 activeId（而非 prop id）判定装载归属——内置副本保存/首存后 activeId 前移，
+  // 但 loadedIdRef 已同步为副本 id，effect 不会用库内规范化的旧内容覆盖窗口期编辑。
   const loadedIdRef = useRef<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadTick, setLoadTick] = useState(0)
@@ -123,12 +151,20 @@ export function EditorPage({ id }: Props) {
   const baselineVersionRef = useRef<string | null>(null)
   useEffect(() => {
     if (record === 'loading' || record === undefined || record === null) return
-    if (loadedIdRef.current === id) return
-    loadedIdRef.current = id
+    // activeId 切换后 useLiveQuery 依赖变更期间可能仍返回上一 id 的旧结果/Object：
+    // 只处理与 activeId 匹配的记录，避免把旧文档装载成新路由的文档
+    if (record === 'new') {
+      if (activeId !== 'new') return
+    } else if ((record as LibraryRecord).id !== activeId) {
+      return
+    }
+    if (loadedIdRef.current === activeId) return
+    loadedIdRef.current = activeId
     if (record === 'new') {
       setDoc(blankLevelDoc())
       setLoadError(null)
       baselineVersionRef.current = null
+      bumpRevision()
       return
     }
     try {
@@ -139,12 +175,13 @@ export function EditorPage({ id }: Props) {
       // 装载宽松告警（D5）：重复 id 不拦截（「先放行后清洗」铁律），提示待保存时修正——
       // 保存路径走 loadLevelDoc 严格拦截
       setLintWarnings(findDuplicateIdErrors(migrated))
+      bumpRevision()
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
       setDoc(null)
       loadedIdRef.current = null
     }
-  }, [record, id, loadTick])
+  }, [record, activeId, loadTick, bumpRevision])
 
   // ---------------------------------------------------------------------------
   // 撤销/重做栈（批次6c）：所有 update（手动+AI 写入）入栈，cap 50；
@@ -152,9 +189,8 @@ export function EditorPage({ id }: Props) {
   // ---------------------------------------------------------------------------
   const docRef = useRef<LevelDoc | null>(null)
   docRef.current = doc
-  const histRef = useRef<{ past: LevelDoc[]; future: LevelDoc[] }>({ past: [], future: [] })
+  const histRef = useRef<EditorHistory>({ past: [], future: [] })
   const [, histBump] = useState(0)
-  const HIST_CAP = 50
   // 保存落库的 doc 引用（「干净基线」）：undo/redo/update 回到该引用即视为未修改（撤销回保存点不再要求再保存）
   const cleanDocRef = useRef<LevelDoc | null>(null)
   // 连续性 tag（docs/40 B1）：与栈顶入栈时携带的 tag 相同的连续 update 合并不压栈；
@@ -177,7 +213,7 @@ export function EditorPage({ id }: Props) {
         if (next === cur) return // no-op 短路
         const h = histRef.current
         if (!(tag !== undefined && pendingTagRef.current === tag)) {
-          h.past = [...h.past.slice(-(HIST_CAP - 1)), cur]
+          h.past = [...h.past.slice(-(HISTORY_CAP - 1)), cur]
         }
         pendingTagRef.current = tag ?? null
         h.future = []
@@ -185,9 +221,10 @@ export function EditorPage({ id }: Props) {
       setSavedTip('')
       setDirty(next !== cleanDocRef.current)
       setDoc(next)
+      bumpRevision() // F1 冲突检测：文档已变更（AI 写入前比对修订号）
       histBump((v) => v + 1)
     },
-    [histBump],
+    [histBump, bumpRevision],
   )
 
   const undo = useCallback((): void => {
@@ -196,13 +233,14 @@ export function EditorPage({ id }: Props) {
     if (h.past.length === 0 || !cur) return
     const prev = h.past[h.past.length - 1]
     h.past = h.past.slice(0, -1)
-    h.future = [cur, ...h.future.slice(0, HIST_CAP - 1)]
+    h.future = [cur, ...h.future.slice(0, HISTORY_CAP - 1)]
     pendingTagRef.current = null
     setSavedTip('')
     setDirty(prev !== cleanDocRef.current)
     setDoc(prev)
+    bumpRevision()
     histBump((v) => v + 1)
-  }, [histBump])
+  }, [histBump, bumpRevision])
 
   const redo = useCallback((): void => {
     const h = histRef.current
@@ -210,13 +248,14 @@ export function EditorPage({ id }: Props) {
     if (h.future.length === 0 || !cur) return
     const next = h.future[0]
     h.future = h.future.slice(1)
-    h.past = [...h.past.slice(-(HIST_CAP - 1)), cur]
+    h.past = [...h.past.slice(-(HISTORY_CAP - 1)), cur]
     pendingTagRef.current = null
     setSavedTip('')
     setDirty(next !== cleanDocRef.current)
     setDoc(next)
+    bumpRevision()
     histBump((v) => v + 1)
-  }, [histBump])
+  }, [histBump, bumpRevision])
 
   // 快捷键（批次6c）：window 级监听——Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z（或 Ctrl+Y）重做。
   // 输入框/文本域/下拉内不拦截（浏览器原生文本撤销优先）；弹窗打开期间短路（docs/40 B5：
@@ -247,17 +286,28 @@ export function EditorPage({ id }: Props) {
   }, [tab])
   useEffect(() => () => stopDebugRun(), [])
 
+  // R5（docs/42 §4.4）：AI agent run 的宿主上移到编辑器——AiPanel 只负责展示，不再
+  // 「卸载即 abort」（切 Tab / 调试布局 / 入坞换列都会卸载面板，不能算用户停止）。
+  // 显式停止时机由 EditorPage 兜住：① 用户关闭 AI 面板（onClose 按钮 / 🤖 开关 →
+  // aiOpen=false，含节点图 Dock 内面板收起）；② 离开编辑器（卸载）。
+  useEffect(() => {
+    if (!aiOpen) stopAgent(docRef.current?.id ?? id)
+  }, [aiOpen, id])
+  useEffect(() => () => stopAgent(docRef.current?.id ?? id), [id])
+
   const savingRef = useRef(false)
   const [saving, setSaving] = useState(false)
   /**
-   * 保存（docs/40 A1/A2/A3/A6/A7 收口）：
+   * 保存（docs/40 A1/A2/A3/A6/A7 + docs/42 §4.5/§4.6 返工）：
    * - 以「await 窗口内的最新编辑」为保存对象（docRef.current），而非点击瞬间的闭包快照；
    * - put 完成后仅当期间没有新编辑才清脏并回写规范化结果（bump 后版本 + 迁移器规范化）；
-   *   期间又有编辑则保留脏标并提示再次保存（绝不静默丢弃）；
+   *   期间又有编辑则保留脏标并提示再次保存（绝不静默丢弃）——内置示例分支同规则，
+   *   窗口期编辑按副本身份保留（旧实现无条件 setDoc(saved) 会回滚标题并清脏）；
    * - 版本自动升修订号（A3 裁决）：与导入/云盘「同 id 同版本跳过」规则自洽；
    * - 失败 catch → 可读错误条，脏标保留、按钮复位可重试（A2）；
    * - #/edit/new 首存成功后 replaceState 原地切真实 id（A7，不触发重挂）；
-   * - 内置示例不可覆盖：另存副本并切换（C6：notice 按副本 id 键控）。
+   * - 内置示例不可覆盖：另存副本并原地切换（C6）——换 id 时同步迁移按 docId 键控的
+   *   运行时状态（AI 会话/检查点/草稿/运行日志）并重映射撤销栈身份（C5，docs/42 §4.6）。
    */
   const save = useCallback(async (): Promise<{ ok: boolean; savedId: string | null }> => {
     if (!doc || savingRef.current) return { ok: false, savedId: null } // 防重入：异步保存期间快速双击不产生双副本（评审 P2-4）
@@ -278,35 +328,81 @@ export function EditorPage({ id }: Props) {
       const saved = bumpVersion(result.doc)
       await putResource(saved as never)
       baselineVersionRef.current = String(saved.version)
+      // A1（docs/42 §4.5）：put await 期间若又有编辑，docRef 已换引用——写库的 latest 只代表
+      // 点击时刻内容；窗口期编辑必须保留（脏标 + 提示再存），不得无条件 setDoc(saved) 回滚
+      const raced = docRef.current !== latest
       if (isBuiltIn) {
-        // C5（docs/40）：原地换 id 而非 hash 重挂——重挂会清空撤销栈/面板/草稿。
-        // replaceState 不触发 hashchange，props.id 仍指内置记录（其 record 不会被本保存触碰，
-        // useLiveQuery 无扰动）；刷新后 App 按新 hash 正常装载副本。
-        setDoc(saved)
-        cleanDocRef.current = saved
+        // C5（docs/42 §4.6）：内置示例另存副本 = 文档身份迁移。先停旧 id 上的运行时
+        // （agent run 的 ctx.docId / 调试会话 / AI 高亮都指向旧图），再迁移按 docId
+        // 键控的状态，最后重映射撤销栈——undo 不再把 doc.id 退回内置 id。
+        const oldDocId = doc.id
+        stopAgent(oldDocId)
+        stopDebugRun()
+        clearAiHighlight()
+        const movedSession = await renameSession(oldDocId, saved.id)
+        renameCheckpoint(oldDocId, saved.id)
+        renameDrafts(oldDocId, saved.id)
+        renameRunLog(oldDocId, saved.id)
+        // 被中止的 run 若未走到 finally，迁移后的会话仍是 busy → 面板永久禁用发送；主动复位
+        if (movedSession && getSession(saved.id).busy) patchSession(saved.id, { busy: false })
+        histRef.current = remapHistoryForCopy(histRef.current, saved)
+        histBump((v) => v + 1) // 撤销/重做按钮可用态随栈重映射刷新
         pendingTagRef.current = null
-        loadedIdRef.current = id // 防装载 effect 因 record 引用变化重复装载
+        // 迁移 await 期间可能又产生编辑：以此刻最新 doc 为准（身份换到副本，内容保留）。
+        // 标题若在窗口期未被用户改动，则沿用 saved 的「（副本）」标题；用户改过则尊重用户输入。
+        const stillRaced = docRef.current !== latest
+        const racedDoc = docRef.current ?? latest
+        const baseTitle = String((latest.meta as { title?: unknown }).title ?? '')
+        const racedTitle = String((racedDoc.meta as { title?: unknown }).title ?? '')
+        const rebased: LevelDoc = {
+          ...racedDoc,
+          id: saved.id,
+          version: saved.version,
+          meta: { ...racedDoc.meta, title: racedTitle === baseTitle ? String(saved.meta.title ?? racedTitle) : racedTitle },
+        }
+        setDoc(stillRaced ? rebased : saved)
+        cleanDocRef.current = saved // 干净基线 = 库内保存内容（窗口期编辑不算已保存）
+        loadedIdRef.current = saved.id // 先同步装载归属，再切 activeId（record 重查询不触发重装）
         baselineVersionRef.current = String(saved.version)
-        setDirty(false)
-        dirtyRef.current = false
-        setSavedTip('内置示例不可覆盖——已另存为你的副本，后续编辑直接保存')
+        setActiveId(saved.id)
+        setDirty(stillRaced)
+        dirtyRef.current = stillRaced // 显式同步：不依赖 React 调度先于 hashchange 任务（评审 P2-1）
+        setSavedTip(
+          stillRaced
+            ? '已另存为你的副本；保存期间又有新的修改，已保留，请再次保存'
+            : '内置示例不可覆盖——已另存为你的副本，后续编辑直接保存',
+        )
         window.history.replaceState(null, '', `#/edit/${saved.id}`)
         prevHashRef.current = window.location.hash
+        bumpRevision()
         return { ok: true, savedId: saved.id }
       }
-      if (docRef.current === latest) {
+      // 普通 / #/edit/new 分支
+      if (!raced) {
         setDoc(saved) // A6：内存与库内一致（规范化 + 新版本），消除列类型等漂移
         cleanDocRef.current = saved // R3：干净基线前移——undo 回到这里自动清脏
-        pendingTagRef.current = null // 保存是操作分界：保存后的连续输入不与保存前的编辑合并（B1）
+        pendingTagRef.current = null // 保存是操作分界（B1）
         setDirty(false)
-        dirtyRef.current = false // 显式同步：不依赖「React 调度先于 hashchange 任务」的时序假设（评审 P2-1）
-        if (id === 'new') {
-          window.history.replaceState(null, '', `#/edit/${saved.id}`) // A7：不触发 hashchange/重挂
-          prevHashRef.current = window.location.hash // dirty-guard 回滚基线同步前移
-        }
+        dirtyRef.current = false
         setSavedTip(`已保存（v${saved.version}）`)
       } else {
-        setSavedTip(`已保存（v${saved.version}）——保存期间又有新的修改，请再次保存`)
+        // A1：保留窗口期编辑（docRef 最新引用），仅把版本号前移到库内新版本
+        setDoc({ ...(docRef.current ?? latest), version: saved.version })
+        cleanDocRef.current = saved
+        pendingTagRef.current = null
+        setDirty(true)
+        dirtyRef.current = true
+        setSavedTip(`已保存（v${saved.version}）——保存期间又有新的修改，已保留，请再次保存`)
+      }
+      bumpRevision()
+      // 首存（#/edit/new）后 record/版本基线必须指向真实记录；已有记录保存时 activeId 已一致
+      if (loadedIdRef.current !== saved.id) {
+        loadedIdRef.current = saved.id
+        setActiveId(saved.id)
+      }
+      if (activeId === 'new') {
+        window.history.replaceState(null, '', `#/edit/${saved.id}`) // A7：不触发 hashchange/重挂
+        prevHashRef.current = window.location.hash // dirty-guard 回滚基线同步前移
       }
       return { ok: true, savedId: saved.id }
     } catch (err) {
@@ -316,7 +412,7 @@ export function EditorPage({ id }: Props) {
       savingRef.current = false // 保存结束后必须释放，否则本次挂载内保存/试运行永久失效
       setSaving(false)
     }
-  }, [doc, id])
+  }, [doc, activeId, bumpRevision])
 
   async function tryRun(): Promise<void> {
     const r = await save()
@@ -352,7 +448,7 @@ export function EditorPage({ id }: Props) {
   if (record === 'loading' || record === undefined || !doc) {
     return (
       <p className="muted page">
-        {record === null && id !== 'new' ? (
+        {record === null && activeId !== 'new' ? (
           <>
             库中没有这个关卡 · <a href="#/library">返回资源库</a>
           </>
@@ -363,10 +459,18 @@ export function EditorPage({ id }: Props) {
     )
   }
 
-  // A8：库内记录版本与基线不同 = 其他窗口/导入覆盖过此文档（loadedIdRef 拦截重装后用户不可见）
+  // A8：库内记录版本与基线不同 = 其他窗口/导入覆盖过此文档（loadedIdRef 拦截重装后用户不可见）。
+  // R13（docs/42 §4.6）：必须同时满足「当前 doc / record 都是 activeId 指向的文档」——内置示例
+  // 另存副本后 activeId 已前移但 useLiveQuery 可能仍返回上一 id 的旧记录（v0.1.0），旧判定会
+  // 误报「文档已在其他窗口被修改」并给出破坏性覆盖按钮。
+  const liveRecord = record && typeof record === 'object' ? (record as LibraryRecord) : null
   const externalChanged =
-    !!(record && typeof record === 'object' && doc && loadedIdRef.current === id && baselineVersionRef.current !== null) &&
-    (record as LibraryRecord).version !== baselineVersionRef.current
+    !!liveRecord &&
+    doc.id === activeId &&
+    liveRecord.id === activeId &&
+    loadedIdRef.current === activeId &&
+    baselineVersionRef.current !== null &&
+    liveRecord.version !== baselineVersionRef.current
 
   return (
     <div className="page editor">
@@ -408,16 +512,25 @@ export function EditorPage({ id }: Props) {
           </button>
         </span>
       </div>
-      {externalChanged && (
+      {externalChanged && liveRecord && (
         <div className="editor-lint">
-          ⚠ 文档已在其他窗口被修改（库内版本 v{String((record as LibraryRecord).version)}）。继续编辑并保存将覆盖外部版本。
+          ⚠ 文档已在其他窗口被修改（库内版本 v{liveRecord.version}）。继续编辑并保存将覆盖外部版本。
           <button
             type="button"
             onClick={() => {
-              const rec = record as LibraryRecord
+              const rec = liveRecord
+              // R13（docs/42 §4.6）：破坏性操作必须二次确认，且走 update 入撤销栈（可 Ctrl+Z 撤回）
+              if (
+                !window.confirm(
+                  '加载库内最新版本？当前未保存的编辑将被覆盖（可通过 Ctrl+Z 撤销）。',
+                )
+              ) {
+                return
+              }
               try {
                 const migrated = migrateDocToV3(rec.doc)
-                setDoc(migrated)
+                update(migrated)
+                cleanDocRef.current = migrated // 与库内版本对齐：加载外部版本后不算未保存修改
                 baselineVersionRef.current = String(rec.version)
                 setDirty(false)
                 dirtyRef.current = false
@@ -488,7 +601,14 @@ export function EditorPage({ id }: Props) {
 
           {tab === 'graph' && (
             <Suspense fallback={<p className="muted">节点图加载中…</p>}>
-              <GraphEditor doc={doc} onChange={update} aiOpen={aiOpen} onToggleAi={() => setAiOpen((v) => !v)} />
+              <GraphEditor
+                doc={doc}
+                onChange={update}
+                aiOpen={aiOpen}
+                onToggleAi={() => setAiOpen((v) => !v)}
+                getRevision={getEditorRevision}
+                getLiveDoc={() => docRef.current}
+              />
             </Suspense>
           )}
 
@@ -500,13 +620,14 @@ export function EditorPage({ id }: Props) {
 
           {tab === 'table' && <TableEditor doc={doc} onChange={update} />}
 
-          {tab === 'json' && <JsonTab doc={doc} onApply={update} />}
+          {tab === 'json' && <JsonTab key={doc.id} doc={doc} onApply={update} />}
         </ErrorBoundary>
 
         {/* graph tab 的 AI 面板由 GraphEditor 在工作台内入坞（随深浅主题换肤，docs/29）；
             其余 tab 在编辑器右栏渲染——同一会话 store，切 tab 对话连续。
             B6（docs/40）：AI 写入携带 tag='ai'——一次 run 的连续写工具在撤销栈中合并，
-            一次 Ctrl+Z 回退整个 AI 任务；用户手动编辑（无 tag）自然打断分段 */}
+            一次 Ctrl+Z 回退整个 AI 任务；用户手动编辑（无 tag）自然打断分段。
+            R13 接口冻结：onApplyDoc(next, tag) 与 getRevision 是 W2 F1 冲突检测的契约。 */}
         {aiOpen && tab !== 'graph' && (
           <ErrorBoundary title="AI 助手">
             <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
@@ -517,8 +638,14 @@ export function EditorPage({ id }: Props) {
                   componentId: tab === 'canvas' ? selected : null,
                   scriptRange: tab === 'script' ? scriptRange : null,
                 }}
-                onApplyDoc={(next) => update(next, 'ai')}
-                onClose={() => setAiOpen(false)}
+                onApplyDoc={(next, tag) => update(next, tag)}
+                getRevision={getEditorRevision}
+                getLiveDoc={() => docRef.current}
+                onClose={() => {
+                  // R5（docs/42 §4.4）：显式关闭面板 = 用户停止 AI run（面板卸载不再自动 abort）
+                  setAiOpen(false)
+                  stopAgent(docRef.current?.id ?? id)
+                }}
               />
             </Suspense>
           </ErrorBoundary>
@@ -791,6 +918,9 @@ function EditorCanvas({
 
       {selectedComp && (
         <Inspector
+          // D7（docs/42 §5.1-14）：按组件 id 重挂——切换选中组件时 props JSON 错误草稿与
+          // 文本草稿不复用（此前无 key，换组件后仍显示上一组件的报错且编辑会覆盖新组件）
+          key={selectedComp.id}
           doc={doc}
           comp={selectedComp}
           onChange={(patch) => onChange(updateComponent(doc, selectedComp.id, patch))}
@@ -976,49 +1106,82 @@ function safeContract(type: string) {
 // JSON 视图
 // ---------------------------------------------------------------------------
 
+/**
+ * JSON 草稿基线签名：只取内容（meta/content/refs），**排除 id/version**——
+ * 保存（version bump）与内置示例另存副本（id 变更）不改变内容，不得触发「草稿已陈旧」误报。
+ */
+function jsonDocSignature(doc: LevelDoc): string {
+  return JSON.stringify({ meta: doc.meta, refs: doc.refs, content: doc.content })
+}
+
 function JsonTab({ doc, onApply }: { doc: LevelDoc; onApply: (doc: LevelDoc) => void }) {
-  // 草稿跨 Tab 存活（docs/40 C1）：未应用的 JSON 文本经 draftStore 保留——
-  // 此前切走 Tab 卸载即丢（「回到原样」承诺冲突）；应用成功后清除草稿
-  const [text, setText] = useState(() => loadDraft<string>(doc.id, DRAFT_SLOTS.jsonText) ?? JSON.stringify(doc, null, 2))
+  // 草稿跨 Tab 存活（docs/40 C1）+ 陈旧检测（docs/42 §5.1-13）：
+  // 草稿槽存 {text, baselineSig}，baselineSig = 挂载时文档结构签名。文档被 AI/undo/其它
+  // Tab 修改后签名失配 → 黄条提示 + 禁用应用，防止用旧文本静默覆盖新文档。
+  // 判定在渲染期派生（同 ScriptTab E3）：挂载期间外部修改也能立即提示。
+  const curSig = useMemo(() => jsonDocSignature(doc), [doc])
+  const [draft, setDraft] = useState<JsonDraft>(() => {
+    const cached = loadDraft<JsonDraft>(doc.id, DRAFT_SLOTS.jsonText)
+    return cached ?? { text: JSON.stringify(doc, null, 2), baselineSig: curSig }
+  })
   const [err, setErr] = useState('')
+  const stale = isDraftStale(draft, curSig)
 
   // 草稿持久化（卸载/切 Tab 不丢）；经 effect 同步，避免渲染期副作用
   useEffect(() => {
-    saveDraft(doc.id, DRAFT_SLOTS.jsonText, text)
-  }, [doc.id, text])
+    saveDraft(doc.id, DRAFT_SLOTS.jsonText, draft)
+  }, [doc.id, draft])
+
+  const regenerate = (): void => {
+    setDraft({ text: JSON.stringify(doc, null, 2), baselineSig: curSig })
+    setErr('')
+  }
+
+  const apply = (): void => {
+    if (stale) return // 陈旧且未重新生成：禁用应用（从当前文档重新生成后才恢复）
+    try {
+      const parsed = JSON.parse(draft.text)
+      if (parsed.kind !== 'level') {
+        setErr('kind 必须是 level')
+        return
+      }
+      // 保留当前关卡 id：应用 JSON 改 id 会让保存落为新记录、URL 与库脱节；
+      // 应用前走完整 loadLevelDoc 预检（docs/40 D5/A5：schema + 重复 id 拦截，
+      // 与保存/导入/AI 写入同一管线——此前直贴 migrate 会放进毒结构到画布才崩）
+      parsed.id = doc.id
+      const result = loadLevelDoc(parsed)
+      if (!result.ok) {
+        setErr(result.errors.slice(0, 8).join('\n'))
+        return
+      }
+      onApply(result.doc)
+      // 已落地：以应用结果为新基线（文本重新生成；后续外部修改仍能被检测）
+      setDraft({ text: JSON.stringify(result.doc, null, 2), baselineSig: jsonDocSignature(result.doc) })
+      setErr('')
+    } catch (e) {
+      setErr(String(e instanceof Error ? e.message : e))
+    }
+  }
 
   return (
     <div className="json-tab">
-      <button
-        type="button"
-        onClick={() => {
-          try {
-            const parsed = JSON.parse(text)
-            if (parsed.kind !== 'level') {
-              setErr('kind 必须是 level')
-              return
-            }
-            // 保留当前关卡 id：应用 JSON 改 id 会让保存落为新记录、URL 与库脱节；
-            // 应用前走完整 loadLevelDoc 预检（docs/40 D5/A5：schema + 重复 id 拦截，
-            // 与保存/导入/AI 写入同一管线——此前直贴 migrate 会放进毒结构到画布才崩）
-            parsed.id = doc.id
-            const result = loadLevelDoc(parsed)
-            if (!result.ok) {
-              setErr(result.errors.slice(0, 8).join('\n'))
-              return
-            }
-            onApply(result.doc)
-            clearDraft(doc.id, DRAFT_SLOTS.jsonText) // 已落地：下次挂载从 doc 重新生成
-            setErr('')
-          } catch (e) {
-            setErr(String(e instanceof Error ? e.message : e))
-          }
-        }}
-      >
+      <button type="button" onClick={apply} disabled={stale}>
         应用 JSON 到编辑器
       </button>
+      {stale && (
+        <div className="editor-lint">
+          文档已被其它操作修改（当前 JSON 草稿基于旧版本，直接应用会覆盖新修改）。
+          <button type="button" onClick={regenerate}>
+            从当前文档重新生成
+          </button>
+        </div>
+      )}
       {err && <pre className="tone-error" style={{ marginLeft: 12, whiteSpace: 'pre-wrap' }}>{err}</pre>}
-      <textarea rows={24} value={text} onChange={(e) => setText(e.target.value)} />
+      <textarea
+        rows={24}
+        value={draft.text}
+        onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))}
+      />
     </div>
   )
 }

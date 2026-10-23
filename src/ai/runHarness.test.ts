@@ -68,6 +68,47 @@ describe('runLevelHeadless（无头试运行）', () => {
     expect(formatRunReport(report)).toContain('未通过装载校验')
   })
 
+  it('超时中止后驱动循环不再注入事件、返回后报告冻结（F12）', async () => {
+    const doc = loaded(tutorialDoc)
+    // 每步都等待 120ms，总超时 80ms：首步等待期间必超时
+    const events = Array.from({ length: 20 }, () => ({ event: 'ghost.nope', waitMs: 120 }))
+    const report = await runLevelHeadless(doc, { events, timeoutMs: 80 })
+    expect(report.timedOut).toBe(true)
+    expect(report.ran).toBe(false)
+    const frozen = {
+      steps: report.steps,
+      views: report.viewsVisited.length,
+      errors: report.errors.length,
+      commands: report.commands.length,
+      duration: report.durationMs,
+    }
+    // 返回后再等超过数步间隔：修复前 run() 仍在后台继续 dispatch/等待并改写同一 report 对象
+    await new Promise((r) => setTimeout(r, 500))
+    expect(report.steps).toBe(frozen.steps)
+    expect(report.viewsVisited).toHaveLength(frozen.views)
+    expect(report.errors).toHaveLength(frozen.errors)
+    expect(report.commands).toHaveLength(frozen.commands)
+    expect(report.durationMs).toBe(frozen.duration)
+    expect(report.timedOut).toBe(true)
+  }, 10000)
+
+  it('formatRunReport：超时阈值用实际 timeoutMs（不再写死 >5000ms）', () => {
+    const report: RunReport = {
+      ran: false,
+      errors: [],
+      commands: [],
+      rowsVisited: [],
+      viewsVisited: [],
+      finished: null,
+      finalVars: {},
+      steps: 1,
+      durationMs: 5,
+      timedOut: true,
+    }
+    expect(formatRunReport(report, { timeoutMs: 3200 })).toContain('>3200ms')
+    expect(formatRunReport(report)).toContain('>5000ms') // 未传时回落默认值
+  })
+
   it('formatRunReport：无命中的注入事件单独成段（探测信号）', () => {
     const report: RunReport = {
       ran: true,

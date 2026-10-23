@@ -197,6 +197,49 @@ function schedulePersist(docId: string): void {
   )
 }
 
+/**
+ * 会话换档（docs/42 §4.6 C5）：内置示例另存副本后 doc.id 变更，按 docId 键控的会话状态
+ * （内存消息/plan/mode/checkpointAt/usage + IndexedDB aiSessions 持久化记录）必须跟着迁移，
+ * 否则同挂载内对话清空、刷新后历史也失联。
+ *
+ * 返回是否迁移了内存会话（调用方据此复位被中止 run 残留的 busy——见 EditorPage 内置副本分支）。
+ * IndexedDB 迁移失败不抛错（内存会话照常；刷新后丢失与旧行为一致）。
+ */
+export async function renameSession(oldDocId: string, newDocId: string): Promise<boolean> {
+  if (oldDocId === newDocId) return false
+  const moved = sessions.get(oldDocId)
+  if (moved) {
+    sessions.delete(oldDocId)
+    sessions.set(newDocId, moved)
+  }
+  const pending = pendingDelta.get(oldDocId)
+  if (pending !== undefined) {
+    pendingDelta.delete(oldDocId)
+    pendingDelta.set(newDocId, pending)
+  }
+  // 旧 id 的防抖持久化任务作废（否则会把旧会话再次写回 IndexedDB）
+  const timer = persistTimers.get(oldDocId)
+  if (timer) {
+    clearTimeout(timer)
+    persistTimers.delete(oldDocId)
+  }
+  // 内存已有完整对话 = 新 id 已恢复，不必再从 IndexedDB 载入（hydrateSession 的空内存才载入语义）
+  if (moved && moved.messages.length > 0) hydrated.add(newDocId)
+  emit()
+  try {
+    const rec = await db.aiSessions.get(oldDocId)
+    if (rec) {
+      await db.aiSessions.put({ ...rec, docId: newDocId })
+      await db.aiSessions.delete(oldDocId)
+    }
+  } catch {
+    // IndexedDB 不可用：内存会话照常可用
+  }
+  // 迁移后的内存会话落到新 id（防抖 600ms 自然覆盖；旧 id 记录已删/搬）
+  if (moved && moved.messages.length > 0) schedulePersist(newDocId)
+  return moved !== undefined
+}
+
 /** 恢复持久化会话（内存为空时才载入；幂等）。失败静默——空会话照常可用 */
 export async function hydrateSession(docId: string): Promise<void> {
   const s = getSession(docId)

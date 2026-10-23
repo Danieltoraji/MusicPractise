@@ -57,7 +57,8 @@ import { NodeInspector } from './NodeInspector'
 import { VariablesPanel } from './VariablesPanel'
 import { CanvasMap } from './CanvasMap'
 import { clearRunLog, readRunLog } from '../../runtime/runLog'
-import { getDef } from '../../runtime/store'
+import { allContracts } from '../../runtime/store'
+import { BASE_COMMANDS } from '../../runtime/componentDef'
 
 interface Props {
   doc: LevelDoc
@@ -66,10 +67,36 @@ interface Props {
   /** AI 助手总开关（EditorPage 单一真源：工具栏「🤖 AI」与各 tab 面板共用） */
   aiOpen: boolean
   onToggleAi: () => void
+  /** W1/W2 接口（docs/42 E19 同批）：编辑器文档修订号，供 AI 写前冲突检测；
+   *  未接时 AiPanel 侧应自行降级（本组件只负责透传） */
+  getRevision?: () => number
+  /** R13 运行归属（W1/W2 接口）：编辑器实时文档读取，透传给 AiPanel（面板卸载后 run 继续） */
+  getLiveDoc?: () => LevelDoc | null
 }
 
 /** AI 助手面板在图工作台内的入坞形态（与属性平级挂画布右侧，随 ge-* 主题换肤）；会话 store 保证与其它 tab 连续 */
 const AiPanel = lazy(() => import('../ai/AiPanel').then((m) => ({ default: m.AiPanel })))
+
+/**
+ * W1/W2 接口透传：AiPanel 的 getRevision 由并行工作流在其 Props 中声明。
+ * 这里用「可扩宽」组件类型转发，保证两侧合并前本文件亦可编译（组件未声明时会被 props 忽略）。
+ */
+const AiPanelWithRevision = AiPanel as unknown as React.ComponentType<
+  React.ComponentProps<typeof AiPanel> & { getRevision?: () => number; getLiveDoc?: () => LevelDoc | null }
+>
+
+/**
+ * E19（docs/40，docs/42 返工）：lint 契约白名单按「组件类型」索引——lint 用实例的
+ * type 查表；此前此处按组件 id 建 map，导致 setVisible/setEnabled 等合法调用被红标。
+ * - 基座命令由 ComponentStore 统一实现、不进各组件 def，必须并入白名单；
+ * - 未知类型不写入 map（lint 查不到即跳过校验），避免未知组件实例的每条 call/on 都误报。
+ */
+const CONTRACT_METHODS: Record<string, string[]> = Object.fromEntries(
+  allContracts().map((c) => [c.type, [...new Set([...Object.keys(c.commands), ...BASE_COMMANDS])]]),
+)
+const CONTRACT_EVENTS: Record<string, string[]> = Object.fromEntries(
+  allContracts().map((c) => [c.type, Object.keys(c.events)]),
+)
 
 // ---------------------------------------------------------------------------
 // dock 布局（docs/29 追加：面板自由调换）：三个列槽 × 五面板归属 + 显隐 + 列宽/面板高，localStorage 持久化
@@ -235,7 +262,7 @@ function nodeJson(n: GNode): string {
   return s
 }
 
-function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
+function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getLiveDoc }: Props) {
   const program = doc.content.logic
   const rf = useReactFlow()
   // 深色工作台 / 浅色主题，与节点摘要中英文显示模式（均记忆在 localStorage）
@@ -439,25 +466,9 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
       lintGraphProgramDetailed(program, {
         componentIds: doc.content.components.map((c) => c.id),
         componentTypes: Object.fromEntries(doc.content.components.map((c) => [c.id, c.type])),
-        // E19：契约方法/事件尾名白名单（运行时静默无效的写法在编辑器先红标）
-        componentMethods: Object.fromEntries(
-          doc.content.components.map((c) => {
-            try {
-              return [c.id, Object.keys(getDef(c.type).contract.commands)]
-            } catch {
-              return [c.id, [] as string[]]
-            }
-          }),
-        ),
-        componentEvents: Object.fromEntries(
-          doc.content.components.map((c) => {
-            try {
-              return [c.id, Object.keys(getDef(c.type).contract.events)]
-            } catch {
-              return [c.id, [] as string[]]
-            }
-          }),
-        ),
+        // E19：契约方法/事件尾名白名单按组件类型查（运行时静默无效的写法在编辑器先红标）
+        componentMethods: CONTRACT_METHODS,
+        componentEvents: CONTRACT_EVENTS,
         viewIds: doc.content.views.map((v) => v.id),
         tableColumns: doc.content.table.columns,
       }),
@@ -857,11 +868,13 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
       case 'ai':
         return (
           <Suspense key={id} fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
-            <AiPanel
+            <AiPanelWithRevision
               doc={doc}
               selection={{ tab: 'graph', nodeId: selectedId }}
               onClose={onToggleAi}
-              onApplyDoc={(next) => onChange(next, 'ai')}
+              onApplyDoc={(next, tag) => onChange(next, tag)}
+              getRevision={getRevision}
+              getLiveDoc={getLiveDoc}
               style={style}
               className={srcClass}
               headerDrag={{
@@ -1074,7 +1087,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
                 关闭按钮形同虚设 */}
             {aiOpen && (
               <Suspense fallback={<aside className="ai-panel ai-panel-loading">AI 面板加载中…</aside>}>
-                <AiPanel doc={doc} selection={{ tab: 'graph', nodeId: selectedId }} onClose={onToggleAi} onApplyDoc={(next) => onChange(next, 'ai')} style={{ flex: 1, minHeight: 0 }} />
+                <AiPanelWithRevision doc={doc} selection={{ tab: 'graph', nodeId: selectedId }} onClose={onToggleAi} onApplyDoc={(next, tag) => onChange(next, tag)} getRevision={getRevision} getLiveDoc={getLiveDoc} style={{ flex: 1, minHeight: 0 }} />
               </Suspense>
             )}
           </div>
@@ -1160,6 +1173,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi }: Props) {
         <span className="muted graph-toolbar-hint">
           右键画布空白加节点 · 拖端口连线（真/假出口）· 双击连线断开 · Delete 删除选中节点
         </span>
+        <span className="graph-narrow-tip">窄屏：节点图可横向滚动查看面板，建议 ≥1280px</span>
         {lintIssues.length > 0 && (
           <button type="button" className="graph-lint-count" onClick={() => setShowIssues((v) => !v)} title="点击查看问题列表">
             ⚠ {lintIssues.length} 个问题

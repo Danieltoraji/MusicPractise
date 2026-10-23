@@ -26,3 +26,15 @@ export function getCheckpoint(docId: string): Checkpoint | null {
 export function clearCheckpoint(docId: string): void {
   checkpoints.delete(docId)
 }
+
+/**
+ * 检查点换档（docs/42 §4.6 C5）：内置示例另存副本后 doc.id 变更，单级回滚快照
+ * 必须跟着迁移——否则同挂载内「↩ 回滚」按钮消失，AI 修改失去回滚入口。
+ */
+export function renameCheckpoint(oldDocId: string, newDocId: string): void {
+  if (oldDocId === newDocId) return
+  const cp = checkpoints.get(oldDocId)
+  if (!cp) return
+  checkpoints.delete(oldDocId)
+  checkpoints.set(newDocId, cp)
+}

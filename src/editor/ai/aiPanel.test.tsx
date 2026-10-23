@@ -2,9 +2,10 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearCheckpoint } from '../../ai/checkpoint'
+import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
+import { stopAgent } from '../../ai/agent'
 import { AI_SETTINGS_KEY, defaultAiSettings } from '../../ai/settings'
-import { clearSession, getSession } from '../../ai/session'
+import { clearSession, getSession, patchSession } from '../../ai/session'
 import { blankLevelDoc } from '../docState'
 import type { LevelDoc } from '../../engine/level'
 import { AiPanel } from './AiPanel'
@@ -78,6 +79,7 @@ function bodyResponse(payload: unknown, status = 200): Response {
 beforeEach(() => {
   localStorage.clear()
   clearSession(DOC.id)
+  clearCheckpoint(DOC.id)
 })
 
 afterEach(() => {
@@ -86,7 +88,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('运行归属（docs/40 R5：C4/F5）', () => {
+describe('运行归属（docs/42 §4.4 R5：布局切换不打断 AI，显式停止保留）', () => {
   function setKey(): void {
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(defaultAiSettings()))
     const stored = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY)!)
@@ -94,33 +96,60 @@ describe('运行归属（docs/40 R5：C4/F5）', () => {
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stored))
   }
 
-  it('面板卸载即停止 agent 循环——不再「关面板后隐蔽运行/写入丢失但显示已应用」', async () => {
-    setKey()
-    clearSession(DOC.id)
-    // fetch 挂起：模拟一轮运行中的请求
-    vi.stubGlobal('fetch', vi.fn((_url: unknown, init?: { signal?: AbortSignal }) => new Promise((_res, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
-    })))
-    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await flushUntil(() => (c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement) !== null)
+  function hangFetch(): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: unknown, init?: { signal?: AbortSignal }) =>
+          new Promise((_res, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+          }),
+      ),
+    )
+  }
+
+  async function startRun(c: HTMLElement): Promise<void> {
     const ta = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
-    act(() => {
-      setter.call(ta, '帮我改关卡')
-      ta.dispatchEvent(new Event('input', { bubbles: true }))
+    await type(ta, '帮我改关卡')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
-    const sendBtn = [...c.querySelectorAll('button')].find((b) => b.textContent === '发送') as HTMLButtonElement
-    act(() => sendBtn.click())
     await flushUntil(() => getSession(DOC.id).busy)
-    expect(getSession(DOC.id).busy).toBe(true)
-    // 卸载面板（用户关闭面板 / 切 Tab）——renderEl 注册的 root 需手动出列
+  }
+
+  it('面板卸载不中止运行——切 Tab/调试布局不再打断 AI（运行归属上移 EditorPage）', async () => {
+    setKey()
+    hangFetch()
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await flushUntil(() => c.querySelector('.ai-panel-form textarea') !== null)
+    await startRun(c)
+    // 卸载面板（模拟切 Tab / AI 启动调试后编辑布局 AiPanel 卸载）
     const idx = roots.length - 1
     await act(async () => roots[idx].unmount())
     roots.splice(idx, 1)
+    // 修复前：卸载 cleanup stopAgent → 运行被中止（busy=false + error 已停止）；现在运行仍在跑
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 80))
+    })
+    expect(getSession(DOC.id).busy).toBe(true)
+    expect(getSession(DOC.id).error).toBeNull()
+    // 显式停止（宿主 stopAgent / 停止按钮同一路径）仍能停止
+    stopAgent(DOC.id)
     await flushUntil(() => !getSession(DOC.id).busy)
-    expect(getSession(DOC.id).busy).toBe(false) // 修复前：运行继续且无法停止
     expect(getSession(DOC.id).error).toContain('已停止')
-    vi.unstubAllGlobals()
+  })
+
+  it('运行中「停止」按钮仍生效（显式停止保留）', async () => {
+    setKey()
+    hangFetch()
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await flushUntil(() => c.querySelector('.ai-panel-form textarea') !== null)
+    await startRun(c)
+    const stop = [...c.querySelectorAll('button')].find((b) => b.textContent === '停止') as HTMLButtonElement
+    expect(stop).toBeTruthy()
+    await act(async () => stop.click())
+    await flushUntil(() => !getSession(DOC.id).busy)
+    expect(getSession(DOC.id).error).toContain('已停止')
   })
 })
 
@@ -267,7 +296,7 @@ describe('AiPanel agent 模式（批次2a）', () => {
     expect(names).toContain('read_script')
   })
 
-  it('agent 模式：write_script 调用落地 onApplyDoc；发送存检查点；回滚恢复原 doc', async () => {
+  it('agent 模式：write_script 落地 onApplyDoc；首次写入前懒存检查点；回滚带独立 tag 恢复原 doc', async () => {
     setKey()
     clearSession(DOC.id)
     const applyDoc = vi.fn()
@@ -302,8 +331,9 @@ describe('AiPanel agent 模式（批次2a）', () => {
     })
     await flushUntil(() => c.textContent!.includes('已把初始分改为 100'))
 
-    // 写入落地：applyDoc 收到的 doc 含新逻辑节点
+    // 写入落地：applyDoc 收到的 doc 含新逻辑节点；tag 为该次 run 的独立 ai:<n>
     expect(applyDoc).toHaveBeenCalledTimes(1)
+    expect(applyDoc.mock.calls[0][1]).toBe('ai:1')
     const applied = applyDoc.mock.calls[0][0] as LevelDoc
     expect(applied.content.logic.nodes.some((n: { kind: string; target?: string }) => n.kind === 'assign' && (n as { target: string }).target === 'score')).toBe(true)
     // 第二次请求带上了 tool 结果
@@ -313,18 +343,209 @@ describe('AiPanel agent 模式（批次2a）', () => {
     const body1 = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
     expect((body1.tools as { function: { name: string } }[]).some((t) => t.function.name === 'write_script')).toBe(true)
 
-    // 回滚按钮出现 → 点击恢复原 doc、按钮消失
+    // 检查点是「首次写入前」的基线（发送时尚未存；写入落地后才出现）
     expect(getSession(original.id).checkpointAt).not.toBeNull()
+    expect(getCheckpoint(original.id)?.doc.meta.title).toBe(original.meta.title)
     const rollback = [...c.querySelectorAll('button')].find((b) => b.textContent === '↩ 回滚') as HTMLButtonElement
     expect(rollback).toBeTruthy()
-    // F4：回滚有二次确认（jsdom stub 接受）
+    // F4：回滚有二次确认（jsdom stub 接受）；回滚用独立 rollback:<n> tag → 可 Ctrl+Z 撤销
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     await act(async () => rollback.click())
     expect(confirmSpy).toHaveBeenCalled()
     expect(applyDoc).toHaveBeenCalledTimes(2)
-    expect((applyDoc.mock.calls[1][0] as LevelDoc).meta.title).toBe(original.meta.title)
+    expect(applyDoc.mock.calls[1][0] as LevelDoc).toMatchObject({ meta: { title: original.meta.title } })
+    expect(applyDoc.mock.calls[1][1]).toMatch(/^rollback:\d+$/)
+    expect(applyDoc.mock.calls[1][1]).not.toBe(applyDoc.mock.calls[0][1])
     expect(getSession(original.id).checkpointAt).toBeNull()
     expect(c.textContent).toContain('已回滚')
+  })
+
+  it('agent 纯问答不产生检查点；失败重试纯问答同样不产生（F14：写入前才存）', async () => {
+    setKey()
+    clearSession(DOC.id)
+    let call = 0
+    // 首次 500（触发错误条），随后两次均为纯文本答复（无工具调用 = 无写入）
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        call += 1
+        if (call === 1) return new Response(JSON.stringify({ error: { message: 'boom' } }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+        return bodyResponse({ choices: [{ message: { content: `只读回答${call}` } }] })
+      }),
+    )
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'agent') as HTMLElement).click())
+    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '这个关卡怎么过')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.querySelector('.ai-panel-error') !== null)
+    expect(getSession(DOC.id).checkpointAt).toBeNull() // 纯问答：无检查点、无回滚按钮
+    expect(getCheckpoint(DOC.id)).toBeNull()
+    // 重试（同样无写入）→ 仍不产生检查点（旧实现 retry 里补存）
+    await act(async () => {
+      ;(c.querySelector('.ai-panel-error-retry') as HTMLButtonElement).click()
+    })
+    await flushUntil(() => c.textContent!.includes('只读回答2'))
+    expect(getSession(DOC.id).checkpointAt).toBeNull()
+    expect(getCheckpoint(DOC.id)).toBeNull()
+    expect(c.textContent).not.toContain('↩ 回滚')
+  })
+
+  it('计划执行无写入时不产生检查点（F14：executePlan 不再预存）', async () => {
+    setKey()
+    clearSession(DOC.id)
+    let call = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        call += 1
+        if (call === 1) return bodyResponse({ choices: [{ message: { content: '1. [run_level] 验证：无头试运行' } }] })
+        return bodyResponse({ choices: [{ message: { content: '按计划执行完毕，无需修改。' } }] })
+      }),
+    )
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'plan') as HTMLElement).click())
+    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '检查一下并验证')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.querySelector('.ai-plan-card') !== null)
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '▶ 执行计划')!.click()
+    })
+    await flushUntil(() => c.textContent!.includes('按计划执行完毕'))
+    expect(getSession(DOC.id).mode).toBe('agent')
+    expect(getSession(DOC.id).checkpointAt).toBeNull() // 旧实现 executePlan 无条件预存
+    expect(getCheckpoint(DOC.id)).toBeNull()
+  })
+
+  it('首次写入前懒存基线；第二次 run 不覆盖任务前基线（F14/B6）', async () => {
+    setKey()
+    clearSession(DOC.id)
+    const docA = blankLevelDoc()
+    const docB = { ...docA, meta: { ...docA.meta, title: '用户中途改的标题' } }
+    const applyDoc = vi.fn()
+    let call = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const i = call++
+        const write =
+          i === 0 || i === 2
+            ? {
+                choices: [
+                  {
+                    message: {
+                      content: '',
+                      tool_calls: [
+                        { id: `w${i}`, type: 'function', function: { name: 'write_script', arguments: JSON.stringify({ script: 'on level.started {\n  v.score = 100\n}' }) } },
+                      ],
+                    },
+                  },
+                ],
+              }
+            : { choices: [{ message: { content: i === 1 ? '第一次完成' : '第二次完成' } }] }
+        return bodyResponse(write)
+      }),
+    )
+    const c = renderEl(<AiPanel doc={docA} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
+    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'agent') as HTMLElement).click())
+    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '第一次改')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.textContent!.includes('第一次完成'))
+    const cp1 = getCheckpoint(docA.id)!
+    expect(cp1).toBeTruthy()
+    expect(cp1.doc.meta.title).toBe(docA.meta.title) // 基线 = 任务前文档
+    expect(applyDoc.mock.calls[0][1]).toBe('ai:1')
+
+    // 宿主重渲染（编辑器 doc 已变）：第二次 run 的写入应沿用任务前基线，不重新快照
+    const root = roots[roots.length - 1]
+    await act(async () => {
+      root.render(<AiPanel doc={docB} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
+    })
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20))
+    })
+    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '第二次改')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.textContent!.includes('第二次完成'))
+    const cp2 = getCheckpoint(docA.id)!
+    expect(cp2.at).toBe(cp1.at) // 不重存
+    expect(cp2.doc.meta.title).toBe(docA.meta.title) // 基线仍是任务前，而非第二次 run 时的 docB
+    expect(applyDoc.mock.calls[1][1]).toBe('ai:2') // 第二次 run 独立撤销 tag（B6）
+  })
+
+  it('计划执行有写入时也不重存检查点（保留任务前基线，F14）', async () => {
+    setKey()
+    clearSession(DOC.id)
+    const applyDoc = vi.fn()
+    // 预置任务前基线（模拟此前 agent run 首次写入时懒存）
+    const at = saveCheckpoint(DOC.id, { ...blankLevelDoc(), meta: { title: '计划前基线' } })
+    patchSession(DOC.id, { checkpointAt: at })
+    let call = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const i = call++
+        if (i === 0) return bodyResponse({ choices: [{ message: { content: '1. [write_script] 把 on level.started 的初始分改为 100' } }] })
+        if (i === 1) {
+          return bodyResponse({
+            choices: [
+              {
+                message: {
+                  content: '',
+                  tool_calls: [
+                    { id: 'pw1', type: 'function', function: { name: 'write_script', arguments: JSON.stringify({ script: 'on level.started {\n  v.score = 100\n}' }) } },
+                  ],
+                },
+              },
+            ],
+          })
+        }
+        return bodyResponse({ choices: [{ message: { content: '计划执行完毕。' } }] })
+      }),
+    )
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
+    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'plan') as HTMLElement).click())
+    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '改初始分')
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
+    })
+    await flushUntil(() => c.querySelector('.ai-plan-card') !== null)
+    await act(async () => {
+      ;[...c.querySelectorAll('button')].find((b) => b.textContent === '▶ 执行计划')!.click()
+    })
+    await flushUntil(() => c.textContent!.includes('计划执行完毕'))
+    expect(applyDoc).toHaveBeenCalledTimes(1)
+    expect(applyDoc.mock.calls[0][1]).toMatch(/^ai:\d+$/)
+    // 旧实现 executePlan/sendText 都会 saveCheckpoint → 基线被覆盖
+    const cp = getCheckpoint(DOC.id)!
+    expect(cp.at).toBe(at)
+    expect(cp.doc.meta.title).toBe('计划前基线')
+  })
+
+  it('撞限续跑不重存检查点（保留任务前基线）', async () => {
+    setKey()
+    clearSession(DOC.id)
+    // 预置任务前基线（模拟此前某次 run 首次写入时懒存）
+    const at = saveCheckpoint(DOC.id, { ...blankLevelDoc(), meta: { title: '任务前基线' } })
+    patchSession(DOC.id, { mode: 'agent', checkpointAt: at, turnCapHit: true })
+    vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: '续跑完成' } }] })))
+    const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
+    await flushUntil(() => c.querySelector('.ai-panel-capbar') !== null)
+    await act(async () => {
+      ;(c.querySelector('.ai-panel-cap-run') as HTMLButtonElement).click()
+    })
+    await flushUntil(() => c.textContent!.includes('续跑完成'))
+    // 旧实现 sendText 每次运行都会 saveCheckpoint → 基线被覆盖
+    const cp = getCheckpoint(DOC.id)!
+    expect(cp.at).toBe(at)
+    expect(cp.doc.meta.title).toBe('任务前基线')
   })
 })
 

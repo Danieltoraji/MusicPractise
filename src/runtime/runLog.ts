@@ -55,3 +55,19 @@ export function clearRunLog(levelId: string): void {
     // ignore
   }
 }
+
+/**
+ * 运行日志换档（docs/42 §4.6 C5）：内置示例另存副本后 levelId 变更，
+ * sessionStorage 里按关卡 id 键控的日志迁移到副本 id（同挂载内回编辑器仍可查看）。
+ */
+export function renameRunLog(oldLevelId: string, newLevelId: string): void {
+  if (oldLevelId === newLevelId) return
+  try {
+    const raw = sessionStorage.getItem(key(oldLevelId))
+    if (raw === null) return
+    sessionStorage.setItem(key(newLevelId), raw)
+    sessionStorage.removeItem(key(oldLevelId))
+  } catch {
+    // sessionStorage 不可用：日志降级为无持久化，不影响保存
+  }
+}

@@ -26,7 +26,8 @@ const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v
 /**
  * 会话归属守卫（docs/40 E4）：调试单例全局只有一个会话——已在运行但不属于本文档时，
  * AI 的读写操作会把 A 关的变量/日志当作 B 关的诊断依据（跨关卡串台）。报错让模型先 stop。
- * mode==='idle' 时放行（后续 start 由调用方决定）；start 也放行（重启当前关是合法操作）。
+ * mode==='idle' 时放行（后续 start 由调用方决定）；start 另有 E4 残留守卫：
+ * 任何非 idle 状态都拒绝（含同文档/人工会话），避免静默 stop 后接管。
  */
 function guardDoc(ctx: { levelId: string }): string | null {
   const s = getDebugSnapshot()
@@ -66,6 +67,13 @@ const debugControlTool: AiTool = {
     const action = str(args.action)
     switch (action) {
       case 'start': {
+        // E4 残留（docs/42 §4.4）：startDebugRun 内部会先静默 stop 现有会话——若已有会话在跑，
+        // AI 的 start 会接管/停掉人工调试会话且不留痕迹。非 idle 一律拒绝，要求显式 stop。
+        const s = getDebugSnapshot()
+        if (s.mode !== 'idle') {
+          const who = s.owner === 'ai' ? 'AI 启动' : '人工启动'
+          return `调试启动失败：已有调试会话在运行（${who}）——先 debug_control(action="stop") 停止后再启动，不能静默重启或接管会话`
+        }
         const err = await startDebugRun(ctx.getDoc(), 'ai')
         if (err) return `调试启动失败：${err}`
         return `✓ 调试会话已启动（AI 归属）。\n${stateSummary()}`

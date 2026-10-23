@@ -86,6 +86,61 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     expect(container.textContent).toContain('点击组件：高亮图中引用它的节点')
   })
 
+  it('G1：编辑布局工具条含窄屏守卫提示（CSS 在 index.css 文件尾控制显隐）', () => {
+    const container = renderEl(<GraphEditor doc={baseDoc()} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    const tip = container.querySelector('.graph-narrow-tip')
+    expect(tip?.textContent).toContain('窄屏：节点图可横向滚动查看面板，建议 ≥1280px')
+  })
+
+  it('E19 回归：契约白名单按组件类型生效——基座命令/未知类型不误报，真实未知方法仍红标', () => {
+    const doc = baseDoc()
+    doc.content.components.push(
+      { id: 'btn1', type: 'button', view: 'main' } as never,
+      { id: 'myst1', type: 'mystery-widget', view: 'main' } as never,
+    )
+    doc.content.logic.nodes.push(
+      { id: 'on_btn', kind: 'on', event: 'btn1.clicked', x: 0, y: 160 },
+      // setVisible 是基座命令（不在 button 契约里，运行时有）——不得红标
+      { id: 'c_base', kind: 'call', target: 'btn1', method: 'setVisible', args: ['{visible: true}'], x: 300, y: 160 },
+      { id: 'c_base2', kind: 'call', target: 'btn1', method: 'setEnabled', args: ['{enabled: false}'], x: 600, y: 160 },
+      // 未知组件类型：契约查不到即跳过校验，不得红标
+      { id: 'on_myst', kind: 'on', event: 'myst1.zapped', x: 0, y: 320 },
+      { id: 'c_myst', kind: 'call', target: 'myst1', method: 'whatever', args: [], x: 300, y: 320 },
+    )
+    doc.content.logic.edges.push(
+      { id: 'e2', from: 'on_btn', to: 'c_base' },
+      { id: 'e3', from: 'c_base', to: 'c_base2' },
+      { id: 'e4', from: 'on_myst', to: 'c_myst' },
+    )
+    const bad = {
+      ...doc,
+      content: {
+        ...doc.content,
+        logic: {
+          ...doc.content.logic,
+          nodes: doc.content.logic.nodes.map((n) => (n.id === 'c_base' ? { ...n, method: 'setVisibel' } : n)),
+        },
+      },
+    } as unknown as LevelDoc
+
+    const errorIds = (c: HTMLElement): string[] =>
+      [...c.querySelectorAll('.react-flow__node')]
+        .filter((el) => el.querySelector('.gnode.has-error, .gnode-badge'))
+        .map((el) => (el as HTMLElement).dataset.id ?? '')
+
+    const container = renderEl(<GraphEditor doc={doc} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    expect(container.querySelector('.react-flow__node[data-id="c_base"]')).toBeTruthy()
+    expect(container.querySelector('.react-flow__node[data-id="c_base2"]')).toBeTruthy()
+    expect(container.querySelector('.react-flow__node[data-id="c_myst"]')).toBeTruthy()
+    expect(errorIds(container)).not.toContain('c_base')
+    expect(errorIds(container)).not.toContain('c_base2')
+    expect(errorIds(container)).not.toContain('c_myst')
+
+    const container2 = renderEl(<GraphEditor doc={bad} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
+    expect(container2.querySelector('.react-flow__node[data-id="c_base"]')).toBeTruthy()
+    expect(errorIds(container2)).toContain('c_base')
+  })
+
   it('点击节点库项添加节点（受控回写）', () => {
     let doc = baseDoc()
     const onChange = vi.fn((next: LevelDoc) => {

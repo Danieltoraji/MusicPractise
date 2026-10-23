@@ -158,6 +158,27 @@ describe('调试会话归属与生命周期（docs/40 R5：E4/E7）', () => {
     stopDebugRun()
   })
 
+  it('E4 残留：会话非 idle 时 start 拒绝——不静默重启/接管人工会话', async () => {
+    const doc = loaded()
+    // 面板人工启动的会话：AI 的 start 不能静默 stop 后接管
+    await startDebugRun(doc)
+    expect(getDebugSnapshot().owner).toBe('human')
+    const res = (await tool('debug_control').exec({ action: 'start' }, harness(doc))) as string
+    expect(res).toContain('调试启动失败')
+    expect(res).toContain('人工启动')
+    expect(res).toContain('先 debug_control(action="stop")')
+    // 原会话未被接管/重启：仍 running 且归属 human
+    expect(getDebugSnapshot().mode).toBe('running')
+    expect(getDebugSnapshot().owner).toBe('human')
+    // AI 自己的会话同样不能静默重启（避免丢掉当前进度/变量）
+    stopDebugRun()
+    expect(((await tool('debug_control').exec({ action: 'start' }, harness(doc))) as string)).toContain('✓')
+    const again = (await tool('debug_control').exec({ action: 'start' }, harness(doc))) as string
+    expect(again).toContain('调试启动失败')
+    expect(again).toContain('AI 启动')
+    stopDebugRun()
+  })
+
   it('E7 回归：stop 清 pendingStep/pendingPause——重启后不再第一个节点就暂停', async () => {
     const doc = loaded()
     await tool('debug_control').exec({ action: 'start' }, harness(doc))

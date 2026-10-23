@@ -264,10 +264,12 @@ export interface GraphLintCtx {
   viewIds?: Iterable<string>
   /** 数据表列（docs/26：set 命令里 q.<列> 引用的存在性与类型格式检查） */
   tableColumns?: { key: string; type?: ColumnType }[]
-  /** E19（docs/40）：组件 id → 契约命令名清单（调用方从 runtime/store 取——引擎层不反向依赖运行时）。
-   *  提供时对 call.method 做白名单校验（未知方法运行时静默无效，编辑器先红标） */
+  /** E19（docs/40）：组件**类型** → 契约命令名清单（调用方从 runtime/store 取——引擎层不反向依赖运行时）。
+   *  提供时对 call.method 做白名单校验（未知方法运行时静默无效，编辑器先红标）。
+   *  注意键是组件类型而非实例 id：lint 先按实例 id 查 type 再查本表；docs/42 §5.1-E19
+   *  的误报正是调用方按 id 建 map 导致。基座命令（setVisible/setEnabled）由调用方并入。 */
   componentMethods?: Record<string, string[]>
-  /** E19：组件 id → 契约事件尾名清单（on 事件 `${id}.${尾}` / `${id}:${尾}` 校验） */
+  /** E19：组件**类型** → 契约事件尾名清单（on 事件 `${组件 id}.${尾}` / `${组件 id}:${尾}` 校验） */
   componentEvents?: Record<string, string[]>
 }
 

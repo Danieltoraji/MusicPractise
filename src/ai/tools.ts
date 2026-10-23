@@ -12,7 +12,7 @@ import { loadLevelDoc } from '../library/validate'
 import { readRunLog } from '../runtime/runLog'
 import { getDef } from '../runtime/store'
 import { generateScript } from '../engine/script'
-import { describeGNode } from './prompts'
+import { describeGNode, LIFECYCLE_CATALOG, clipContractText } from './prompts'
 import { formatRunReport, runLevelHeadless, type RunEventStep } from './runHarness'
 import { setAiHighlight } from '../editor/graph/aiHighlight'
 
@@ -21,6 +21,12 @@ export interface ToolContext {
   getDoc(): LevelDoc
   /** 应用修改后的 doc（走编辑器唯一写路径 update → 全视图自动刷新+标脏）；写入工具专用 */
   applyDoc(next: LevelDoc): void
+  /**
+   * 编辑器文档修订号（F1，docs/42 §4.3）：每次文档变更递增。
+   * agent 循环据此检测运行期间创作者的手动编辑——写入前修订号与上次 AI 写入后的不一致时
+   * 拒绝写入（要求模型先重读现状），避免整文档回写静默覆盖用户改动。
+   */
+  getRevision?(): number
   /** 运行日志按关卡 id 存取 */
   levelId: string
   /**
@@ -69,7 +75,8 @@ const readDocTool: AiTool = {
   name: 'read_doc',
   description:
     '读取关卡文档的结构化摘要（meta/视图/组件/变量/数据表/推进配置）。' +
-    '组件段附每个组件的事件/命令契约清单（写入逻辑前以此为准，不要臆测事件名）；看逻辑用 read_script，看原始 JSON 用 read_json',
+    '组件段附每个组件的事件/命令/查询契约与 props 字段（name/type/options/default，写入逻辑与改 props 前以此为准，不要臆测事件名）；' +
+    '另附生命周期事件目录（level.started/level.finished/question.loaded/view.entered 及 payload）。看逻辑用 read_script，看原始 JSON 用 read_json',
   parameters: {
     type: 'object',
     properties: {
@@ -91,12 +98,23 @@ const readDocTool: AiTool = {
         let events: string[] = []
         let commands: string[] = []
         let queries: string[] = []
+        let propsDoc: string | undefined
+        let propsFields: { name: string; type: string; options?: string[]; default?: Json }[] = []
         try {
           const def = getDef(c.type)
           // F3：下发「键(负载说明)」值——只给键名曾让模型猜错 payload 形状静默无效
-          events = Object.entries(def.contract.events).map(([k, v]) => `${k}(${v})`)
-          commands = Object.entries(def.contract.commands).map(([k, v]) => `${k}(${v})`)
-          queries = Object.entries(def.contract.queries ?? {}).map(([k, v]) => `${k}(${v})`)
+          events = Object.entries(def.contract.events).map(([k, v]) => `${k}(${clipContractText(v)})`)
+          commands = Object.entries(def.contract.commands).map(([k, v]) => `${k}(${clipContractText(v)})`)
+          queries = Object.entries(def.contract.queries ?? {}).map(([k, v]) => `${k}(${clipContractText(v)})`)
+          // F3（docs/42 §5.1）：props 契约此前完全缺失——结构化字段给 name/type/options/default，
+          // 自由说明给 propsDoc（单条截断防长文本把 read_doc 撑爆）
+          propsDoc = def.contract.propsDoc ? clipContractText(def.contract.propsDoc) : undefined
+          propsFields = (def.contract.propsFields ?? []).map((f) => ({
+            name: f.key,
+            type: f.type,
+            ...(f.options && f.options.length > 0 ? { options: f.options } : {}),
+            ...(f.fallback !== undefined ? { default: f.fallback } : {}),
+          }))
         } catch {
           // 未知/旧数据类型：跳过契约段，不阻断读取
         }
@@ -111,9 +129,13 @@ const readDocTool: AiTool = {
           ...(events.length > 0 ? { events } : {}),
           ...(commands.length > 0 ? { commands } : {}),
           ...(queries.length > 0 ? { queries } : {}),
+          ...(propsDoc ? { propsDoc } : {}),
+          ...(propsFields.length > 0 ? { propsFields } : {}),
         }
       })
       sections.push(`## components（${comps.length} 个）\n${JSON.stringify(comps, null, 2)}`)
+      // 生命周期事件目录（F3 缺口）：on 入口可用的事件名与 payload，从零写逻辑不用猜
+      sections.push(`## 生命周期事件（on 入口可用）\n${LIFECYCLE_CATALOG}`)
     }
     if (part === 'all' || part === 'table') {
       const rows = content.table.rows.slice(0, MAX_ROWS)
@@ -237,16 +259,18 @@ const runLevelTool: AiTool = {
     for (const step of events) {
       if (!step.event) return '修改失败（未应用）：events 中存在缺少 event 字段的步骤'
     }
+    const timeoutMs = typeof args.timeoutMs === 'number' ? args.timeoutMs : undefined
     const report = await runLevelHeadless(ctx.getDoc(), {
       events: events as RunEventStep[],
-      timeoutMs: typeof args.timeoutMs === 'number' ? args.timeoutMs : undefined,
+      timeoutMs,
     })
     // 无命中对照（引擎对无处理器事件静默 no-op，只能静态比对 on 事件入口）
     const onEvents = new Set(
       ctx.getDoc().content.logic.nodes.filter((n) => n.kind === 'on').map((n) => (n as { event: string }).event),
     )
     const unmatchedEvents = [...new Set(events.map((e) => e.event))].filter((ev) => !onEvents.has(ev))
-    return formatRunReport(report, { events: events as RunEventStep[], unmatchedEvents })
+    // F12（docs/42 §5.1）：报告里的超时阈值用本次实际 timeoutMs，不再写死 >5000ms
+    return formatRunReport(report, { events: events as RunEventStep[], unmatchedEvents, timeoutMs })
   },
 }
 

@@ -108,6 +108,26 @@ describe('AI 只读工具', () => {
     expect(comps).toContain('setEnabled(')
   })
 
+  it('read_doc：组件段附 propsDoc/propsFields（name/type/options/default）与生命周期事件目录（F3）', () => {
+    const docWithSynth = addComponent(makeDoc(), 'synth', 'main')
+    const comps = tool('read_doc').exec({ part: 'components' }, ctxFor(docWithSynth)) as string
+    expect(comps).toContain('"propsDoc"')
+    expect(comps).toContain('"propsFields"')
+    expect(comps).toContain('"name": "wave"')
+    expect(comps).toContain('"type": "string"')
+    expect(comps).toContain('"options"')
+    expect(comps).toContain('"default": "sawtooth"')
+    expect(comps).toContain('纯振荡器') // propsDoc 自由说明
+    // 生命周期事件目录（含 payload 说明）
+    expect(comps).toContain('## 生命周期事件')
+    expect(comps).toContain('level.started')
+    expect(comps).toContain('level.finished')
+    expect(comps).toContain('question.loaded')
+    expect(comps).toContain('view.entered')
+    // 截断上限：组件段整体远小于未截断的所有契约全文
+    expect(comps.length).toBeLessThan(20000)
+  })
+
   it('read_json：完整 JSON', () => {
     const doc = makeDoc()
     const text = tool('read_json').exec({}, ctxFor(doc)) as string
@@ -149,6 +169,20 @@ describe('AI 只读工具', () => {
     expect(out).toContain('[命令] sound1.play')
     expect(out).toContain('[错误](节点 c1)[button1.clicked] boom')
   })
+})
+
+describe('run_level（无头试运行）', () => {
+  it('超时报告使用本次实际 timeoutMs，而非写死 >5000ms（F12）', async () => {
+    const doc = makeDoc()
+    const t = tool('run_level')
+    const out = (await t.exec(
+      { timeoutMs: 50, events: [{ event: 'ghost.nope', waitMs: 200 }, { event: 'ghost.nope', waitMs: 200 }] },
+      ctxFor(doc),
+    )) as string
+    expect(out).toContain('试运行超时被中止')
+    expect(out).toContain('>50ms')
+    expect(out).not.toContain('>5000ms')
+  }, 10000)
 })
 
 describe('highlight_nodes（批次5）', () => {

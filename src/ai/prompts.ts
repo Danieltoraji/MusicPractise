@@ -8,6 +8,7 @@ import type { GNode } from '../engine/graphProgram'
 import { COLUMN_TYPE_LABELS } from '../engine/level'
 import type { Json } from '../engine/expr'
 import type { LevelDoc } from '../engine/level'
+import type { PropFieldDef } from '../runtime/componentDef'
 import { getDef } from '../runtime/store'
 
 /** 编辑器各视图上报给 AI 面板的选中上下文（tab 粒度必填，具体选中可缺） */
@@ -60,6 +61,8 @@ function safeContract(type: string): {
   events: Record<string, string>
   commands: Record<string, string>
   queries: Record<string, string>
+  propsDoc?: string
+  propsFields?: PropFieldDef[]
 } | null {
   try {
     const def = getDef(type)
@@ -68,21 +71,51 @@ function safeContract(type: string): {
       events: def.contract.events,
       commands: def.contract.commands,
       queries: def.contract.queries ?? {},
+      propsDoc: def.contract.propsDoc,
+      propsFields: def.contract.propsFields,
     }
   } catch {
     return null
   }
 }
 
+/** F3（docs/42 §5.1）：单条契约文本上限——props 说明/字段清单可能很长，逐条截断防提示词爆炸 */
+export const CONTRACT_TEXT_MAX = 200
+
+/** 单条契约文本截断到 CONTRACT_TEXT_MAX 字符（模型仍可用 read_json 看完整 props） */
+export function clipContractText(text: string): string {
+  return text.length > CONTRACT_TEXT_MAX ? `${text.slice(0, CONTRACT_TEXT_MAX)}…` : text
+}
+
+/** props 契约段：结构化字段（name:type[选项]=默认）+ 自由说明（F3 缺口：此前完全缺失） */
+export function formatPropsContract(contract: { propsFields?: PropFieldDef[]; propsDoc?: string }): string {
+  const parts: string[] = []
+  if (contract.propsFields && contract.propsFields.length > 0) {
+    parts.push(
+      contract.propsFields
+        .map(
+          (f) =>
+            `${f.key}:${f.type}${f.options && f.options.length > 0 ? `[${f.options.join('|')}]` : ''}${
+              f.fallback !== undefined ? `=${JSON.stringify(f.fallback)}` : ''
+            }`,
+        )
+        .join('、'),
+    )
+  }
+  if (contract.propsDoc) parts.push(contract.propsDoc)
+  return parts.map(clipContractText).join('；')
+}
+
 /** F3（docs/40）：契约「值」就是负载/参数形状说明——只下发键名曾让 AI 猜错 payload 静默无效 */
 function contractSegment(entries: Record<string, string>): string {
   return Object.entries(entries)
-    .map(([k, v]) => `${k}(${v})`)
+    .map(([k, v]) => `${k}(${clipContractText(v)})`)
     .join('/')
 }
 
-/** 生命周期事件目录（与事件管理面板同源语义）：从零写逻辑时不再靠猜 */
-const LIFECYCLE_CATALOG = 'level.started（进入关卡一次）/ level.finished（结算，payload: score/passed）/ ' +
+/** 生命周期事件目录（与事件管理面板同源语义）：从零写逻辑时不再靠猜。read_doc 复用同一份目录 */
+export const LIFECYCLE_CATALOG =
+  'level.started（进入关卡一次）/ level.finished（结算，payload: score/passed）/ ' +
   'question.loaded（每行装载，payload: index/total/row）/ view.entered（切视图，payload: view）'
 
 function truncate(text: string, max: number): string {
@@ -144,9 +177,11 @@ export function buildEditorSystemPrompt(doc: LevelDoc, mode: 'ask' | 'plan' | 'a
     const events = contract ? contractSegment(contract.events) : ''
     const commands = contract ? contractSegment(contract.commands) : ''
     const queries = contract ? contractSegment(contract.queries) : ''
+    // F3（docs/42 §5.1）：props 契约（结构化字段 + 说明）此前完全缺失——AI 只能从示例猜测
+    const props = contract ? formatPropsContract(contract) : ''
     const view = c.view ?? doc.content.views[0]?.id ?? 'main'
     lines.push(
-      `- ${c.id}（${c.type}${contract ? `·${contract.displayName}` : ''}${c.name ? `·${c.name}` : ''}·视图 ${view}${c.visible === false ? '·隐藏' : ''}）事件: ${events || '无'} 命令: ${commands || '无'}${queries ? ` 查询: ${queries}` : ''}`,
+      `- ${c.id}（${c.type}${contract ? `·${contract.displayName}` : ''}${c.name ? `·${c.name}` : ''}·视图 ${view}${c.visible === false ? '·隐藏' : ''}）事件: ${events || '无'} 命令: ${commands || '无'}${queries ? ` 查询: ${queries}` : ''}${props ? ` 属性: ${props}` : ''}`,
     )
   }
 

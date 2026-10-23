@@ -858,7 +858,9 @@ function reachableSequence(prog: GraphProgram): GNode[] {
 
 export interface MergeResult {
   prog: GraphProgram
-  /** 旧图中可达（进序列）但未在新图找到特征配对的节点数——脚本改动重写的语句 */
+  /** 与旧图语句配对成功、继承旧 id（旧节点有坐标时连同 x/y）的节点数 */
+  kept: number
+  /** 新图中可达但未在旧图找到特征配对的节点数——脚本改动重写的语句（获得新 id、不继承坐标） */
   unmatched: number
   /** 旧图中不可达（未接线）的节点数——应用即丢弃 */
   dropped: number
@@ -867,6 +869,13 @@ export interface MergeResult {
 /**
  * 把 prev（应用前图）的节点 id 与坐标回填到 next（parseScript 产物）上。
  * 纯函数：不改 next/prev；id 替换同步映射全部边的端点。
+ *
+ * 合并结果必须自洽（docs/42 E1 返工）：
+ * - 节点 id 唯一：未配对的新节点保留 parse 产物 id 时，若与已映射的旧 id 撞车（旧图本身
+ *   也是上一次脚本产物时常见），分配 `${id}_${n}` 唯一 id 并同步改写其边端点；
+ * - 旧节点没有坐标时不写 x/y——显式 `x: undefined` 会被 JSON Schema 校验器拒绝，
+ *   表现为「脚本应用后无法保存」；
+ * - 合并后自检 id 唯一、无悬空边/自环，违反直接抛错（ScriptTab 阻止应用并显示原因）。
  */
 export function mergeScriptAnchors(next: GraphProgram, prev: GraphProgram): MergeResult {
   const prevSeq = reachableSequence(prev)
@@ -888,17 +897,62 @@ export function mergeScriptAnchors(next: GraphProgram, prev: GraphProgram): Merg
     if (prevNode) idMap.set(n.id, prevNode.id)
     else unmatched += 1
   }
-  const mapped = idMap.get.bind(idMap)
+
+  // 合并后 id 规划（docs/42 E1-b）：先占住全部旧 id（配对节点要继承它们），
+  // 未配对节点保留 parse id；与已占 id 冲突时改 `id_n`，直到唯一。
+  const finalIdOf = new Map<string, string>(idMap) // nextId → 合并后 id
+  const usedIds = new Set<string>(idMap.values())
+  for (const n of next.nodes) {
+    if (finalIdOf.has(n.id)) continue
+    let finalId = n.id
+    if (usedIds.has(finalId)) {
+      let n2 = 2
+      while (usedIds.has(`${n.id}_${n2}`)) n2 += 1
+      finalId = `${n.id}_${n2}`
+    }
+    usedIds.add(finalId)
+    finalIdOf.set(n.id, finalId)
+  }
+
+  const prevById = new Map(prev.nodes.map((p) => [p.id, p]))
   const nodes = next.nodes.map((n) => {
-    const prevId = mapped(n.id)
-    if (prevId === undefined) return n
-    const prevNode = prev.nodes.find((p) => p.id === prevId)!
-    return { ...n, id: prevId, x: prevNode.x, y: prevNode.y }
+    const finalId = finalIdOf.get(n.id)!
+    const prevId = idMap.get(n.id)
+    if (prevId === undefined) return finalId === n.id ? n : { ...n, id: finalId }
+    const prevNode = prevById.get(prevId)!
+    // 旧节点无坐标时不得写出显式 x: undefined（cfworker 校验器遇到 undefined 直接抛异常，
+    // 表现为脚本应用后保存失败——docs/42 §4.1）
+    return {
+      ...n,
+      id: finalId,
+      ...(prevNode.x !== undefined ? { x: prevNode.x } : {}),
+      ...(prevNode.y !== undefined ? { y: prevNode.y } : {}),
+    }
   })
+  // 边端点统一走 finalIdOf（含未配对的改名节点），保证不会留下指向 parse id 的悬空边
   const edges = next.edges.map((e) => ({
     ...e,
-    from: idMap.has(e.from) ? idMap.get(e.from)! : e.from,
-    to: idMap.has(e.to) ? idMap.get(e.to)! : e.to,
+    from: finalIdOf.get(e.from) ?? e.from,
+    to: finalIdOf.get(e.to) ?? e.to,
   }))
-  return { prog: { ...next, nodes, edges }, unmatched, dropped: prevUnreachable }
+
+  // 结构自检：合并算法一旦失效宁可拒绝应用（ScriptTab 显示错误），也不能把脏图写进文档
+  const finalIds = new Set<string>()
+  for (const n of nodes) {
+    if (finalIds.has(n.id)) {
+      throw new Error(`脚本合并结构自检失败：节点 id「${n.id}」重复——已阻止应用，请重新生成脚本后重试`)
+    }
+    finalIds.add(n.id)
+  }
+  for (const e of edges) {
+    if (!finalIds.has(e.from) || !finalIds.has(e.to)) {
+      throw new Error(
+        `脚本合并结构自检失败：连线 ${e.id} 的端点不存在（${e.from} → ${e.to}）——已阻止应用，请重新生成脚本后重试`,
+      )
+    }
+    if (e.from === e.to) {
+      throw new Error(`脚本合并结构自检失败：连线 ${e.id} 形成自环（${e.from}）——已阻止应用，请重新生成脚本后重试`)
+    }
+  }
+  return { prog: { ...next, nodes, edges }, kept: idMap.size, unmatched, dropped: prevUnreachable }
 }
