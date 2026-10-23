@@ -8,12 +8,14 @@
  * - 列宽/行高为编辑器内存态（不进文档 JSON，会话内保持）
  * 约束延续：单元格受控写回（删行/插行后不残留旧文本，评审 P1-2）。
  */
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { ColumnType, LevelDoc } from '../engine/level'
 import { FlowEditor } from './FlowEditor'
 import { ListEditorModal, listEntriesFromCell } from './ListEditor'
 import { registerModalOpen } from './keyGuard'
 import { DRAFT_SLOTS, loadDraft, saveDraft } from './draftStore'
+import { SCHEMA_LIMITS } from '../library/schemaLimits'
+import { Modal } from './Modal'
 import type { Json } from '../engine/expr'
 import {
   addTableColumn,
@@ -29,7 +31,7 @@ import {
 import { notesFromCell, notesToCell } from './graph/NoteChipsEditor'
 import { StaffEditorModal, StaffPreview } from './StaffEditor'
 
-const COLUMN_TYPES: { value: ColumnType; label: string }[] = [
+export const COLUMN_TYPES: { value: ColumnType; label: string }[] = [
   { value: 'text', label: '文本' },
   { value: 'number', label: '数字' },
   { value: 'boolean', label: '布尔' },
@@ -38,7 +40,7 @@ const COLUMN_TYPES: { value: ColumnType; label: string }[] = [
   { value: 'json', label: 'JSON 高级' },
 ]
 
-const DEFAULT_COL_W: Record<ColumnType, number> = { text: 180, number: 96, boolean: 72, notes: 260, list: 170, json: 200 }
+export const DEFAULT_COL_W: Record<ColumnType, number> = { text: 180, number: 96, boolean: 72, notes: 260, list: 170, json: 200 }
 const DEFAULT_ROW_H = 36
 const MIN_COL_W = 64
 const MIN_ROW_H = 28
@@ -81,6 +83,11 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
     }
   }
 
+  // D1：弹窗打开回调稳定化（CellEditor memo 的 props 前提）
+  const openJson = useCallback((row: number, colKey: string): void => setJsonCell({ row, key: colKey }), [])
+  const openStaff = useCallback((row: number, colKey: string): void => setStaffCell({ row, key: colKey }), [])
+  const openList = useCallback((row: number, colKey: string): void => setListCell({ row, key: colKey }), [])
+
   const onColResizeDown = (e: React.PointerEvent, key: string, type: ColumnType): void => {
     e.preventDefault()
     e.stopPropagation()
@@ -112,10 +119,16 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
   }
 
   // 逐键编辑的 text/number 单元格带连续性 tag（docs/40 B1）：同单元格的连续输入
-  // 在撤销栈中合并为一条；notes/list/json 走弹窗一次性 commit，无需 tag
-  const commitCell = (row: number, key: string, value: Json, tag?: string): void => {
-    onChange(updateTableCell(doc, row, { [key]: value }), tag)
-  }
+  // 在撤销栈中合并为一条；notes/list/json 走弹窗一次性 commit，无需 tag。
+  // docRef 让 commitCell 引用稳定（D1 memo 前提）——闭包 doc 会在每次编辑后失效
+  const docRef = useRef(doc)
+  docRef.current = doc
+  const commitCell = useCallback(
+    (row: number, key: string, value: Json, tag?: string): void => {
+      onChange(updateTableCell(docRef.current, row, { [key]: value }), tag)
+    },
+    [onChange],
+  )
 
   // staffCell 打开期间解析一次：合规 → 直接编辑谱面；不合规 → importRaw 走修复/导入通道
   const staffRaw = staffCell ? (doc.content.table.rows[staffCell.row]?.[staffCell.key] ?? null) : null
@@ -128,8 +141,13 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
         <span className="muted">
           每行一道题（行号即 v.__row，q.&lt;列名&gt; 指向当前行）。单元格按列类型结构化编辑，无需手写 JSON；拖列头右缘/行头下缘调宽高。
         </span>
-        <button type="button" onClick={() => onChange(addTableRow(doc))}>
-          + 添加行
+        <button
+          type="button"
+          disabled={table.rows.length >= SCHEMA_LIMITS.tableRows}
+          title={table.rows.length >= SCHEMA_LIMITS.tableRows ? `已达上限 ${SCHEMA_LIMITS.tableRows} 行（schema 约束）` : undefined}
+          onClick={() => onChange(addTableRow(doc))}
+        >
+          + 添加行{table.rows.length >= SCHEMA_LIMITS.tableRows ? '（已满）' : ''}
         </button>
       </div>
       <FlowEditor doc={doc} onChange={onChange} />
@@ -155,7 +173,8 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
                       <input
                         className="tgrid-key"
                         defaultValue={c.key}
-                        title={`列名（表达式 q.${c.key}）；改名后表达式旧引用由 lint 提示`}
+                        maxLength={SCHEMA_LIMITS.columnKeyMaxLength}
+                        title={`列名（表达式 q.${c.key}，≤${SCHEMA_LIMITS.columnKeyMaxLength} 字符）；改名后表达式旧引用由 lint 提示`}
                         onBlur={(e) => {
                           const key = e.currentTarget.value.trim()
                           if (key === c.key) return
@@ -179,7 +198,21 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
                         className="tgrid-type"
                         value={type}
                         title="列类型：决定单元格的编辑方式（切换不改写已存数据）"
-                        onChange={(e) => onChange(setTableColumnType(doc, c.key, e.target.value as ColumnType))}
+                        onChange={(e) => {
+                          const next = e.target.value as ColumnType
+                          if (next === type) return
+                          // D2（docs/40）：类型切换确认——非文本类型切换会改变单元格渲染与编辑方式
+                          const count = table.rows.filter((r) => r[c.key] !== null && r[c.key] !== undefined).length
+                          if (
+                            count > 0 &&
+                            !window.confirm(
+                              `把列「${c.key}」切换为「${COLUMN_TYPES.find((t) => t.value === next)?.label}」？
+该列已有 ${count} 行数据——切换只改变编辑方式，不改写数据；非文本旧数据会以修复入口呈现。`,
+                            )
+                          )
+                            return
+                          onChange(setTableColumnType(doc, c.key, next))
+                        }}
                       >
                         {COLUMN_TYPES.map((t) => (
                           <option key={t.value} value={t.value}>{t.label}</option>
@@ -209,7 +242,12 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
                     if (e.key === 'Enter') addColumn()
                   }}
                 />
-                <button type="button" onClick={addColumn}>
+                <button
+                  type="button"
+                  onClick={addColumn}
+                  disabled={table.columns.length >= SCHEMA_LIMITS.tableColumns}
+                  title={table.columns.length >= SCHEMA_LIMITS.tableColumns ? `已达上限 ${SCHEMA_LIMITS.tableColumns} 列（schema 约束）` : undefined}
+                >
                   + 列
                 </button>
               </th>
@@ -222,7 +260,24 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
                   <span className="tgrid-rownum" title={`第 ${i + 1} 题（v.__row = ${i}）`}>
                     {i + 1}
                   </span>
-                  <button type="button" className="ginsp-argdel" title={`删除第 ${i + 1} 行`} onClick={() => onChange(removeTableRow(doc, i))}>
+                  <button
+                    type="button"
+                    className="ginsp-argdel"
+                    title={`删除第 ${i + 1} 行`}
+                    onClick={() => {
+                      onChange(removeTableRow(doc, i))
+                      // D3（docs/40）：行高按行号键存——删行后整体前移一位，否则错位
+                      setRowH((cur) => {
+                        const next: Record<number, number> = {}
+                        for (const [k, v] of Object.entries(cur)) {
+                          const idx = Number(k)
+                          if (idx < i) next[idx] = v
+                          else if (idx > i) next[idx - 1] = v
+                        }
+                        return next
+                      })
+                    }}
+                  >
                     ×
                   </button>
                   <span
@@ -238,13 +293,15 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
                   <td key={c.key} className={`tgrid-cell tcell-${c.type ?? 'text'}`}>
                     <CellEditor
                       type={c.type ?? 'text'}
+                      row={i}
+                      colKey={c.key}
                       value={row[c.key] ?? null}
                       width={widthOf(c.key, c.type ?? 'text')}
                       height={heightOf(i)}
-                      onCommit={(v, tag) => commitCell(i, c.key, v, tag)}
-                      onOpenJson={() => setJsonCell({ row: i, key: c.key })}
-                      onOpenStaff={() => setStaffCell({ row: i, key: c.key })}
-                      onOpenList={() => setListCell({ row: i, key: c.key })}
+                      onCommit={commitCell}
+                      onOpenJson={openJson}
+                      onOpenStaff={openStaff}
+                      onOpenList={openList}
                     />
                   </td>
                 ))}
@@ -286,6 +343,7 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
       {listCell && (
         <ListEditorModal
           title={`编辑字符串列表 · 第 ${listCell.row + 1} 行 / ${listCell.key}`}
+          converting={!Array.isArray(doc.content.table.rows[listCell.row]?.[listCell.key])}
           value={listEntriesFromCell(doc.content.table.rows[listCell.row]?.[listCell.key] ?? null)}
           onCommit={(items) => {
             // 全部清空 → null（与 text 列「清空 = 无数据」语义一致）
@@ -303,19 +361,26 @@ export function TableEditor({ doc, onChange }: { doc: LevelDoc; onChange: (doc: 
 // 单元格编辑器（按列类型分派）
 // ---------------------------------------------------------------------------
 
-function CellEditor(props: {
+function CellEditorImpl(props: {
   type: ColumnType
+  row: number
+  colKey: string
   value: Json
   /** 所在列宽/行高（notes 迷你谱预览适配用） */
   width?: number
   height?: number
   /** 逐键编辑（text/number）时携带连续性 tag，撤销栈据此合并一次输入会话（docs/40 B1） */
-  onCommit: (v: Json, tag?: string) => void
-  onOpenJson: () => void
-  onOpenStaff: () => void
-  onOpenList: () => void
+  onCommit: (row: number, colKey: string, v: Json, tag?: string) => void
+  onOpenJson: (row: number, colKey: string) => void
+  onOpenStaff: (row: number, colKey: string) => void
+  onOpenList: (row: number, colKey: string) => void
 }): React.ReactElement {
-  const { type, value, onCommit } = props
+  const { type, value, row, colKey } = props
+  // D1（docs/40）：受控 memo——value 不变时打字/拖宽不重渲其它单元格
+  const onCommit = (v: Json, tag?: string): void => props.onCommit(row, colKey, v, tag)
+  const openJson = (): void => props.onOpenJson(row, colKey)
+  const openStaff = (): void => props.onOpenStaff(row, colKey)
+  const openList = (): void => props.onOpenList(row, colKey)
 
   if (type === 'boolean') {
     return (
@@ -329,9 +394,11 @@ function CellEditor(props: {
   }
 
   if (type === 'number') {
-    // 非标量值（历史脏数据/类型误标）不再 String() 出 [object Object]：回落 JSON 弹层修正
-    if (value !== null && value !== undefined && typeof value === 'object') {
-      return <JsonFallbackCell value={value} expect="数值" onOpenJson={props.onOpenJson} />
+    // D2（docs/40）：非 number 数据（object/boolean/字符串数字）一律回落修复入口——
+    // 此前 boolean/字符串被 String() 塞进 type=number，浏览器净化为空（显示空但数据还在）
+    const scalarBad = value !== null && value !== undefined && typeof value !== 'number'
+    if (scalarBad) {
+      return <JsonFallbackCell value={value} expect="数值" onOpenJson={openJson} />
     }
     const text = typeof value === 'number' ? String(value) : value === null || value === undefined ? '' : String(value)
     return (
@@ -358,7 +425,7 @@ function CellEditor(props: {
           type="button"
           className="tstaff tstaff-fix"
           title="该单元格不是标准音符数组——点击打开编辑器修复（可从文本导入，应用后替换）"
-          onClick={props.onOpenStaff}
+          onClick={openStaff}
         >
           <span className="tstaff-fix-text">⚠ 非标准音符数据 · 点击修复</span>
         </button>
@@ -366,7 +433,7 @@ function CellEditor(props: {
     }
     // 五线谱可视化（docs/27）：迷你谱预览（只显示一行，后面隐藏），点击打开谱面弹窗编辑
     return (
-      <button type="button" className="tstaff" title="点击编辑五线谱" onClick={props.onOpenStaff}>
+      <button type="button" className="tstaff" title="点击编辑五线谱" onClick={openStaff}>
         <StaffPreview notes={notes} width={props.width} height={Math.max(56, (props.height ?? 64) - 6)} />
       </button>
     )
@@ -377,7 +444,7 @@ function CellEditor(props: {
     const items = listEntriesFromCell(value)
     const summary = items.length === 0 ? '（空）' : items.join('、')
     return (
-      <button type="button" className="tlist-open" title="点击编辑字符串列表" onClick={props.onOpenList}>
+      <button type="button" className="tlist-open" title="点击编辑字符串列表" onClick={openList}>
         <span className="tlist-summary">{clip(summary, 90)}</span>
         <span className="tlist-count">{items.length} 项</span>
       </button>
@@ -390,7 +457,7 @@ function CellEditor(props: {
         <span className="tjson-text" title="JSON 高级列">
           {value === null || value === undefined ? '（空）' : clip(JSON.stringify(value))}
         </span>
-        <button type="button" onClick={props.onOpenJson}>
+        <button type="button" onClick={openJson}>
           编辑 JSON
         </button>
       </span>
@@ -400,7 +467,7 @@ function CellEditor(props: {
   // text（缺省）：字符串直存；清空 → null（与「无数据」语义一致）。
   // 非标量值（对象/数组）不再 String() 出 [object Object]：回落 JSON 弹层修正（docs/27）
   if (value !== null && value !== undefined && typeof value === 'object') {
-    return <JsonFallbackCell value={value} expect="文本" onOpenJson={props.onOpenJson} />
+    return <JsonFallbackCell value={value} expect="文本" onOpenJson={openJson} />
   }
   const text = value === null || value === undefined ? '' : String(value)
   return (
@@ -411,6 +478,20 @@ function CellEditor(props: {
     />
   )
 }
+
+/** D1：memo 化的单元格编辑器（比较只看数据性 props；回调经 useCallback 稳定） */
+export const CellEditor = memo(CellEditorImpl, (a, b) =>
+  a.type === b.type &&
+  a.row === b.row &&
+  a.colKey === b.colKey &&
+  a.value === b.value &&
+  a.width === b.width &&
+  a.height === b.height &&
+  a.onCommit === b.onCommit &&
+  a.onOpenJson === b.onOpenJson &&
+  a.onOpenStaff === b.onOpenStaff &&
+  a.onOpenList === b.onOpenList,
+)
 
 /** text/number 列遇到非标量旧数据：不静默破坏，引导走 JSON 高级弹层修 */
 function JsonFallbackCell(props: { value: Json; expect: string; onOpenJson: () => void }): React.ReactElement {
@@ -435,8 +516,7 @@ function JsonCellEditor(props: {
   const cell = props.doc.content.table.rows[props.row]?.[props.colKey]
   const [text, setText] = useState(() => (cell === undefined ? 'null' : JSON.stringify(cell, null, 2)))
   const [err, setErr] = useState('')
-  // 模态打开期间短路编辑器全局快捷键（Ctrl+Z/Delete，docs/40 B5）
-  useEffect(registerModalOpen, [])
+  void registerModalOpen // Modal 内部已注册（保留导入防误删）
 
   const apply = (): void => {
     const t = text.trim()
@@ -455,27 +535,26 @@ function JsonCellEditor(props: {
   }
 
   return (
-    <div
-      className="tjson-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) props.onClose()
-      }}
-    >
-      <div className="tjson-modal">
-        <div className="tjson-modal-head">
-          <b>
-            编辑 JSON · 第 {props.row + 1} 行 / {props.colKey}
-          </b>
+    <Modal
+      title={
+        <>
+          编辑 JSON · 第 {props.row + 1} 行 / {props.colKey}
+        </>
+      }
+      onClose={props.onClose}
+      actions={
+        <>
           <button type="button" onClick={props.onClose}>
             取消
           </button>
           <button type="button" className="primary" onClick={apply}>
             应用
           </button>
-        </div>
-        {err && <div className="tone-error">{err}</div>}
-        <textarea value={text} rows={12} onChange={(e) => setText(e.target.value)} spellCheck={false} />
-      </div>
-    </div>
+        </>
+      }
+    >
+      {err && <div className="tone-error">{err}</div>}
+      <textarea value={text} rows={12} onChange={(e) => setText(e.target.value)} spellCheck={false} autoFocus />
+    </Modal>
   )
 }

@@ -8,9 +8,10 @@
  * 纯函数（diatonic↔midi 换算 / 时序游标 / 音高步进）导出可单测。
  * 音符串时序模型：t 缺省接排（旋律），相同 t 同时响（和弦）——与运行时 scheduleNoteEvents 一致。
  */
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
 import { durToQuarters, playNotes } from '../runtime/audio'
+import { Modal } from './Modal'
 import { registerModalOpen } from './keyGuard'
 import { DUR_OPTIONS, parseNoteTokens, type PlayNote } from './graph/NoteChipsEditor'
 
@@ -224,20 +225,28 @@ function midiToVexKey(midi: number): string {
 // StaffPreview：数据表迷你谱（fitWidth 等比缩小，一行显示全部音符）
 // ---------------------------------------------------------------------------
 
-export function StaffPreview(props: { notes: PlayNote[]; width?: number; height?: number }): React.ReactElement {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (ref.current) {
-      drawStaff(ref.current, props.notes, {
-        width: props.width ?? 210,
-        height: props.height ?? 64,
-        fitWidth: props.width ?? 210,
-      })
-    }
-  }, [props.notes, props.width, props.height])
-  if (props.notes.length === 0) return <span className="tstaff-empty">（空）</span>
-  return <div ref={ref} className="tstaff-svg" />
-}
+/** D1（docs/40）：memo 化——拖列宽/无关编辑时不再全表 VexFlow 重绘。
+ *  notes 由 notesFromCell 每次生成新数组（引用恒变），按 JSON 值比较（≤64 音符，成本远低于重绘） */
+export const StaffPreview = memo(
+  function StaffPreview(props: { notes: PlayNote[]; width?: number; height?: number }): React.ReactElement {
+    const ref = useRef<HTMLDivElement>(null)
+    useEffect(() => {
+      if (ref.current) {
+        drawStaff(ref.current, props.notes, {
+          width: props.width ?? 210,
+          height: props.height ?? 64,
+          fitWidth: props.width ?? 210,
+        })
+      }
+    }, [props.notes, props.width, props.height])
+    if (props.notes.length === 0) return <span className="tstaff-empty">（空）</span>
+    return <div ref={ref} className="tstaff-svg" />
+  },
+  (a, b) =>
+    a.width === b.width &&
+    a.height === b.height &&
+    JSON.stringify(a.notes) === JSON.stringify(b.notes),
+)
 
 // ---------------------------------------------------------------------------
 // StaffEditorModal：五线谱弹窗编辑器（MuseScore 风格输入）
@@ -256,8 +265,7 @@ export function StaffEditorModal(props: {
   const [importErr, setImportErr] = useState('')
   const [dur, setDur] = useState('4n')
   const [dot, setDot] = useState(false)
-  // 模态打开期间短路编辑器全局快捷键（Ctrl+Z/Delete，docs/40 B5）
-  useEffect(registerModalOpen, [])
+  void registerModalOpen // Modal 内部已注册
   const [restMode, setRestMode] = useState(false)
   const [simultaneous, setSimultaneous] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
@@ -399,6 +407,10 @@ export function StaffEditorModal(props: {
       setImportErr('无法解析——请检查记法（音名或 MIDI 号，可带 :时值；r = 休止符）')
       return
     }
+    if (parsed.length > 64) {
+      setImportErr(`导入 ${parsed.length} 个音符超过单元格上限 64（schema 约束）——请分段录入`)
+      return
+    }
     setImportErr('')
     commit(parsed, parsed.length, null)
   }
@@ -486,22 +498,21 @@ export function StaffEditorModal(props: {
   })
 
   return (
-    <div
-      className="tjson-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) props.onClose()
-      }}
-    >
-      <div className="tjson-modal staff-modal">
-        <div className="tjson-modal-head">
-          <b>{props.title}</b>
+    <Modal
+      title={props.title}
+      onClose={props.onClose}
+      contentClassName="staff-modal"
+      actions={
+        <>
           <button type="button" onClick={props.onClose}>
             取消
           </button>
           <button type="button" className="primary" onClick={() => props.onCommit(draft)}>
             应用
           </button>
-        </div>
+        </>
+      }
+    >
         {props.importRaw !== undefined && (
           <div className="staff-import-warn">
             当前单元格数据不是标准音符数组（应用后将替换为下方谱面内容）。原始值：
@@ -578,10 +589,9 @@ export function StaffEditorModal(props: {
           </button>
         </div>
         <div className="staff-editor-score" onClick={addAtClick} ref={scoreRef} />
-        <p className="muted staff-editor-hint">
-          键盘输入（MuseScore 风格）：C–G = 音符（Shift+C–G = 与上一音同时）· 0 = 休止符 · 1–6 = 时值 · . = 附点 · ↑↓ = 上/下一音级 · +/- = 升/降半音 · ←→ = 移动光标 · Backspace/Delete = 删除 · Space = 试听；也可点击谱线加音、点击音符头选中
-        </p>
-      </div>
-    </div>
+      <p className="muted staff-editor-hint">
+        键盘输入（MuseScore 风格）：C–G = 音符（Shift+C–G = 与上一音同时）· 0 = 休止符 · 1–6 = 时值 · . = 附点 · ↑↓ = 上/下一音级 · +/- = 升/降半音 · ←→ = 移动光标 · Backspace/Delete = 删除 · Space = 试听；也可点击谱线加音、点击音符头选中
+      </p>
+    </Modal>
   )
 }

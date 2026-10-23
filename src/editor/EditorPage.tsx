@@ -32,6 +32,7 @@ import {
   updateComponent,
 } from './docState'
 import { findDuplicateIdErrors } from '../library/validate'
+import { SCHEMA_LIMITS } from '../library/schemaLimits'
 import { DRAFT_SLOTS, clearDraft, loadDraft, saveDraft } from './draftStore'
 
 type Tab = 'canvas' | 'graph' | 'script' | 'table' | 'json'
@@ -676,11 +677,20 @@ function EditorCanvas({
             <div className="palette-cat">{cat === 'music' ? '音乐' : cat === 'ui' ? '交互' : '隐形'}</div>
             {palette
               .filter((c) => c.category === cat)
-              .map((c) => (
-                <button key={c.type} type="button" onClick={() => onChange(addComponent(doc, c.type, currentView))}>
-                  + {c.displayName}
-                </button>
-              ))}
+              .map((c) => {
+                const full = doc.content.components.length >= SCHEMA_LIMITS.components
+                return (
+                  <button
+                    key={c.type}
+                    type="button"
+                    disabled={full}
+                    title={full ? `组件数已达上限 ${SCHEMA_LIMITS.components}（schema 约束）` : undefined}
+                    onClick={() => onChange(addComponent(doc, c.type, currentView))}
+                  >
+                    + {c.displayName}
+                  </button>
+                )
+              })}
           </div>
         ))}
       </div>
@@ -709,11 +719,16 @@ function EditorCanvas({
               </button>
             </span>
           ))}
-          <button type="button" onClick={() => {
-            const { doc: next, id } = addView(doc)
-            onChange(next)
-            setView(id)
-          }}>
+          <button
+            type="button"
+            disabled={doc.content.views.length >= SCHEMA_LIMITS.views}
+            title={doc.content.views.length >= SCHEMA_LIMITS.views ? `视图数已达上限 ${SCHEMA_LIMITS.views}（schema 约束）` : undefined}
+            onClick={() => {
+              const { doc: next, id } = addView(doc)
+              onChange(next)
+              setView(id)
+            }}
+          >
             + 视图
           </button>
           <span className="muted views-hint">互斥视图：运行时只渲染当前视图 · 随行刷新的数据展示请在节点图用 set 命令（question.loaded / view.entered）</span>

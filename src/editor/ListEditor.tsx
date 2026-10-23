@@ -3,8 +3,9 @@
  * 窄格内联输入与 JSON 直编。listEntriesFromCell 对任意旧值尽力转为可编辑条目
  * （数字/布尔/对象逐项 JSON 文本化）——类型切换后不再落「编辑 JSON」死胡同。
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { registerModalOpen } from './keyGuard'
+import { Modal } from './Modal'
 
 /** 单元格任意 Json 值 → 可编辑字符串条目（尽力转换，永不失败；null/undefined → 空列表） */
 export function listEntriesFromCell(v: unknown): string[] {
@@ -18,12 +19,13 @@ export function listEntriesFromCell(v: unknown): string[] {
 export function ListEditorModal(props: {
   title: string
   value: string[]
+  /** D2（docs/40）：原始单元格值不是字符串数组（历史脏数据/类型切换遗留）——应用将转换为文本列表 */
+  converting?: boolean
   onCommit: (items: string[]) => void
   onClose: () => void
 }): React.ReactElement {
   const [items, setItems] = useState<string[]>(props.value)
-  // 模态打开期间短路编辑器全局快捷键（Ctrl+Z/Delete，docs/40 B5）
-  useEffect(registerModalOpen, [])
+  void registerModalOpen // Modal 内部已注册
 
   const update = (i: number, text: string): void => setItems(items.map((x, j) => (j === i ? text : x)))
   const remove = (i: number): void => setItems(items.filter((_, j) => j !== i))
@@ -44,22 +46,21 @@ export function ListEditorModal(props: {
   }
 
   return (
-    <div
-      className="tjson-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) props.onClose()
-      }}
-    >
-      <div className="tjson-modal tlist-modal">
-        <div className="tjson-modal-head">
-          <b>{props.title}</b>
+    <Modal
+      title={props.converting ? `${props.title}（原数据将转换为文本列表）` : props.title}
+      onClose={props.onClose}
+      contentClassName="tlist-modal"
+      actions={
+        <>
           <button type="button" onClick={props.onClose}>
             取消
           </button>
           <button type="button" className="primary" onClick={() => props.onCommit(items)}>
             应用
           </button>
-        </div>
+        </>
+      }
+    >
         <div className="tlist-rows">
           {items.map((it, i) => (
             <div key={i} className="tlist-row">
@@ -91,13 +92,12 @@ export function ListEditorModal(props: {
           ))}
           {items.length === 0 && <p className="muted">还没有条目——点「+ 添加条目」创建第一项。</p>}
         </div>
-        <div className="tlist-foot">
-          <button type="button" onClick={add}>
-            + 添加条目
-          </button>
-          <span className="muted">回车 = 快速添加下一项 · 顺序即选择题选项顺序（choice.setOptions）</span>
-        </div>
+      <div className="tlist-foot">
+        <button type="button" onClick={add}>
+          + 添加条目
+        </button>
+        <span className="muted">回车 = 快速添加下一项 · 顺序即选择题选项顺序（choice.setOptions）</span>
       </div>
-    </div>
+    </Modal>
   )
 }
