@@ -1,9 +1,10 @@
 /**
- * G15（docs/40 / docs/44 R29–R30）：CSS 顶层重复/死声明守卫。
+ * G15（docs/40 / docs/44 R29–R32）：CSS 顶层重复/死声明守卫。
  *
  * - R29：删除「同选择器 + 完全相同声明」的重复规则（1020→1017 条顶层规则），零完全重复；
  * - R30：删除「同选择器、被后置规则完全覆盖」的 60 条死声明（非 !important、非 @media），
- *   本守卫重算同一分析并要求归零——新增同名覆盖规则时必须先清理旧声明，避免死代码回涨。
+ *   本守卫重算同一分析并要求归零——新增同名覆盖规则时必须先清理旧声明，避免死代码回涨；
+ * - R32：删除 `.level-canvas` 整条死规则（宽高/定位被 LevelStage 内联 style 与 `.stage-canvas` 完全覆盖）。
  * 残余：56 组同名选择器中的**不同属性/不同用途**冲突（如 base 与 .ge-dark/媒体查询），
  * 需人工分类 + 视觉矩阵，未在本守卫范围内。
  */
@@ -11,6 +12,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
+const levelStage = readFileSync(new URL('../runtime/LevelStage.tsx', import.meta.url), 'utf8')
 
 interface Rule {
   sel: string
@@ -84,6 +86,15 @@ describe('G15 CSS 重复/死声明守卫（docs/44 R29–R30）', () => {
       }
     }
     expect(dead, `存在被后置规则完全覆盖的死声明：\n${dead.join('\n')}`).toEqual([])
+  })
+
+  it('.level-canvas 死规则不再存在（被内联 style + .stage-canvas 完全覆盖）', () => {
+    // class 仍由 LevelRunner 传入，但几何完全由 LevelStage 内联 style 决定；
+    // 若内联几何被移除，本测试先失败，提醒重新评估是否需要恢复 .level-canvas 规则。
+    expect(css, '出现 .level-canvas 规则：请确认不是重新引入死样式').not.toMatch(/^\.level-canvas\s*\{/m)
+    expect(levelStage).toContain('width: STAGE_W')
+    expect(levelStage).toContain('height: STAGE_H')
+    expect(levelStage).toContain('left: fit.left')
   })
 
   it('花括号平衡（删除重复规则/死声明后结构完整）', () => {

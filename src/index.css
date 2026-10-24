@@ -554,14 +554,9 @@ input::placeholder {
   flex: none;
   font-variant-numeric: tabular-nums;
 }
-/* level-canvas-wrap 挂在 .stage-viewport 同一元素上（批次12 共享舞台），
-   滚动行为统一由 .stage-viewport 管理（见文件尾部分享舞台段），此处不再重复声明 */
-.level-canvas {
-  position: relative;
-  width: 800px;
-  height: 470px;
-  margin: 0 auto;
-}
+/* R32（G15 残余）：`.level-canvas` 规则已删除——该 class 仍由 LevelRunner 传入，
+   但 width/height/left 被 LevelStage 内联 style 覆盖、position 被后置 `.stage-canvas`
+   同特异性覆盖、absolute 下 margin:auto 无效，整条规则是历史残留。 */
 .level-foot {
   border-top: 1px solid var(--line);
   padding: var(--sp-2) var(--sp-3);
