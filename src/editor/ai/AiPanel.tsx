@@ -347,6 +347,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
             <button
               key={m}
               type="button"
+              data-testid={`ai-mode-tab-${m}`}
               className={`ai-mode-tab${session.mode === m ? ' active' : ''}`}
               title={MODE_META[m].tip}
               disabled={session.busy || session.mode === m}
@@ -359,6 +360,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
         {session.checkpointAt !== null && (
           <button
             type="button"
+            data-testid="ai-rollback"
             className="ai-panel-rollback"
             title="撤销本轮 AI 的全部修改：恢复到 agent 模式发送前的版本"
             onClick={rollback}
@@ -426,11 +428,12 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
         />
       )}
       {!session.plan && draftPlan && (
-        <div className="ai-plan-card">
+        <div className="ai-plan-card" data-testid="ai-plan-card">
           <div className="ai-plan-head">
             <span>执行计划（{draftPlan.items.length} 项）——勾选要执行的项</span>
             <button
               type="button"
+              data-testid="ai-plan-run"
               className="ai-plan-run"
               disabled={excluded.size === draftPlan.items.length}
               onClick={() => void executePlan()}
@@ -439,6 +442,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
             </button>
             <button
               type="button"
+              data-testid="ai-plan-abandon"
               className="ai-plan-abandon"
               title="放弃这份计划"
               onClick={() => setExcluded(new Set(draftPlan.items.map((_, i) => i)))}
@@ -446,7 +450,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
               放弃
             </button>
           </div>
-          <div className="ai-plan-items">
+          <div className="ai-plan-items" data-testid="ai-plan-items">
             {draftPlan.items.map((it, i) => (
               <label key={i} className="ai-plan-item">
                 <input
@@ -468,19 +472,20 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
         </div>
       )}
       {!session.plan && !draftPlan && lastAssistantText && session.mode === 'plan' && !session.busy && (
-        <div className="ai-plan-bar">
+        <div className="ai-plan-bar" data-testid="ai-plan-bar">
           <span>上方回复包含执行计划</span>
-          <button type="button" className="ai-plan-run" onClick={() => void executePlan()}>
+          <button type="button" className="ai-plan-run" data-testid="ai-plan-run" onClick={() => void executePlan()}>
             ▶ 执行计划
           </button>
         </div>
       )}
 
       {session.turnCapHit && !session.busy && (
-        <div className="ai-panel-capbar">
+        <div className="ai-panel-capbar" data-testid="ai-capbar">
           <span>已达单次任务轮数上限，任务还没跑完？</span>
           <button
             type="button"
+            data-testid="ai-cap-run"
             className="ai-panel-cap-run"
             title="以现有进度接着跑（轮数预算重置，不重复发消息）"
             disabled={!profile}
@@ -488,17 +493,18 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
           >
             ▶ 继续
           </button>
-          <button type="button" className="ai-panel-error-close" title="关闭" onClick={() => patchSession(doc.id, { turnCapHit: false })}>
+          <button type="button" className="ai-panel-error-close" data-testid="ai-cap-close" title="关闭" onClick={() => patchSession(doc.id, { turnCapHit: false })}>
             ×
           </button>
         </div>
       )}
 
       {session.error && (
-        <div className="ai-panel-error">
+        <div className="ai-panel-error" data-testid="ai-error">
           <span>{session.error}</span>
           <button
             type="button"
+            data-testid="ai-error-retry"
             className="ai-panel-error-retry"
             title="以现有对话重跑本轮（不重复发送刚才的消息）"
             disabled={session.busy || !profile}
@@ -506,7 +512,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
           >
             ↻ 重试
           </button>
-          <button type="button" className="ai-panel-error-close" title="关闭" onClick={() => patchSession(doc.id, { error: null })}>
+          <button type="button" className="ai-panel-error-close" data-testid="ai-error-close" title="关闭" onClick={() => patchSession(doc.id, { error: null })}>
             ×
           </button>
         </div>
@@ -558,7 +564,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
         </div>
       )}
 
-      <div className="ai-panel-form">
+      <div className="ai-panel-form" data-testid="ai-form">
         <input
           ref={fileInputRef}
           type="file"
@@ -572,6 +578,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
         />
         <button
           type="button"
+          data-testid="ai-attach"
           className="ai-attach-btn"
           title={`附加图片（也可直接 Ctrl+V 粘贴截图，最多 ${MAX_ATTACH_IMAGES} 张）`}
           disabled={!profile || pendingImages.length >= MAX_ATTACH_IMAGES}
@@ -627,6 +634,7 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
 
       {(session.usage || (session.turnCount ?? 0) > 0) && (
         <div
+          data-testid="ai-usage"
           className="ai-panel-usage"
           title="本会话累计 token 用量与本轮请求轮数（轮数在每次运行开始归零）"
         >
@@ -657,23 +665,23 @@ function PlanCard({
   const icon = (s: PlanItemStatus): string =>
     s === 'done' ? '✓' : s === 'in_progress' ? '→' : s === 'skipped' ? '—' : '○'
   return (
-    <div className="ai-plan-card">
+    <div className="ai-plan-card" data-testid="ai-plan-card">
       <div className="ai-plan-head">
         <span>
           {plan.status === 'done' ? '✅ 计划完成' : `⚙ 执行计划中（${done}/${plan.items.length}）`}
         </span>
         {onContinue && (
-          <button type="button" className="ai-plan-run" title="重发未完成的计划项" onClick={onContinue}>
+          <button type="button" className="ai-plan-run" data-testid="ai-plan-run" title="重发未完成的计划项" onClick={onContinue}>
             ▶ 继续执行
           </button>
         )}
         {onAbandon && (
-          <button type="button" className="ai-plan-abandon" title="放弃计划（已执行的修改用「↩ 回滚」撤销）" onClick={onAbandon}>
+          <button type="button" className="ai-plan-abandon" data-testid="ai-plan-abandon" title="放弃计划（已执行的修改用「↩ 回滚」撤销）" onClick={onAbandon}>
             放弃
           </button>
         )}
       </div>
-      <div className="ai-plan-items">
+      <div className="ai-plan-items" data-testid="ai-plan-items">
         {plan.items.map((it, i) => (
           <div key={i} className={`ai-plan-item st-${it.status}`}>
             <span className="ai-plan-icon">{icon(it.status)}</span>

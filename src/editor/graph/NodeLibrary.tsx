@@ -24,7 +24,7 @@ function TemplateButtons({ templates, onPick }: { templates: PaletteTemplate[]; 
         模板
       </div>
       {templates.map((tpl) => (
-        <button key={tpl.key} type="button" className="glib-item glib-item-tpl" title={tpl.desc} onClick={() => onPick(tpl)}>
+        <button key={tpl.key} type="button" data-testid={`palette-template-${tpl.key}`} className="glib-item glib-item-tpl" title={tpl.desc} onClick={() => onPick(tpl)}>
           ▸ {tpl.label}
         </button>
       ))}
@@ -54,7 +54,7 @@ export function NodeLibraryPanel({ groups, templates, onPick, onPickTemplate }: 
               {g.label}
             </div>
             {items.map((item) => (
-              <button key={item.key} type="button" className="glib-item" title={item.desc} onClick={() => onPick(item)}>
+              <button key={item.key} type="button" data-testid={`palette-item-${item.key}`} className="glib-item" title={item.desc} onClick={() => onPick(item)}>
                 {item.label}
               </button>
             ))}
@@ -115,6 +115,7 @@ export function NodeContextMenu({
                 <button
                   key={item.key}
                   type="button"
+                  data-testid={`palette-menu-item-${item.key}`}
                   className="glib-item"
                   title={item.desc}
                   onClick={() => {

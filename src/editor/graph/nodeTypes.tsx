@@ -67,6 +67,7 @@ function GraphCard({ data, selected }: NodeProps<GraphCardNode>) {
   return (
     <div
       className={`gnode ${selected ? 'is-selected' : ''} ${errors.length ? 'has-error' : ''} ${data.related ? 'is-related' : ''} ${data.paused ? 'is-paused' : ''} ${data.aihl ? 'is-aihl' : ''}`}
+      data-testid={`graph-card-${node.id}`}
       title={errors.length ? errors.join('\n') : data.aihl ? 'AI 高亮' : undefined}
     >
       {data.onToggleBp && (

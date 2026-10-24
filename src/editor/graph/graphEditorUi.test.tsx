@@ -124,20 +124,20 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     } as unknown as LevelDoc
 
     const errorIds = (c: HTMLElement): string[] =>
-      [...c.querySelectorAll('.react-flow__node')]
-        .filter((el) => el.querySelector('.gnode.has-error, .gnode-badge'))
-        .map((el) => (el as HTMLElement).dataset.id ?? '')
+      [...c.querySelectorAll('[data-testid^="graph-card-"]')]
+        .filter((el) => el.classList.contains('has-error') || el.querySelector('.gnode-badge') !== null)
+        .map((el) => (el.getAttribute('data-testid') ?? '').replace(/^graph-card-/, ''))
 
     const container = renderEl(<GraphEditor doc={doc} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
-    expect(container.querySelector('.react-flow__node[data-id="c_base"]')).toBeTruthy()
-    expect(container.querySelector('.react-flow__node[data-id="c_base2"]')).toBeTruthy()
-    expect(container.querySelector('.react-flow__node[data-id="c_myst"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="graph-card-c_base"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="graph-card-c_base2"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="graph-card-c_myst"]')).toBeTruthy()
     expect(errorIds(container)).not.toContain('c_base')
     expect(errorIds(container)).not.toContain('c_base2')
     expect(errorIds(container)).not.toContain('c_myst')
 
     const container2 = renderEl(<GraphEditor doc={bad} onChange={() => {}} aiOpen={false} onToggleAi={() => {}} />)
-    expect(container2.querySelector('.react-flow__node[data-id="c_base"]')).toBeTruthy()
+    expect(container2.querySelector('[data-testid="graph-card-c_base"]')).toBeTruthy()
     expect(errorIds(container2)).toContain('c_base')
   })
 
@@ -183,7 +183,7 @@ describe('GraphEditor（jsdom 冒烟）', () => {
       doc = next
     })
     const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
-    const card = [...container.querySelectorAll('.react-flow__node')].find((n) => (n as HTMLElement).dataset.id === 'on1')
+    const card = container.querySelector('[data-testid="graph-card-on1"]')
     expect(card).toBeTruthy()
     // 选中 on1（RF 发 select change → 宿主回填受控 nodes 的 selected）
     act(() => card!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
@@ -203,7 +203,7 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     })
     const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
     // 选中 as1（assign 节点 → Inspector 有表达式输入框）
-    const card = [...container.querySelectorAll('.react-flow__node')].find((n) => (n as HTMLElement).dataset.id === 'as1')!
+    const card = container.querySelector('[data-testid="graph-card-as1"]')!
     act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     // Inspector 出现（选中 on1）——事件表达式输入框聚焦时按 Delete 不删
     const input = container.querySelector('.ginsp input, .ginsp textarea') as HTMLElement | null
@@ -221,7 +221,7 @@ describe('GraphEditor（jsdom 冒烟）', () => {
       doc = next
     })
     const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
-    const card = [...container.querySelectorAll('.react-flow__node')].find((n) => (n as HTMLElement).dataset.id === 'on1')!
+    const card = container.querySelector('[data-testid="graph-card-on1"]')!
     act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     // 选中 on1 → Inspector 的事件下拉；聚焦下拉按删除键：修复前 SELECT 不在守卫清单，节点被误删
     const select = container.querySelector('.ginsp select') as HTMLSelectElement | null
@@ -366,7 +366,7 @@ function changeSelect(select: HTMLSelectElement, value: string): void {
 
 describe('工作台面板化（docs/29）', () => {
   const toggleBtn = (container: HTMLElement, label: string): HTMLButtonElement => {
-    const btn = [...container.querySelectorAll('.graph-toolbar .gtoggle')].find((b) => b.textContent?.includes(label))
+    const btn = [...container.querySelectorAll('[data-testid^="graph-panel-toggle-"]')].find((b) => b.textContent?.includes(label))
     if (!btn) throw new Error(`找不到面板切换按钮 ${label}`)
     return btn as HTMLButtonElement
   }

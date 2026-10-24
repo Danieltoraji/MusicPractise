@@ -1115,43 +1115,45 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
   return (
     <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`} data-testid="graph-editor">
       <div className="graph-toolbar">
-        <button type="button" className={`gtoggle${panelVisible('library') ? ' active' : ''}`} onClick={() => togglePanel('library')} title="组件库面板（节点/模板菜单）">
+        <button type="button" data-testid="graph-panel-toggle-library" className={`gtoggle${panelVisible('library') ? ' active' : ''}`} onClick={() => togglePanel('library')} title="组件库面板（节点/模板菜单）">
           🧩 组件库
         </button>
-        <button type="button" className={`gtoggle${panelVisible('events') ? ' active' : ''}`} onClick={() => togglePanel('events')} title="事件管理面板（系统/组件/内部事件 → 一键落节点）">
+        <button type="button" data-testid="graph-panel-toggle-events" className={`gtoggle${panelVisible('events') ? ' active' : ''}`} onClick={() => togglePanel('events')} title="事件管理面板（系统/组件/内部事件 → 一键落节点）">
           ⚡ 事件
         </button>
-        <button type="button" className={`gtoggle${panelVisible('vars') ? ' active' : ''}`} onClick={() => togglePanel('vars')} title="变量面板（声明/初值）">
+        <button type="button" data-testid="graph-panel-toggle-vars" className={`gtoggle${panelVisible('vars') ? ' active' : ''}`} onClick={() => togglePanel('vars')} title="变量面板（声明/初值）">
           🧮 变量
         </button>
-        <button type="button" className={`gtoggle${panelVisible('inspector') ? ' active' : ''}`} onClick={() => togglePanel('inspector')} title="节点属性面板">
+        <button type="button" data-testid="graph-panel-toggle-inspector" className={`gtoggle${panelVisible('inspector') ? ' active' : ''}`} onClick={() => togglePanel('inspector')} title="节点属性面板">
           ⚙ 属性
         </button>
-        <button type="button" className={`gtoggle${aiOpen ? ' active' : ''}`} onClick={onToggleAi} title="AI 助手面板（统一对话，随主题换肤）">
+        <button type="button" data-testid="graph-panel-toggle-ai" className={`gtoggle${aiOpen ? ' active' : ''}`} onClick={onToggleAi} title="AI 助手面板（统一对话，随主题换肤）">
           🤖 AI
         </button>
-        <button type="button" className={`gtoggle${panelVisible('debug') ? ' active' : ''}`} onClick={() => togglePanel('debug')} title="调试面板（断点/单步/变量观察与赋值/实时日志/手动触发事件；仅编辑器内可用）">
+        <button type="button" data-testid="graph-panel-toggle-debug" className={`gtoggle${panelVisible('debug') ? ' active' : ''}`} onClick={() => togglePanel('debug')} title="调试面板（断点/单步/变量观察与赋值/实时日志/手动触发事件；仅编辑器内可用）">
           🐞 调试
         </button>
         <span className="graph-tb-sep" aria-hidden />
-        <button type="button" onClick={() => apply((prog) => arrangeLayout(prog, 'all'))} title="按执行层级自动重排全部节点">
+        <button type="button" data-testid="graph-arrange-all" onClick={() => apply((prog) => arrangeLayout(prog, 'all'))} title="按执行层级自动重排全部节点">
           整理布局
         </button>
         <button
           type="button"
+          data-testid="graph-arrange-missing"
           onClick={() => apply((prog) => arrangeLayout(prog, 'missing'))}
           title="只给没有位置的节点补齐自动布局"
         >
           补齐新节点位置
         </button>
-        <button type="button" className={showScript ? 'active' : ''} onClick={() => setShowScript((v) => !v)} title="以伪代码只读视图查看当前逻辑">
+        <button type="button" data-testid="graph-toggle-script" className={showScript ? 'active' : ''} onClick={() => setShowScript((v) => !v)} title="以伪代码只读视图查看当前逻辑">
           查看脚本
         </button>
-        <button type="button" className={showLog ? 'active' : ''} onClick={() => setShowLog((v) => !v)} title="查看最近一次试运行的逻辑错误与命令轨迹">
+        <button type="button" data-testid="graph-toggle-log" className={showLog ? 'active' : ''} onClick={() => setShowLog((v) => !v)} title="查看最近一次试运行的逻辑错误与命令轨迹">
           运行日志{runLog.length > 0 ? `（${runLog.length}）` : ''}
         </button>
         <button
           type="button"
+          data-testid="graph-toggle-map"
           className={showMap ? 'active' : ''}
           onClick={() => {
             if (showMap) setMapFocus(null) // 收起即解除高亮（评审 P2-6）
@@ -1163,6 +1165,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
         </button>
         <button
           type="button"
+          data-testid="graph-toggle-summary"
           className={summaryMode === 'zh' ? 'active' : ''}
           title={summaryMode === 'zh' ? '节点摘要：中文模式（点击切回默认）' : '节点摘要：默认（点击切换为全中文）'}
           onClick={toggleSummary}
@@ -1171,6 +1174,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
         </button>
         <button
           type="button"
+          data-testid="graph-toggle-theme"
           title={theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'}
           onClick={toggleTheme}
         >
@@ -1178,6 +1182,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
         </button>
         <button
           type="button"
+          data-testid="graph-toggle-fullscreen"
           title="全屏运行工作台（Esc 退出）"
           onClick={() => {
             if (document.fullscreenElement) void document.exitFullscreen()
@@ -1191,7 +1196,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
         </span>
         <span className="graph-narrow-tip">窄屏：节点图可横向滚动查看面板，建议 ≥1280px</span>
         {lintIssues.length > 0 && (
-          <button type="button" className="graph-lint-count" onClick={() => setShowIssues((v) => !v)} title="点击查看问题列表">
+          <button type="button" className="graph-lint-count" data-testid="graph-lint-toggle" onClick={() => setShowIssues((v) => !v)} title="点击查看问题列表">
             ⚠ {lintIssues.length} 个问题
           </button>
         )}

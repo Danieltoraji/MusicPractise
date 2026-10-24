@@ -109,7 +109,7 @@ describe('运行归属（docs/42 §4.4 R5：布局切换不打断 AI，显式停
   }
 
   async function startRun(c: HTMLElement): Promise<void> {
-    const ta = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
+    const ta = c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement
     await type(ta, '帮我改关卡')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
@@ -121,7 +121,7 @@ describe('运行归属（docs/42 §4.4 R5：布局切换不打断 AI，显式停
     setKey()
     hangFetch()
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await flushUntil(() => c.querySelector('.ai-panel-form textarea') !== null)
+    await flushUntil(() => c.querySelector('[data-testid="ai-input"]') !== null)
     await startRun(c)
     // 卸载面板（模拟切 Tab / AI 启动调试后编辑布局 AiPanel 卸载）
     const idx = roots.length - 1
@@ -143,7 +143,7 @@ describe('运行归属（docs/42 §4.4 R5：布局切换不打断 AI，显式停
     setKey()
     hangFetch()
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await flushUntil(() => c.querySelector('.ai-panel-form textarea') !== null)
+    await flushUntil(() => c.querySelector('[data-testid="ai-input"]') !== null)
     await startRun(c)
     const stop = [...c.querySelectorAll('button')].find((b) => b.textContent === '停止') as HTMLButtonElement
     expect(stop).toBeTruthy()
@@ -182,7 +182,7 @@ describe('AiPanel（jsdom）', () => {
     const c = renderEl(
       <AiPanel doc={DOC} selection={{ tab: 'graph', nodeId: null, componentId: null, scriptRange: null }} onApplyDoc={vi.fn()} onClose={noop} />,
     )
-    const input = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
+    const input = c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
       setter.call(input, '这个关卡的逻辑是怎么走的？')
@@ -214,7 +214,7 @@ describe('AiPanel（jsdom）', () => {
     vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: 'hi' } }] })))
 
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    const input = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
+    const input = c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
       setter.call(input, '你好')
@@ -239,7 +239,7 @@ describe('AiPanel（jsdom）', () => {
     vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ error: { message: 'bad key' } }, 401)))
 
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    const input = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
+    const input = c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
       setter.call(input, '测试')
@@ -248,10 +248,10 @@ describe('AiPanel（jsdom）', () => {
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
-    await flushUntil(() => c.querySelector('.ai-panel-error') !== null)
-    expect(c.querySelector('.ai-panel-error')?.textContent).toContain('鉴权失败')
-    await act(async () => (c.querySelector('.ai-panel-error-close') as HTMLElement).click())
-    expect(c.querySelector('.ai-panel-error')).toBeNull()
+    await flushUntil(() => c.querySelector('[data-testid="ai-error"]') !== null)
+    expect(c.querySelector('[data-testid="ai-error"]')?.textContent).toContain('鉴权失败')
+    await act(async () => (c.querySelector('[data-testid="ai-error-close"]') as HTMLElement).click())
+    expect(c.querySelector('[data-testid="ai-error"]')).toBeNull()
   })
 })
 
@@ -270,12 +270,12 @@ describe('AiPanel agent 模式（批次2a）', () => {
   it('模式切换：agent 分段按钮切换会话模式并持久（按 doc.id）', () => {
     setKey()
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    const agentTab = [...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'agent') as HTMLButtonElement
+    const agentTab = [...c.querySelectorAll('[data-testid^="ai-mode-tab-"]')].find((b) => b.textContent === 'agent') as HTMLButtonElement
     act(() => agentTab.click())
     expect(getSession(DOC.id).mode).toBe('agent')
     expect(agentTab.classList.contains('active')).toBe(true)
     // 切回 ask
-    const askTab = [...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'ask') as HTMLButtonElement
+    const askTab = [...c.querySelectorAll('[data-testid^="ai-mode-tab-"]')].find((b) => b.textContent === 'ask') as HTMLButtonElement
     act(() => askTab.click())
     expect(getSession(DOC.id).mode).toBe('ask')
   })
@@ -285,7 +285,7 @@ describe('AiPanel agent 模式（批次2a）', () => {
     const fetchMock = vi.fn(async () => bodyResponse({ choices: [{ message: { content: '好的' } }] }))
     vi.stubGlobal('fetch', fetchMock)
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await type((c.querySelector(".ai-panel-form textarea") as HTMLTextAreaElement), '这个关卡是干嘛的')
+    await type((c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement), '这个关卡是干嘛的')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
@@ -324,8 +324,8 @@ describe('AiPanel agent 模式（批次2a）', () => {
     vi.stubGlobal('fetch', fetchMock)
     const c = renderEl(<AiPanel doc={original} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
     // 切 agent 模式
-    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'agent') as HTMLElement).click())
-    await type((c.querySelector(".ai-panel-form textarea") as HTMLTextAreaElement), '把初始分改成 100')
+    act(() => ([...c.querySelectorAll('[data-testid^="ai-mode-tab-"]')].find((b) => b.textContent === 'agent') as HTMLElement).click())
+    await type((c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement), '把初始分改成 100')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
@@ -374,17 +374,17 @@ describe('AiPanel agent 模式（批次2a）', () => {
       }),
     )
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'agent') as HTMLElement).click())
-    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '这个关卡怎么过')
+    act(() => ([...c.querySelectorAll('[data-testid^="ai-mode-tab-"]')].find((b) => b.textContent === 'agent') as HTMLElement).click())
+    await type(c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement, '这个关卡怎么过')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
-    await flushUntil(() => c.querySelector('.ai-panel-error') !== null)
+    await flushUntil(() => c.querySelector('[data-testid="ai-error"]') !== null)
     expect(getSession(DOC.id).checkpointAt).toBeNull() // 纯问答：无检查点、无回滚按钮
     expect(getCheckpoint(DOC.id)).toBeNull()
     // 重试（同样无写入）→ 仍不产生检查点（旧实现 retry 里补存）
     await act(async () => {
-      ;(c.querySelector('.ai-panel-error-retry') as HTMLButtonElement).click()
+      ;(c.querySelector('[data-testid="ai-error-retry"]') as HTMLButtonElement).click()
     })
     await flushUntil(() => c.textContent!.includes('只读回答2'))
     expect(getSession(DOC.id).checkpointAt).toBeNull()
@@ -405,12 +405,12 @@ describe('AiPanel agent 模式（批次2a）', () => {
       }),
     )
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'plan') as HTMLElement).click())
-    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '检查一下并验证')
+    act(() => ([...c.querySelectorAll('[data-testid^="ai-mode-tab-"]')].find((b) => b.textContent === 'plan') as HTMLElement).click())
+    await type(c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement, '检查一下并验证')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
-    await flushUntil(() => c.querySelector('.ai-plan-card') !== null)
+    await flushUntil(() => c.querySelector('[data-testid="ai-plan-card"]') !== null)
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '▶ 执行计划')!.click()
     })
@@ -450,8 +450,8 @@ describe('AiPanel agent 模式（批次2a）', () => {
       }),
     )
     const c = renderEl(<AiPanel doc={docA} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
-    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'agent') as HTMLElement).click())
-    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '第一次改')
+    act(() => ([...c.querySelectorAll('[data-testid^="ai-mode-tab-"]')].find((b) => b.textContent === 'agent') as HTMLElement).click())
+    await type(c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement, '第一次改')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
@@ -469,7 +469,7 @@ describe('AiPanel agent 模式（批次2a）', () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 20))
     })
-    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '第二次改')
+    await type(c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement, '第二次改')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
@@ -511,12 +511,12 @@ describe('AiPanel agent 模式（批次2a）', () => {
       }),
     )
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
-    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'plan') as HTMLElement).click())
-    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '改初始分')
+    act(() => ([...c.querySelectorAll('[data-testid^="ai-mode-tab-"]')].find((b) => b.textContent === 'plan') as HTMLElement).click())
+    await type(c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement, '改初始分')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
-    await flushUntil(() => c.querySelector('.ai-plan-card') !== null)
+    await flushUntil(() => c.querySelector('[data-testid="ai-plan-card"]') !== null)
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '▶ 执行计划')!.click()
     })
@@ -537,9 +537,9 @@ describe('AiPanel agent 模式（批次2a）', () => {
     patchSession(DOC.id, { mode: 'agent', checkpointAt: at, turnCapHit: true })
     vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: '续跑完成' } }] })))
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await flushUntil(() => c.querySelector('.ai-panel-capbar') !== null)
+    await flushUntil(() => c.querySelector('[data-testid="ai-capbar"]') !== null)
     await act(async () => {
-      ;(c.querySelector('.ai-panel-cap-run') as HTMLButtonElement).click()
+      ;(c.querySelector('[data-testid="ai-cap-run"]') as HTMLButtonElement).click()
     })
     await flushUntil(() => c.textContent!.includes('续跑完成'))
     // 旧实现 sendText 每次运行都会 saveCheckpoint → 基线被覆盖
@@ -587,12 +587,12 @@ describe('AiPanel plan 模式 + plan-act 工作流（批次2b 完成）', () => 
     vi.stubGlobal('fetch', fetchMock)
 
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={applyDoc} onClose={noop} />)
-    act(() => ([...c.querySelectorAll('.ai-mode-tab')].find((b) => b.textContent === 'plan') as HTMLElement).click())
-    await type((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement), '把初始分改成 100')
+    act(() => ([...c.querySelectorAll('[data-testid^="ai-mode-tab-"]')].find((b) => b.textContent === 'plan') as HTMLElement).click())
+    await type((c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement), '把初始分改成 100')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
-    await flushUntil(() => c.querySelector('.ai-plan-card') !== null)
+    await flushUntil(() => c.querySelector('[data-testid="ai-plan-card"]') !== null)
 
     // plan 请求体不含写工具
     const body1 = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as { body: string }).body)
@@ -659,7 +659,7 @@ describe('AiPanel 开场自动发送与预设（批次4）', () => {
     const kickoffDoc = blankLevelDoc()
     sessionStorage.setItem(`ai-kickoff:${kickoffDoc.id}`, JSON.stringify({ docId: kickoffDoc.id, prompt: '节奏训练关' }))
     const c = renderEl(<AiPanel doc={kickoffDoc} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    expect((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement).value).toBe('节奏训练关')
+    expect((c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement).value).toBe('节奏训练关')
     expect(getSession(kickoffDoc.id).mode).toBe('agent')
     expect(sessionStorage.getItem(`ai-kickoff:${kickoffDoc.id}`)).toBeNull()
   })
@@ -669,7 +669,7 @@ describe('AiPanel 开场自动发送与预设（批次4）', () => {
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
     const preset = [...c.querySelectorAll('.ai-preset')].find((b) => b.textContent?.includes('这个关卡的逻辑')) as HTMLButtonElement
     act(() => preset.click())
-    expect((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement).value).toContain('这个关卡的逻辑')
+    expect((c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement).value).toContain('这个关卡的逻辑')
   })
 })
 
@@ -724,7 +724,7 @@ describe('AI 回复 Markdown 渲染（批次7）', () => {
 
     vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: md } }] })))
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await type((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement), '审查')
+    await type((c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement), '审查')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
@@ -740,7 +740,7 @@ describe('AI 回复 Markdown 渲染（批次7）', () => {
     const evil = '<script>window.__pwned = 1</script>\n<img src=x onerror="window.__pwned = 2">\n正常文本'
     vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: evil } }] })))
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await type((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement), '看')
+    await type((c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement), '看')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
@@ -780,7 +780,7 @@ describe('AI 回复 Markdown 渲染（批次7）', () => {
       }),
     )
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await type((c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement), '发链接')
+    await type((c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement), '发链接')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
@@ -834,7 +834,7 @@ describe('用户附图（批次8a）', () => {
     const send = [...c.querySelectorAll('button')].find((b) => b.textContent === '发送') as HTMLButtonElement
     expect(send.disabled).toBe(false)
 
-    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '看这张图')
+    await type(c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement, '看这张图')
     await act(async () => {
       send.click()
     })
@@ -858,7 +858,7 @@ describe('用户附图（批次8a）', () => {
     clearSession(DOC.id)
     vi.stubGlobal('fetch', vi.fn(async () => bodyResponse({ choices: [{ message: { content: '好' } }] })))
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    const textarea = c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement
+    const textarea = c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement
     await act(async () => {
       textarea.dispatchEvent(pasteEvent([new File(['x'], 'clip.png', { type: 'image/png' })]))
     })
@@ -896,16 +896,16 @@ describe('会话治理（批次8c）', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '帮我看看')
+    await type(c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement, '帮我看看')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
-    await flushUntil(() => c.querySelector('.ai-panel-error') !== null)
-    expect(c.querySelector('.ai-panel-error')?.textContent).toContain('429')
+    await flushUntil(() => c.querySelector('[data-testid="ai-error"]') !== null)
+    expect(c.querySelector('[data-testid="ai-error"]')?.textContent).toContain('429')
     expect(getSession(DOC.id).messages.filter((m) => m.role === 'user')).toHaveLength(1)
 
     await act(async () => {
-      ;(c.querySelector('.ai-panel-error-retry') as HTMLButtonElement).click()
+      ;(c.querySelector('[data-testid="ai-error-retry"]') as HTMLButtonElement).click()
     })
     await flushUntil(() => c.textContent!.includes('重试成功。'))
     // user 消息没有因重试翻倍；错误条消失
@@ -924,7 +924,7 @@ describe('会话治理（批次8c）', () => {
       ),
     )
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
-    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '嗨')
+    await type(c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement, '嗨')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
@@ -967,24 +967,24 @@ describe('撞限续跑（轮数预算）', () => {
     vi.stubGlobal('fetch', fetchMock)
     const c = renderEl(<AiPanel doc={DOC} selection={{ tab: 'canvas' }} onApplyDoc={vi.fn()} onClose={noop} />)
     await act(async () => {
-      ;[...c.querySelectorAll<HTMLButtonElement>('.ai-mode-tab')].find((b) => b.textContent === 'agent')!.click()
+      ;[...c.querySelectorAll<HTMLButtonElement>('[data-testid^="ai-mode-tab-"]')].find((b) => b.textContent === 'agent')!.click()
     })
-    await type(c.querySelector('.ai-panel-form textarea') as HTMLTextAreaElement, '改点什么')
+    await type(c.querySelector('[data-testid="ai-input"]') as HTMLTextAreaElement, '改点什么')
     await act(async () => {
       ;[...c.querySelectorAll('button')].find((b) => b.textContent === '发送')!.click()
     })
-    await flushUntil(() => c.querySelector('.ai-panel-capbar') !== null)
-    expect(c.querySelector('.ai-panel-capbar')?.textContent).toContain('轮数上限')
+    await flushUntil(() => c.querySelector('[data-testid="ai-capbar"]') !== null)
+    expect(c.querySelector('[data-testid="ai-capbar"]')?.textContent).toContain('轮数上限')
     expect(getSession(DOC.id).turnCapHit).toBe(true)
 
     await act(async () => {
-      ;(c.querySelector('.ai-panel-cap-run') as HTMLButtonElement).click()
+      ;(c.querySelector('[data-testid="ai-cap-run"]') as HTMLButtonElement).click()
     })
     await flushUntil(() => c.textContent!.includes('接着跑完了。'))
     expect(getSession(DOC.id).turnCapHit).toBe(false)
     // user 消息没有因续跑翻倍；恢复条已消失
     expect(getSession(DOC.id).messages.filter((m) => m.role === 'user')).toHaveLength(1)
-    expect(c.querySelector('.ai-panel-capbar')).toBeNull()
+    expect(c.querySelector('[data-testid="ai-capbar"]')).toBeNull()
     // 首轮 32 次请求（撞限）+ 续跑 1 次（文本收尾）
     expect(fetchMock).toHaveBeenCalledTimes(33)
   })
