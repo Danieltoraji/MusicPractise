@@ -15,6 +15,7 @@ npm test                 # Vitest：引擎/运行时/编辑器/AI/资源库/云�
 npm run bench:update     # R11 写路径基准（373.8KB 混合 schema 满配，P50/P95；可 --json）
 npm run build            # tsc strict + Vite 生产构建
 npm run verify:dist      # R33：生产构建静态门禁（无内联 script / skin-boot 顺序 / CSP script-src self）
+npm run check:css-conflicts # R35：G15 同名选择器冲突分类（期望 0 重复/0 覆盖/0 值冲突）
 ```
 
 ## 功能一览
