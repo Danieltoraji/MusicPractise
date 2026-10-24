@@ -1,9 +1,11 @@
 /**
- * G15（docs/40 / docs/44 R29）：CSS 顶层「同选择器 + 完全相同声明」重复规则守卫。
+ * G15（docs/40 / docs/44 R29–R30）：CSS 顶层重复/死声明守卫。
  *
- * R29 审计：全文件 1020 条顶层规则中仅 3 组「选择器与声明完全一致」的重复（.badge.pass /
- * .ai-plan-run / .docs-article p,li），已删除；其余 56 组同名选择器多属**属性冲突**（不同值/
- * 不同用途），删除需视觉矩阵护航，留作残余（docs/44 §16）。
+ * - R29：删除「同选择器 + 完全相同声明」的重复规则（1020→1017 条顶层规则），零完全重复；
+ * - R30：删除「同选择器、被后置规则完全覆盖」的 60 条死声明（非 !important、非 @media），
+ *   本守卫重算同一分析并要求归零——新增同名覆盖规则时必须先清理旧声明，避免死代码回涨。
+ * 残余：56 组同名选择器中的**不同属性/不同用途**冲突（如 base 与 .ge-dark/媒体查询），
+ * 需人工分类 + 视觉矩阵，未在本守卫范围内。
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -13,6 +15,8 @@ const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
 interface Rule {
   sel: string
   body: string
+  /** 非 important 的声明属性名 */
+  props: string[]
 }
 
 /** 顶层（非 @media/@keyframes）规则解析：按花括号配对，忽略注释与空白差异 */
@@ -34,15 +38,23 @@ function topLevelRules(source: string): Rule[] {
     const rawSelector = source.slice(i, open)
     if (!rawSelector.includes('@')) {
       const sel = rawSelector.replace(/\/\*[\s\S]*?\*\//g, '').trim().replace(/\s+/g, ' ')
-      const body = source.slice(open + 1, j).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim()
-      if (sel && body) rules.push({ sel, body })
+      const bodyRaw = source.slice(open + 1, j)
+      const body = bodyRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim()
+      const props = bodyRaw
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split(';')
+        .map((part) => part.trim())
+        .filter((part) => part.includes(':') && !/!\s*important/i.test(part))
+        .map((part) => part.slice(0, part.indexOf(':')).trim())
+        .filter(Boolean)
+      if (sel && body) rules.push({ sel, body, props })
     }
     i = j + 1
   }
   return rules
 }
 
-describe('G15 CSS 重复规则守卫（docs/44 R29）', () => {
+describe('G15 CSS 重复/死声明守卫（docs/44 R29–R30）', () => {
   it('不存在「同选择器 + 完全相同声明」的顶层重复规则', () => {
     const rules = topLevelRules(css)
     expect(rules.length, '顶层规则数异常（CSS 结构被破坏？）').toBeGreaterThan(900)
@@ -55,7 +67,26 @@ describe('G15 CSS 重复规则守卫（docs/44 R29）', () => {
     expect(dups, `存在完全重复规则：${dups.join(' | ')}`).toEqual([])
   })
 
-  it('花括号平衡（删除重复规则后结构完整）', () => {
+  it('不存在被后置同选择器规则完全覆盖的非 important 死声明', () => {
+    const rules = topLevelRules(css)
+    const bySel = new Map<string, Rule[]>()
+    for (const r of rules) {
+      if (!bySel.has(r.sel)) bySel.set(r.sel, [])
+      bySel.get(r.sel)!.push(r)
+    }
+    const dead: string[] = []
+    for (const [sel, group] of bySel) {
+      for (let gi = 0; gi < group.length - 1; gi += 1) {
+        const laterProps = new Set(group.slice(gi + 1).flatMap((r) => r.props))
+        for (const prop of group[gi].props) {
+          if (laterProps.has(prop)) dead.push(`${sel} { ${prop} }`)
+        }
+      }
+    }
+    expect(dead, `存在被后置规则完全覆盖的死声明：\n${dead.join('\n')}`).toEqual([])
+  })
+
+  it('花括号平衡（删除重复规则/死声明后结构完整）', () => {
     const open = (css.match(/\{/g) ?? []).length
     const close = (css.match(/\}/g) ?? []).length
     expect(close).toBe(open)
