@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:dist": "node scripts/verify-dist.mjs",
+    "check:css-conflicts": "node scripts/css-conflicts.mjs",
     "bench:update": "node scripts/bench-update.mjs"
   },
   "dependencies": {
