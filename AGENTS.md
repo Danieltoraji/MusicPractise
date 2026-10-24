@@ -1,6 +1,6 @@
 # AGENTS.md — MusicPractise（音乐练习 UGC 平台）
 
-> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-24 由 ZCode 会话修订（docs/40 编辑器审计、docs/41 R1–R12 修复、docs/42 独立验收、docs/43 R13 返工、docs/44 后续批次 R14/R15/R16a/R16b/R17a/R17b1/R18/R19/R20/R21/R22/R23/R24/R25/R26/R27/R28/R29/R30/R31/R32 落地；测试基线 805 → 808 → 861 → 915 → 929 → 938 → 967 → 971 → 972 → 974 → 980 → 981 → 986 → 988 → 992 → 996 → 997 → 1001 → 1005 → 1008 → 1010 → 1011 → 1015 → **1016 项 / 113 文件**）。
+> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-24 由 ZCode 会话修订（docs/40 编辑器审计、docs/41 R1–R12 修复、docs/42 独立验收、docs/43 R13 返工、docs/44 后续批次 R14/R15/R16a/R16b/R17a/R17b1/R18/R19/R20/R21/R22/R23/R24/R25/R26/R27/R28/R29/R30/R31/R32/R33 落地；测试基线 805 → 808 → 861 → 915 → 929 → 938 → 967 → 971 → 972 → 974 → 980 → 981 → 986 → 988 → 992 → 996 → 997 → 1001 → 1005 → 1008 → 1010 → 1011 → 1015 → **1016 项 / 113 文件**）。
 
 ## 项目定位
 
@@ -9,7 +9,7 @@
 ## 命令与工程基线
 
 - `npm run dev` 纯前端（5173，`/api` 代理到 wrangler 8787）；`npm run dev:worker` 全栈（先 `npm run build`）；`npm run db:migrate:local` 本地 D1 迁移；`npm test`（Vitest）；`npm run build` = `tsc --noEmit && vite build`。
-- 质量门禁：全量测试全绿（现行基线 **1016 项 / 113 文件**，R32 后；历史见 docs/41/43/44；**全局 console 门禁已启用，非预期 console.error/warn 即失败**）+ `tsc`/`build` 干净（build 以 exit 0 + 无新增告警为准；vexflow >500kB 警告为已知项）+ 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环；写路径性能改动先跑 `npm run bench:update`（R11 门控，docs/44 §5）；编辑器交互新增/修改需同时补 `data-testid`（G3 契约，见 `src/test/g3Anchors.test.ts`）；双用 hook class 从 `src/editor/editorHooks.ts` 引用（G14 契约）。
+- 质量门禁：全量测试全绿（现行基线 **1016 项 / 113 文件**，R33 后；历史见 docs/41/43/44；**全局 console 门禁已启用，非预期 console.error/warn 即失败**）+ `tsc`/`build` 干净（build 以 exit 0 + 无新增告警为准；vexflow >500kB 警告为已知项）+ **生产构建静态门禁 `npm run verify:dist`（R33：无内联 script / skin-boot 顺序 / CSP script-src self）** + 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环；写路径性能改动先跑 `npm run bench:update`（R11 门控，docs/44 §5）；编辑器交互新增/修改需同时补 `data-testid`（G3 契约，见 `src/test/g3Anchors.test.ts`）；双用 hook class 从 `src/editor/editorHooks.ts` 引用（G14 契约）。
 - 设计/评审/落地记录按编号归档 `docs/`（如 docs/02 数据结构契约、docs/27 数据表 2.0、docs/31 后端、docs/36 UI 全量重设计、docs/37 运行时 UI 改造、docs/38 编辑器界面改造）；数据模型或接口变更须同步对应文档与契约表。
 
 ## 目录与架构要点
@@ -73,7 +73,7 @@
 - 合成事件（automation/测试）下 `setPointerCapture(假 pointerId)` 抛 InvalidPointerId 并中断后续处理器——EditorCanvas/GraphEditor 的拖拽入口已 try/catch 兜底；新写拖拽入口照 GraphEditor `startSplitDrag` 惯例（docs/40 R3）。
 - wrangler dev 的 TaskStop 杀不净子进程：8787 被热重载的旧实例占用时新实例被挤到 8789 且因本地 D1 SQLite 锁竞争崩溃，旧实例还可能在编辑中间态构建失败后带病服务——处置：`netstat -ano` 找 PID taskkill 清端口后重启（docs/39 H4）。
 - 对返回 Promise 的校验函数（如 `verifyPassword`，签名 (password, stored)）必须 await 且勿颠倒参数序——布尔语境漏 await 不报错、只会恒真放行（docs/39 H5 曾致加入密码校验被绕过，单测抓住）。
-- **生产 CSP 禁止内联脚本**：`script-src 'self'`（`public/_headers` + `worker/http.ts` 双通道）会拦截 `index.html` 内联 `<script>`；本地 Vite dev 无此头、容易误判「生效」——FOUC/引导脚本一律外置（现为 `public/skin-boot.js` + `%BASE_URL%`），并靠 `src/test/bootstrapSecurity.test.ts` 静态互锁防止回退（docs/43）。
+- **生产 CSP 禁止内联脚本**：`script-src 'self'`（`public/_headers` + `worker/http.ts` 双通道）会拦截 `index.html` 内联 `<script>`；本地 Vite dev 无此头、容易误判「生效」——FOUC/引导脚本一律外置（现为 `public/skin-boot.js` + `%BASE_URL%`），并靠 `src/test/bootstrapSecurity.test.ts` 静态互锁防止回退（docs/43）；**构建产物另由 `npm run verify:dist` 守卫（无内联 script/skin-boot 顺序/CSP/资源存在，R33）**，发布前必须跑。
 - **脚本页锚点合并是启发式**：`mergeScriptAnchors` 按语句特征配对，仅对「配对成功且旧节点有坐标」的节点保留 id/x/y；二次编辑 s 前缀旧图、重排/插入/删除可能产生 id 冲突——合并后必须保证 id 唯一、无悬空边/自环，并在合并后跑 `loadLevelDoc` 预检（曾因写出 `x: undefined` 使保存/AI 写入全部失败，docs/42 §4.1）。
 - **内置副本保存 = 文档身份迁移**：内置示例另存副本换 id 时，必须同步迁移按 docId 键控的状态（AI session/checkpoint/draftStore/runLog）、重映射撤销栈身份、切换 `activeId` 且 record 查询跟随；否则出现假「外部修改」横幅、undo 回退到内置 id、再保存建第二份副本（docs/42 §4.6）。
 - **AI 写冲突检测依赖 revision**：宿主必须给 AiPanel 传 `getRevision`/`getLiveDoc`；只给引用快照会因 React 提交时序漏检（旧 `lastSeenExternal` 方案已被 docs/42 动态证伪）。新增写工具仍必须走 `applyAndCheck`（mutate→loadLevelDoc→applyDoc）。
@@ -93,7 +93,7 @@
 
 ## 待办与搁置（2026-10-23 修订）
 
-- **R13 后仍开放（后续批次见 docs/44）**：G2 `.ge-dark` 剩余结构性收敛与视觉矩阵（R17a 语义 token 层 + R17b1 单色规则首批收敛：17 选择器提升、选择器行 158→143、预算 ≤143 防回涨；像素矩阵仍外依赖）、G3 视觉回归（R15 起步、**R21 锚点扩到 127 处/静态唯一 52 并加静态契约**；视觉 smoke 仍外依赖）、H2 视觉覆盖（R15 canvas 噪音清零、**R20 全局 console 门禁已闭环**；浏览器视觉矩阵仍外依赖）、G4/G5 已由 R22 落地、G13/G14 已由 R23 落地、G10/G12 已由 R24 落地、G6/G8 已由 R25 落地、G11 主要项已由 R26 落地（选中态伪元素/边阴影重构仍开放）、G7 已由 R27 闭环、G9 已由 R28 落地、**G15 已由 R29–R30/R32 清理完全重复规则/死声明/.level-canvas（56 组冲突组仍开放）**、**I7–I16 文档漂移已由 R31 校正**、编辑器移动端适配。**R16a/R16b 已闭环 F8/F13/F18/F19/F9/E18/O2/A5/F6**，**D1 已由 R14 闭环**，**R18/R11 热路径 patch 化已完成**（基准 P95 0.02–0.03ms；增删/整表深拷贝为残余；bundle 评估暂不改造，docs/44 §5），**R19 已闭环 F10/O9**（docs/44 §6），**R20 已闭环 H2 console 门禁**（docs/44 §7），**R21 已落地 G3 锚点增量**（docs/44 §8），**R22 已落地 G4/G5 机制**（docs/44 §9），**R23 已落地 G13/G14**（docs/44 §10），**R24 已落地 G10/G12 机制**（docs/44 §11），**R25 已落地 G6/G8**（docs/44 §12），**R26 已落地 G11 主要项**（docs/44 §13），**R27 已闭环 G7**（docs/44 §14），**R28 已落地 G9 机制**（docs/44 §15），**R29–R30 已落地 G15 清理**（docs/44 §16–§17），**R31 已落地文档互锁 + docs/45 外部门禁清单**（docs/44 §18），**R32 已落地 G15 .level-canvas 清理**（docs/44 §19）；R17b2（剩余收敛+视觉矩阵）待外依赖。
+- **R13 后仍开放（后续批次见 docs/44）**：G2 `.ge-dark` 剩余结构性收敛与视觉矩阵（R17a 语义 token 层 + R17b1 单色规则首批收敛：17 选择器提升、选择器行 158→143、预算 ≤143 防回涨；像素矩阵仍外依赖）、G3 视觉回归（R15 起步、**R21 锚点扩到 127 处/静态唯一 52 并加静态契约**；视觉 smoke 仍外依赖）、H2 视觉覆盖（R15 canvas 噪音清零、**R20 全局 console 门禁已闭环**；浏览器视觉矩阵仍外依赖）、G4/G5 已由 R22 落地、G13/G14 已由 R23 落地、G10/G12 已由 R24 落地、G6/G8 已由 R25 落地、G11 主要项已由 R26 落地（选中态伪元素/边阴影重构仍开放）、G7 已由 R27 闭环、G9 已由 R28 落地、**G15 已由 R29–R30/R32 清理完全重复规则/死声明/.level-canvas（56 组冲突组仍开放）**、**I7–I16 文档漂移已由 R31 校正**、编辑器移动端适配。**R16a/R16b 已闭环 F8/F13/F18/F19/F9/E18/O2/A5/F6**，**D1 已由 R14 闭环**，**R18/R11 热路径 patch 化已完成**（基准 P95 0.02–0.03ms；增删/整表深拷贝为残余；bundle 评估暂不改造，docs/44 §5），**R19 已闭环 F10/O9**（docs/44 §6），**R20 已闭环 H2 console 门禁**（docs/44 §7），**R21 已落地 G3 锚点增量**（docs/44 §8），**R22 已落地 G4/G5 机制**（docs/44 §9），**R23 已落地 G13/G14**（docs/44 §10），**R24 已落地 G10/G12 机制**（docs/44 §11），**R25 已落地 G6/G8**（docs/44 §12），**R26 已落地 G11 主要项**（docs/44 §13），**R27 已闭环 G7**（docs/44 §14），**R28 已落地 G9 机制**（docs/44 §15），**R29–R30 已落地 G15 清理**（docs/44 §16–§17），**R31 已落地文档互锁 + docs/45 外部门禁清单**（docs/44 §18），**R32 已落地 G15 .level-canvas 清理**（docs/44 §19），**R33 已落地生产构建静态门禁 verify:dist**（docs/44 §20）；R17b2（剩余收敛+视觉矩阵）待外依赖。
 - **云盘共享与关卡库已全部落地（docs/39，H1–H6）**：资源库文件管理器、云盘文件夹化、公共/精选/官方/群组关卡库、申请公开审核、admin 审核队列与官方/群组管理。后续候选：下载排行榜/排序参数、通知系统、拖拽整理、移动端适配（延续 docs/38 口径）。
 - Bundle 瘦身已部分落地（vexflow/smplr/pitchy/fflate 惰性或动态 import、react vendor chunk，见 vite.config.ts；主包峰值曾 1.83MB/gzip ~906KB，目标 gzip ~450–550KB）；MusicXML 导入未启动。
 - 移动端适配：游玩舞台已适配（批次12 fit-scale + 触屏），**编辑器等重交互表面的移动端适配未启动**（docs/38 裁决不纳入，当前为 0）。
