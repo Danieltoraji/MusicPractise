@@ -37,7 +37,7 @@ import {
   setMeta,
   updateComponent,
 } from './docState'
-import { findDuplicateIdErrors } from '../library/validate'
+import { findDuplicateIdErrors, lintLoadedLevel } from '../library/validate'
 import { SCHEMA_LIMITS } from '../library/schemaLimits'
 import { DRAFT_SLOTS, isDraftStale, loadDraft, renameDrafts, saveDraft } from './draftStore'
 import type { JsonDraft } from './draftStore'
@@ -172,9 +172,9 @@ export function EditorPage({ id }: Props) {
       setDoc(migrated)
       setLoadError(null)
       baselineVersionRef.current = String((record as LibraryRecord).version ?? '')
-      // 装载宽松告警（D5）：重复 id 不拦截（「先放行后清洗」铁律），提示待保存时修正——
-      // 保存路径走 loadLevelDoc 严格拦截
-      setLintWarnings(findDuplicateIdErrors(migrated))
+      // 装载宽松告警（D5/F6）：重复 id 不拦截（「先放行后清洗」铁律），但 flow.pass/图 lint/
+      // 悬空视图等运行时静默失效问题与保存路径同口径提示（此前装载只报重复 id）
+      setLintWarnings([...findDuplicateIdErrors(migrated), ...lintLoadedLevel(migrated)])
       bumpRevision()
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
@@ -538,7 +538,7 @@ export function EditorPage({ id }: Props) {
                 setDirty(false)
                 dirtyRef.current = false
                 setSavedTip('')
-                setLintWarnings(findDuplicateIdErrors(migrated))
+                setLintWarnings([...findDuplicateIdErrors(migrated), ...lintLoadedLevel(migrated)])
               } catch (err) {
                 setSaveErrors([`外部版本装载失败：${err instanceof Error ? err.message : String(err)}`])
               }

@@ -39,8 +39,18 @@ export interface AiProfileConfig {
   apiKey: string
 }
 
-/** aborted = 调用方已停止（R5/F5：进入 fetch 前预检 signal，避免「停止后仍发起新请求」） */
-export type AiErrorKind = 'bad-config' | 'network' | 'auth' | 'rate-limit' | 'server' | 'bad-request' | 'response' | 'aborted'
+/** aborted = 调用方已停止（R5/F5：进入 fetch 前预检 signal，避免「停止后仍发起新请求」）
+ *  timeout = 连接/首字节/流式空闲超时（F13：与调用方中止、普通网络错误区分，给可读诊断） */
+export type AiErrorKind =
+  | 'bad-config'
+  | 'network'
+  | 'auth'
+  | 'rate-limit'
+  | 'server'
+  | 'bad-request'
+  | 'response'
+  | 'aborted'
+  | 'timeout'
 
 export class AiClientError extends Error {
   readonly kind: AiErrorKind
@@ -56,8 +66,10 @@ export class AiClientError extends Error {
 
 export interface ChatCompleteOptions {
   signal?: AbortSignal
-  /** 毫秒，默认 60s；超时以 AbortError 形式归入 network 类 */
+  /** 连接/首字节超时（毫秒，默认 60s）；触发后抛 AiClientError kind='timeout' */
   timeoutMs?: number
+  /** 流式空闲超时（毫秒，默认 30s）：两次增量之间允许的最长间隔；触发后 kind='timeout' */
+  idleTimeoutMs?: number
   temperature?: number
   /** 限制补全长度（测试连接用小值） */
   maxTokens?: number
@@ -185,9 +197,29 @@ export async function chatCompleteRaw(
   if (opts.signal?.aborted) throw new AiClientError('aborted', '已停止。')
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000)
+  const connectTimeoutMs = opts.timeoutMs ?? 60_000
+  const idleTimeoutMs = opts.idleTimeoutMs ?? 30_000
+  // F13：区分「连接/首字节超时」与「流式空闲超时」——前者覆盖 fetch 到首块之前，
+  // 后者在每次收到增量后重置；两者都通过 abort 打断底层读取，再按阶段映射可读错误。
+  let timeoutPhase: 'connect' | 'idle' | null = null
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const arm = (phase: 'connect' | 'idle', ms: number): void => {
+    if (timer !== undefined) clearTimeout(timer)
+    timer = setTimeout(() => {
+      timeoutPhase = phase
+      controller.abort()
+    }, ms)
+  }
+  const timeoutError = (): AiClientError => {
+    const ms = timeoutPhase === 'idle' ? idleTimeoutMs : connectTimeoutMs
+    const sec = Math.max(1, Math.round(ms / 1000))
+    return timeoutPhase === 'idle'
+      ? new AiClientError('timeout', `响应超时：连续 ${sec} 秒没有收到新的流式数据（供应商可能已断流或代理超时），请重试`)
+      : new AiClientError('timeout', `请求超时：${sec} 秒内没有建立连接或收到首字节（网络慢或供应商无响应），请重试`)
+  }
   const forward = () => controller.abort()
   opts.signal?.addEventListener('abort', forward)
+  arm('connect', connectTimeoutMs)
 
   try {
     let res: Response
@@ -209,8 +241,10 @@ export async function chatCompleteRaw(
         signal: controller.signal,
       })
     } catch (err) {
-      // fetch 抛 TypeError 基本是断网 / DNS / CORS 拦截——静态站无法区分，给出统一绕行建议
+      // 调用方主动停止优先：保持原有 AbortError 透传语义（agent/面板据此显示「已停止」）
       if (opts.signal?.aborted) throw err
+      if (timeoutPhase !== null) throw timeoutError()
+      // fetch 抛 TypeError 基本是断网 / DNS / CORS 拦截——静态站无法区分，给出统一绕行建议
       throw new AiClientError(
         'network',
         '无法连接到供应商（可能是网络不通，或该服务不允许浏览器跨域直连）。' +
@@ -219,11 +253,31 @@ export async function chatCompleteRaw(
     }
     await raiseForResponse(res)
 
+    // F13：首字节到达后不再用「总时长」卡住长回复——每收到一块增量重置空闲计时
+    arm('idle', idleTimeoutMs)
     if (opts.stream === true) {
-      return await consumeSseStream(res, opts)
+      try {
+        return await consumeSseStream(res, opts, {
+          signal: controller.signal,
+          onActivity: () => arm('idle', idleTimeoutMs),
+        })
+      } catch (err) {
+        if (err instanceof AiClientError) throw err
+        if (opts.signal?.aborted) throw err
+        if (timeoutPhase !== null) throw timeoutError()
+        // 保留底层错误详情便于诊断（agent.test 既有断言依赖原文），外层给可读中文
+        const detail = err instanceof Error && err.message ? `（${err.message}）` : ''
+        throw new AiClientError('network', `流式响应读取中断${detail}：网络断开或代理超时，请重试`)
+      }
     }
 
-    const data = (await res.json().catch(() => null)) as ChatResponseShape | null
+    let data: ChatResponseShape | null = null
+    try {
+      data = (await res.json()) as ChatResponseShape
+    } catch {
+      if (timeoutPhase !== null) throw timeoutError()
+      // 非 JSON/响应体读取失败：交给下面的「无法解析」错误统一处理
+    }
     const message = data?.choices?.[0]?.message
     const content = typeof message?.content === 'string' ? message.content : ''
     const toolCalls = parseToolCalls(message?.tool_calls)
@@ -232,7 +286,7 @@ export async function chatCompleteRaw(
     }
     return { content, toolCalls, usage: parseUsage(data?.usage) }
   } finally {
-    clearTimeout(timer)
+    if (timer !== undefined) clearTimeout(timer)
     opts.signal?.removeEventListener('abort', forward)
   }
 }
@@ -251,6 +305,7 @@ interface SseDelta {
 async function consumeSseStream(
   res: Response,
   opts: { onDelta?: (delta: string) => void },
+  hooks: { signal?: AbortSignal; onActivity?: () => void } = {},
 ): Promise<ChatCompletionResult> {
   if (!res.body) throw new AiClientError('response', '供应商流式响应没有内容体')
   const reader = res.body.getReader()
@@ -259,6 +314,29 @@ async function consumeSseStream(
   let content = ''
   let usage: ChatUsage | undefined
   const toolAcc = new Map<number, { id: string; function: { name: string; arguments: string } }>()
+
+  /**
+   * F13：读取与 abort 竞速——底层 body 在部分环境/供应商实现里不会因 fetch signal 中止
+   * 而立即 reject，若只等 reader.read()，空闲超时后仍可能永久挂起。
+   */
+  const readWithAbort = async (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+    const signal = hooks.signal
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const readPromise = reader.read()
+    if (!signal) return readPromise
+    // 竞速失败方（abort 后的 readPromise）可能稍后 reject：挂接 catch 防未处理拒绝
+    void readPromise.catch(() => {})
+    let onAbort: (() => void) | undefined
+    const aborted = new Promise<never>((_, reject) => {
+      onAbort = () => reject(new DOMException('Aborted', 'AbortError'))
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+    try {
+      return await Promise.race([readPromise, aborted])
+    } finally {
+      if (onAbort) signal.removeEventListener('abort', onAbort)
+    }
+  }
 
   const handleChunk = (chunkText: string): void => {
     for (const rawLine of chunkText.split('\n')) {
@@ -292,9 +370,11 @@ async function consumeSseStream(
 
   try {
     for (;;) {
-      const { done, value } = await reader.read()
+      const { done, value } = await readWithAbort()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
+      // F13：收到数据即重置空闲计时（首块后 arm('idle')；后续每块续命）
+      hooks.onActivity?.()
       const nl = buffer.lastIndexOf('\n')
       if (nl === -1) continue
       handleChunk(buffer.slice(0, nl + 1))

@@ -68,7 +68,11 @@ export function validateEnvelope(
   try {
     const result = validatorFor(kind as ResourceKind).validate(doc)
     if (result.valid) return { ok: true, errors: [] }
-    return { ok: false, errors: formatSchemaErrors(result.errors) }
+    // A5（docs/43 §7 / docs/44 R16）：按文档实际 schemaVersion 选 oneOf 分支——
+    // 此前 v1 旧档校验失败也优先展示 v3 分支错误（字段名对不上，作者无法定位）
+    const version = (doc as { schemaVersion?: unknown } | null)?.schemaVersion
+    const prefer = version === 1 ? 'v1' : version === 3 ? 'v3' : undefined
+    return { ok: false, errors: formatSchemaErrors(result.errors, prefer) }
   } catch (err) {
     // cfworker 遇到 undefined 属性值会直接抛「Instances of "undefined" type are not supported」
     // （docs/42 §4.1：脚本合并曾写出显式 x: undefined，保存/AI 写入全被裸异常击穿）。
@@ -108,7 +112,10 @@ function formatInstanceLocation(loc: string): string {
   m = /^\/content\/views\/(\d+)(.*)$/.exec(p)
   if (m) return `视图第 ${Number(m[1]) + 1} 项${formatRest(m[2])}`
   if (p.startsWith('/meta')) return `元信息${formatRest(p.slice(5))}`
-  return p === '/' || p === '' ? '文档根' : formatRest(p)
+  if (p === '/' || p === '') return '文档根'
+  // 文档根级/未知路径：去掉开头分隔符，避免错误行以「 · 」开头（docs/43 A5 遗留）
+  const rest = formatRest(p)
+  return rest.startsWith(' · ') ? rest.slice(3) : rest
 }
 
 /** 段内剩余路径 `/notes/0/dur` → ` · notes[0] · dur`（段太长直接保留原样） */
@@ -141,17 +148,38 @@ const KEYWORD_LABEL: Record<string, string> = {
 /** 中间结构包装行（无用户价值）：oneOf/$ref/properties/items 只描述「子模式有错」的过程 */
 const WRAPPER_KEYWORDS = new Set(['oneOf', '$ref', 'properties', 'items'])
 
-function formatSchemaErrors(errors: { keyword: string; instanceLocation: string; keywordLocation: string; error: string }[]): string[] {
+function formatSchemaErrors(
+  errors: { keyword: string; instanceLocation: string; keywordLocation: string; error: string }[],
+  prefer?: 'v1' | 'v3',
+): string[] {
   // oneOf 归纳（docs/40 A5）：level 根 schema = oneOf[V1Level, V3Level]，双分支全量失败会翻倍刷屏。
-  // cfworker 的 keywordLocation 就地展开 $ref：v3 = #/oneOf/1/…。v3 分支有叶子错误则只看 v3。
+  // cfworker 的 keywordLocation 就地展开 $ref：v1 = #/oneOf/0/…、v3 = #/oneOf/1/…。
+  const isV1 = (e: { keywordLocation: string }): boolean => e.keywordLocation.includes('#/oneOf/0/')
   const isV3 = (e: { keywordLocation: string }): boolean => e.keywordLocation.includes('#/oneOf/1/')
   const leaf = errors.filter((e) => !WRAPPER_KEYWORDS.has(e.keyword))
+  const v1 = leaf.filter(isV1)
   const v3 = leaf.filter(isV3)
-  const picked = v3.length > 0 ? v3 : leaf
+  // A5：文档声明的版本优先；版本缺失/未知时沿用「v3 优先、v1 兜底」旧口径
+  const picked =
+    prefer === 'v1'
+      ? v1.length > 0
+        ? v1
+        : leaf
+      : prefer === 'v3'
+        ? v3.length > 0
+          ? v3
+          : leaf
+        : v3.length > 0
+          ? v3
+          : leaf
   const v1Note =
-    v3.length === 0 && leaf.some((e) => e.keywordLocation.includes('#/oneOf/0/'))
-      ? ['（文档按 v1 旧格式规则检查未通过——装载管线会自动升级为 v3，请优先核对以下字段）']
-      : []
+    prefer === 'v1'
+      ? picked.length > 0 && v1.length > 0
+        ? ['（文档声明为 v1 旧格式——装载管线会自动升级为 v3，请优先核对以下字段）']
+        : []
+      : v3.length === 0 && leaf.some(isV1)
+        ? ['（文档按 v1 旧格式规则检查未通过——装载管线会自动升级为 v3，请优先核对以下字段）']
+        : []
   const lines = picked.map((e) => {
     const label = KEYWORD_LABEL[e.keyword]
     const pos = formatInstanceLocation(e.instanceLocation)
@@ -245,30 +273,41 @@ export function loadLevelDoc(raw: unknown): LoadResult {
     // D5：重复 id（组件/视图/列 key）在保存/导入/AI 写入路径直接拦截（装载宽松告警另行处理）
     errors.push(...findDuplicateIdErrors(doc))
     if (errors.length > 0) return { ok: false, errors }
-    lintWarnings = lintGraphProgram(doc.content.logic, {
-      componentIds: doc.content.components.map((c) => c.id),
-      viewIds: doc.content.views.map((v) => v.id),
-    })
-    // F6（docs/40）：flow.pass.expr 语法 lint——写坏的表达式运行时静默「永不通过」
-    const passExpr = doc.content.flow?.pass?.expr
-    if (typeof passExpr === 'string' && passExpr.trim() !== '') {
-      try {
-        parseExpr(passExpr)
-      } catch (err) {
-        lintWarnings.push(
-          'flow.pass 过关表达式语法错误：' + (err instanceof Error ? err.message : String(err)) + '——运行时会静默判未通过',
-        )
-      }
-    }
-    // v3 结构告警（schema 无法表达的约束，评审 P2-12/13）
-    const viewIdSet = new Set(doc.content.views.map((v) => v.id))
-    for (const c of doc.content.components) {
-      if (c.view !== undefined && !viewIdSet.has(c.view)) {
-        lintWarnings.push(`组件 ${c.id} 指向不存在的视图 "${c.view}"——该组件不会渲染（视图缺省取首视图）`)
-      }
-    }
+    lintWarnings = lintLoadedLevel(doc)
     return { ok: true, doc, lintWarnings }
   }
 
   return { ok: false, errors }
+}
+
+/**
+ * F6（docs/40 / docs/44 R16）：装载后 lint 统一入口。
+ * 此前 loadLevelDoc（保存/导入/AI 写入）会做 graph lint + flow.pass + 视图引用检查，
+ * 而 EditorPage 装载只调 migrateDocToV3 + 重复 id 告警——打开关卡时 flow.pass 写坏
+ * 等运行时静默失效的问题看不到。两条路径现在共用本函数，避免口径漂移。
+ */
+export function lintLoadedLevel(doc: LevelDoc): string[] {
+  const warnings = lintGraphProgram(doc.content.logic, {
+    componentIds: doc.content.components.map((c) => c.id),
+    viewIds: doc.content.views.map((v) => v.id),
+  })
+  // F6：flow.pass.expr 语法 lint——写坏的表达式运行时静默「永不通过」
+  const passExpr = doc.content.flow?.pass?.expr
+  if (typeof passExpr === 'string' && passExpr.trim() !== '') {
+    try {
+      parseExpr(passExpr)
+    } catch (err) {
+      warnings.push(
+        'flow.pass 过关表达式语法错误：' + (err instanceof Error ? err.message : String(err)) + '——运行时会静默判未通过',
+      )
+    }
+  }
+  // v3 结构告警（schema 无法表达的约束，评审 P2-12/13）
+  const viewIdSet = new Set(doc.content.views.map((v) => v.id))
+  for (const c of doc.content.components) {
+    if (c.view !== undefined && !viewIdSet.has(c.view)) {
+      warnings.push(`组件 ${c.id} 指向不存在的视图 "${c.view}"——该组件不会渲染（视图缺省取首视图）`)
+    }
+  }
+  return warnings
 }

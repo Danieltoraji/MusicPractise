@@ -290,3 +290,77 @@ describe('token 用量解析（批次8c）', () => {
     expect(res2.usage).toBeUndefined()
   })
 })
+
+describe('F13 超时分类（docs/44 R16）', () => {
+  it('连接/首字节超时：kind=timeout + 可读中文（不再伪装成 network）', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (_url: unknown, init?: RequestInit) =>
+            new Promise<Response>((_res, reject) => {
+              init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+            }),
+        ),
+      )
+      const p = chatCompleteRaw(profile, [{ role: 'user', content: 'hi' }], { timeoutMs: 1500 })
+      const assertion = expect(p).rejects.toMatchObject({
+        kind: 'timeout',
+        message: expect.stringContaining('请求超时'),
+      })
+      await vi.advanceTimersByTimeAsync(1500)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('流式空闲超时：首块后断流 → kind=timeout（已收到增量保留在 onDelta）', async () => {
+    vi.useFakeTimers()
+    try {
+      const enc = new TextEncoder()
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: '你' } }] })}\n\n`))
+          // 故意不 close：模拟供应商断流/代理挂起
+        },
+      })
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })),
+      )
+      const deltas: string[] = []
+      const p = chatCompleteRaw(profile, [{ role: 'user', content: 'hi' }], {
+        stream: true,
+        onDelta: (d) => deltas.push(d),
+        timeoutMs: 5000,
+        idleTimeoutMs: 300,
+      })
+      const assertion = expect(p).rejects.toMatchObject({
+        kind: 'timeout',
+        message: expect.stringContaining('响应超时'),
+      })
+      await vi.advanceTimersByTimeAsync(1200)
+      await assertion
+      expect(deltas).toEqual(['你'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('外部中止优先于超时：保持 AbortError 透传（不误报 timeout）', async () => {
+    const enc = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"x"}}]}\n\n'))
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, { status: 200 })))
+    const ctrl = new AbortController()
+    const p = chatCompleteRaw(profile, [], { stream: true, signal: ctrl.signal, idleTimeoutMs: 60_000 })
+    const assertion = expect(p).rejects.toBeInstanceOf(DOMException)
+    ctrl.abort()
+    await assertion
+  })
+})

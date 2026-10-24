@@ -6,7 +6,7 @@
  * 编辑语义全部基于 docState 纯函数；结果一律返回可读中文摘要。
  */
 
-import type { ColumnType, LevelDoc } from '../engine/level'
+import { COLUMN_TYPE_LABELS, type ColumnType, type LevelDoc } from '../engine/level'
 import type { Json } from '../engine/expr'
 import { parseScript, ScriptError } from '../engine/script'
 import { allContracts } from '../runtime/store'
@@ -106,7 +106,14 @@ const editTableTool: AiTool = {
       patch: { type: 'object', description: 'update_cell：{列key: 新值}' },
       key: { type: 'string', description: '列 key' },
       label: { type: 'string', description: 'add_column/set_column_label：显示名' },
-      type: { type: 'string', enum: ['text', 'number', 'boolean', 'notes', 'list', 'json'], description: 'add_column/set_column_type：列类型' },
+      type: {
+        // F19（docs/44 R16）：列类型枚举从 COLUMN_TYPE_LABELS 派生，不再手写第二份清单
+        type: 'string',
+        enum: Object.keys(COLUMN_TYPE_LABELS),
+        description: `add_column/set_column_type：列类型（${Object.entries(COLUMN_TYPE_LABELS)
+          .map(([k, v]) => `${k}=${v}`)
+          .join('/')}）`,
+      },
     },
     required: ['op'],
   },
@@ -182,6 +189,68 @@ const editTableTool: AiTool = {
 // edit_components
 // ---------------------------------------------------------------------------
 
+/** F8（docs/44 R16）：组件 layout 逐字段解析——未知键/非数字/不完整给出可读错误，
+ * 不再静默忽略或整块丢弃（此前 add 只收恰好 4 键，update 直接整体替换/透传）。 */
+const LAYOUT_KEYS = ['x', 'y', 'w', 'h'] as const
+type FullLayout = { x: number; y: number; w: number; h: number }
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+function parseLayout(raw: unknown, base: unknown, requireComplete: boolean): { layout?: FullLayout; error?: string } {
+  if (raw === undefined || raw === null) return {}
+  if (!isPlainObject(raw)) return { error: 'layout 必须是对象 {x,y,w,h}' }
+  const provided = Object.keys(raw)
+  if (provided.length === 0) return {}
+  const badKeys = provided.filter((k) => !(LAYOUT_KEYS as readonly string[]).includes(k))
+  if (badKeys.length > 0) return { error: `layout 含不支持的字段「${badKeys.join('、')}」（只允许 x/y/w/h）` }
+  const merged: Record<string, unknown> = { ...(isPlainObject(base) ? base : {}), ...raw }
+  const missing = LAYOUT_KEYS.filter((k) => typeof merged[k] !== 'number' || !Number.isFinite(merged[k] as number))
+  if (missing.length > 0) {
+    return {
+      error: requireComplete
+        ? `layout 需要完整的 x/y/w/h（缺少或非数字：${missing.join('、')}）`
+        : `layout 缺少可合并的现有坐标（缺少：${missing.join('、')}）；请一次给全 x/y/w/h`,
+    }
+  }
+  return { layout: { x: merged.x as number, y: merged.y as number, w: merged.w as number, h: merged.h as number } }
+}
+
+/** F8：props 深合并（对象递归合并、数组/标量整体替换；replaceProps=true 时整体替换） */
+function mergePropsDeep(base: unknown, patch: unknown): Record<string, Json> {
+  const out: Record<string, Json> = { ...(isPlainObject(base) ? (base as Record<string, Json>) : {}) }
+  if (!isPlainObject(patch)) return out
+  for (const [k, v] of Object.entries(patch)) {
+    const cur = out[k]
+    out[k] = isPlainObject(v) && isPlainObject(cur) ? (mergePropsDeep(cur, v) as Json) : (v as Json)
+  }
+  return out
+}
+
+/** F8：把 update patch 规划为最终写入值（props 深合并 / layout 与现有坐标合并并校验） */
+function planComponentPatch(
+  comp: { layout?: unknown; props?: unknown },
+  patch: Record<string, unknown>,
+  replaceProps: boolean,
+): { planned?: Record<string, unknown>; error?: string } {
+  const planned: Record<string, unknown> = { ...patch }
+  if ('layout' in patch) {
+    const r = parseLayout(patch.layout, comp.layout, false)
+    if (r.error) return { error: r.error }
+    if (r.layout) planned.layout = r.layout
+    else delete planned.layout
+  }
+  if ('props' in patch) {
+    if (!isPlainObject(patch.props)) return { error: 'props 必须是对象（如 {"text":"确定"}）' }
+    planned.props = replaceProps ? patch.props : mergePropsDeep(comp.props, patch.props)
+  }
+  return { planned }
+}
+
+/** F19（docs/44 R16）：组件类型清单从运行时契约派生，避免工具描述与契约双清单漂移 */
+const COMPONENT_TYPE_NAMES = allContracts().map((c) => c.type).sort()
+
 const editComponentsTool: AiTool = {
   name: 'edit_components',
   description:
@@ -192,11 +261,12 @@ const editComponentsTool: AiTool = {
     type: 'object',
     properties: {
       op: { type: 'string', enum: ['add', 'update', 'remove'] },
-      type: { type: 'string', description: 'add：组件类型（staff/label/button/choice/input/slider/timer/sound/synth/fingering/rhythm/tuner）' },
+      type: { type: 'string', description: `add：组件类型（${COMPONENT_TYPE_NAMES.join('/')}）` },
       view: { type: 'string', description: 'add：所属视图 id（默认首视图）' },
       name: { type: 'string', description: 'add/update：显示名' },
-      props: { type: 'object', description: 'add/update：组件 props' },
-      layout: { type: 'object', description: 'add/update：{x,y,w,h}' },
+      props: { type: 'object', description: 'add/update：组件 props（update 默认与现有 props 深合并）' },
+      layout: { type: 'object', description: 'add/update：{x,y,w,h}（update 可只给部分字段，与现有坐标合并）' },
+      replaceProps: { type: 'boolean', description: 'update：true 时 props 整体替换（默认深合并）' },
       items: {
         type: 'array',
         description: 'add 批量：一次添加多个组件（与单件参数二选一，多组件时优先用它）',
@@ -213,7 +283,7 @@ const editComponentsTool: AiTool = {
         description: 'update 批量：一次改多个组件（与 id/patch 二选一）',
         items: {
           type: 'object',
-          properties: { id: { type: 'string' }, patch: { type: 'object' } },
+          properties: { id: { type: 'string' }, patch: { type: 'object' }, replaceProps: { type: 'boolean' } },
           required: ['id', 'patch'],
         },
       },
@@ -249,24 +319,34 @@ const editComponentsTool: AiTool = {
         if (badViews.length > 0) {
           return `修改失败（未应用）：视图 ${badViews.join('、')} 不存在。现有：${doc.content.views.map((v) => v.id).join('、')}`
         }
+        // F8：批量项 layout/props 预检——任一项非法则整批不应用，避免半批成功
+        const itemLayouts: (FullLayout | undefined)[] = []
+        const itemProblems: string[] = []
+        for (const [i, it] of items.entries()) {
+          const r = parseLayout(it.layout, undefined, true)
+          if (r.error) itemProblems.push(`第 ${i + 1} 项：${r.error}`)
+          itemLayouts.push(r.layout)
+          if ('props' in it && !isPlainObject(it.props)) itemProblems.push(`第 ${i + 1} 项：props 必须是对象（如 {"text":"确定"}）`)
+        }
+        if (itemProblems.length > 0) return `修改失败（未应用）：${itemProblems.join('；')}`
         const labels: string[] = []
         return applyAndCheck(
           ctx,
           () => `已添加 ${labels.length} 个组件：${labels.join('、')}——write_script 中即以这些 id 引用`,
           (d) => {
             let out = d
-            for (const it of items) {
+            for (const [idx, it] of items.entries()) {
               const before = new Set(out.content.components.map((c) => c.id))
               out = addComponent(out, str(it.type), str(it.view) || defView || undefined)
               const newId = out.content.components.find((c) => !before.has(c.id))?.id ?? ''
               const name = str(it.name)
               const props = obj(it.props)
-              const layout = obj(it.layout)
-              if (name || Object.keys(props).length > 0 || Object.keys(layout).length === 4) {
+              const layout = itemLayouts[idx]
+              if (name || Object.keys(props).length > 0 || layout) {
                 out = updateComponent(out, newId, {
                   ...(name ? { name } : {}),
                   ...(Object.keys(props).length > 0 ? { props: props as Record<string, Json> } : {}),
-                  ...(Object.keys(layout).length === 4 ? { layout: layout as unknown as { x: number; y: number; w: number; h: number } } : {}),
+                  ...(layout ? { layout } : {}),
                 })
               }
               labels.push(`${newId}（${str(it.type)}${name ? `·${name}` : ''}）`)
@@ -284,8 +364,11 @@ const editComponentsTool: AiTool = {
         return `修改失败（未应用）：视图 ${view} 不存在。现有：${doc.content.views.map((v) => v.id).join('、')}`
       }
       const name = str(args.name)
+      if ('props' in args && !isPlainObject(args.props)) return '修改失败（未应用）：props 必须是对象（如 {"text":"确定"}）'
       const props = obj(args.props)
-      const layout = obj(args.layout)
+      const layoutParsed = parseLayout(args.layout, undefined, true)
+      if (layoutParsed.error) return `修改失败（未应用）：${layoutParsed.error}`
+      const layout = layoutParsed.layout
       let newId = ''
       return applyAndCheck(
         ctx,
@@ -294,11 +377,11 @@ const editComponentsTool: AiTool = {
           const before = new Set(d.content.components.map((c) => c.id))
           let out = addComponent(d, type, view || undefined)
           newId = out.content.components.find((c) => !before.has(c.id))?.id ?? ''
-          if (name || Object.keys(props).length > 0 || Object.keys(layout).length === 4) {
+          if (name || Object.keys(props).length > 0 || layout) {
             out = updateComponent(out, newId, {
               ...(name ? { name } : {}),
               ...(Object.keys(props).length > 0 ? { props: props as Record<string, Json> } : {}),
-              ...(Object.keys(layout).length === 4 ? { layout: layout as unknown as { x: number; y: number; w: number; h: number } } : {}),
+              ...(layout ? { layout } : {}),
             })
           }
           return out
@@ -311,34 +394,46 @@ const editComponentsTool: AiTool = {
         const updates = (args.updates as unknown[]).map(obj)
         if (updates.length === 0) return '修改失败（未应用）：updates 不能为空'
         const problems: string[] = []
-        const planned: { id: string; allowed: Record<string, unknown> }[] = []
+        const plans: { id: string; patch: Record<string, unknown> }[] = []
         for (const [i, u] of updates.entries()) {
           const id = str(u.id)
-          if (!doc.content.components.some((c) => c.id === id)) {
+          const comp = doc.content.components.find((c) => c.id === id)
+          if (!comp) {
             problems.push(`第 ${i + 1} 项：组件 ${id} 不存在`)
             continue
           }
           const allowed = pickPatch(u.patch)
-          if (Object.keys(allowed).length === 0) problems.push(`第 ${i + 1} 项：组件 ${id} 的 patch 为空（可改 name/visible/view/layout/props）`)
-          planned.push({ id, allowed })
+          if (Object.keys(allowed).length === 0) {
+            problems.push(`第 ${i + 1} 项：组件 ${id} 的 patch 为空（可改 name/visible/view/layout/props）`)
+            continue
+          }
+          const plan = planComponentPatch(comp, allowed, u.replaceProps === true)
+          if (plan.error) {
+            problems.push(`第 ${i + 1} 项：组件 ${id} ${plan.error}`)
+            continue
+          }
+          plans.push({ id, patch: plan.planned! })
         }
         if (problems.length > 0) {
           return `修改失败（未应用）：${problems.join('；')}。现有组件：${doc.content.components.map((c) => c.id).join('、')}`
         }
-        return applyAndCheck(ctx, `已更新 ${planned.length} 个组件（${planned.map((p) => p.id).join('、')}）`, (d) => {
+        return applyAndCheck(ctx, `已更新 ${plans.length} 个组件（${plans.map((p) => p.id).join('、')}）`, (d) => {
           let out = d
-          for (const p of planned) out = updateComponent(out, p.id, p.allowed as never)
+          for (const p of plans) out = updateComponent(out, p.id, p.patch as never)
           return out
         })
       }
       const id = str(args.id)
-      if (!doc.content.components.some((c) => c.id === id)) {
+      const comp = doc.content.components.find((c) => c.id === id)
+      if (!comp) {
         return `修改失败（未应用）：组件 ${id} 不存在。现有：${doc.content.components.map((c) => c.id).join('、')}`
       }
       const allowed = pickPatch(args.patch)
       if (Object.keys(allowed).length === 0) return '修改失败（未应用）：patch 为空（可改 name/visible/view/layout/props）'
-      return applyAndCheck(ctx, `组件 ${id} 已更新（${Object.keys(allowed).join('、')}）`, (d) =>
-        updateComponent(d, id, allowed as never),
+      const plan = planComponentPatch(comp, allowed, args.replaceProps === true)
+      if (plan.error) return `修改失败（未应用）：${plan.error}`
+      return applyAndCheck(ctx, `组件 ${id} 已更新（${Object.keys(plan.planned!).join('、')}）`, (d) =>
+        updateComponent(d, id, plan.planned as never),
       )
     }
     if (op === 'remove') {

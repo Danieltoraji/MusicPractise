@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { blankLevelDoc, setTable } from '../editor/docState'
-import type { LevelDoc } from '../engine/level'
+import { COLUMN_TYPE_LABELS, type LevelDoc } from '../engine/level'
+import { allContracts } from '../runtime/store'
 import { clearCheckpoint, getCheckpoint, saveCheckpoint } from './checkpoint'
 
 beforeEach(() => {
@@ -278,5 +279,111 @@ describe('AI 写入工具批量参数（工具粒度治理：一次调用做多�
     const bad = await run('edit_views', { ops: [{ op: 'remove', id: 'v9' }, { op: 'remove', id: 'ghost' }] }, doc)
     expect(bad.result).toContain('不存在')
     expect(bad.h.applied).toHaveLength(0)
+  })
+})
+
+describe('F8 edit_components props 深合并 / layout 逐字段（docs/44 R16）', () => {
+  let doc: LevelDoc
+  beforeEach(() => {
+    doc = blankLevelDoc()
+    doc.content.components.push({
+      id: 'b1',
+      type: 'button',
+      view: 'main',
+      props: { text: '旧', style: { bold: true, size: 12 }, tags: ['a'] },
+      layout: { x: 10, y: 20, w: 100, h: 40 },
+    } as never)
+  })
+
+  it('update props 默认深合并：嵌套对象保留未提字段，数组/标量整体替换', async () => {
+    const r = await run('edit_components', { op: 'update', id: 'b1', patch: { props: { style: { size: 16 }, tags: ['b'] } } }, doc)
+    expect(r.result).toContain('✓')
+    expect(r.h.applied).toHaveLength(1)
+    const comp = r.h.current().content.components.find((c) => c.id === 'b1')!
+    expect(comp.props).toEqual({ text: '旧', style: { bold: true, size: 16 }, tags: ['b'] })
+  })
+
+  it('replaceProps=true 时 props 整体替换（显式逃逸深合并）', async () => {
+    const r = await run(
+      'edit_components',
+      { op: 'update', id: 'b1', replaceProps: true, patch: { props: { text: '新' } } },
+      doc,
+    )
+    expect(r.result).toContain('✓')
+    expect(r.h.current().content.components[0]!.props).toEqual({ text: '新' })
+  })
+
+  it('layout 部分字段与现有坐标合并后写入完整 {x,y,w,h}', async () => {
+    const r = await run('edit_components', { op: 'update', id: 'b1', patch: { layout: { w: 120 } } }, doc)
+    expect(r.result).toContain('✓')
+    expect(r.h.current().content.components[0]!.layout).toEqual({ x: 10, y: 20, w: 120, h: 40 })
+  })
+
+  it('layout 未知字段/非数字整批拒绝且不应用', async () => {
+    const badKey = await run('edit_components', { op: 'update', id: 'b1', patch: { layout: { x: 1, foo: 2 } } }, doc)
+    expect(badKey.result).toContain('不支持的字段')
+    expect(badKey.h.applied).toHaveLength(0)
+    expect(badKey.h.current().content.components[0]!.layout).toEqual({ x: 10, y: 20, w: 100, h: 40 })
+
+    const badNum = await run('edit_components', { op: 'update', id: 'b1', patch: { layout: { y: 'nope' } } }, doc)
+    expect(badNum.result).toContain('layout')
+    expect(badNum.h.applied).toHaveLength(0)
+  })
+
+  it('add：layout 必须一次给全；完整 layout 可添加', async () => {
+    const partial = await run('edit_components', { op: 'add', type: 'label', layout: { x: 1 } }, doc)
+    expect(partial.result).toContain('layout 需要完整')
+    expect(partial.h.applied).toHaveLength(0)
+
+    const ok = await run('edit_components', { op: 'add', type: 'label', layout: { x: 1, y: 2, w: 30, h: 10 } }, doc)
+    expect(ok.result).toContain('✓')
+    const added = ok.h.current().content.components.find((c) => c.type === 'label')!
+    expect(added.layout).toEqual({ x: 1, y: 2, w: 30, h: 10 })
+  })
+
+  it('批量 updates：props 深合并；任一项 layout 非法则整批不应用', async () => {
+    doc.content.components.push({ id: 'b2', type: 'button', view: 'main', props: { text: '乙' } } as never)
+    const ok = await run(
+      'edit_components',
+      {
+        op: 'update',
+        updates: [
+          { id: 'b1', patch: { props: { style: { size: 20 } } } },
+          { id: 'b2', patch: { props: { text: '新乙' } } },
+        ],
+      },
+      doc,
+    )
+    expect(ok.result).toContain('✓')
+    const comps = ok.h.current().content.components
+    expect(comps.find((c) => c.id === 'b1')!.props).toMatchObject({ text: '旧', style: { bold: true, size: 20 } })
+    expect(comps.find((c) => c.id === 'b2')!.props).toEqual({ text: '新乙' })
+
+    const bad = await run(
+      'edit_components',
+      { op: 'update', updates: [{ id: 'b1', patch: { layout: { h: 50 } } }, { id: 'b2', patch: { layout: { foo: 1 } } }] },
+      ok.h.current(),
+    )
+    expect(bad.result).toContain('不支持的字段')
+    expect(bad.h.applied).toHaveLength(0)
+    expect(bad.h.current().content.components.find((c) => c.id === 'b1')!.layout).toEqual({ x: 10, y: 20, w: 100, h: 40 })
+  })
+})
+
+describe('F19 工具 schema 从契约/常量派生（docs/44 R16）', () => {
+  it('edit_table 列类型 enum 与 COLUMN_TYPE_LABELS 同源', async () => {
+    const { WRITE_TOOLS } = await import('./tools-write')
+    const tool = WRITE_TOOLS.find((t) => t.name === 'edit_table')!
+    const spec = (tool.parameters as { properties: { type: { enum: string[] } } }).properties.type
+    expect(spec.enum).toEqual(Object.keys(COLUMN_TYPE_LABELS))
+  })
+
+  it('edit_components 类型描述覆盖全部运行时契约类型（新增组件自动出现在提示中）', async () => {
+    const { WRITE_TOOLS } = await import('./tools-write')
+    const tool = WRITE_TOOLS.find((t) => t.name === 'edit_components')!
+    const desc = (tool.parameters as { properties: { type: { description: string } } }).properties.type.description
+    const types = allContracts().map((c) => c.type)
+    expect(types.length).toBeGreaterThan(0)
+    for (const type of types) expect(desc).toContain(type)
   })
 })

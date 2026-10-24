@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import noteClickDoc from '../sample/note-click.level.json'
 import v1NoteClickDoc from '../sample/fixtures/note-click.v1.json'
-import { capErrorLines, loadLevelDoc, validateEnvelope } from './validate'
+import type { LevelDoc } from '../engine/level'
+import { capErrorLines, lintLoadedLevel, loadLevelDoc, validateEnvelope } from './validate'
 
 describe('装载管线 loadLevelDoc', () => {
   it('合法关卡装载成功且无 lint 告警', () => {
@@ -208,5 +209,34 @@ describe('F6 flow.pass 表达式语法 lint（docs/40）', () => {
     const r = loadLevelDoc(ok)
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.lintWarnings.some((w) => w.includes('flow.pass'))).toBe(false)
+  })
+})
+
+describe('A5/F6 校验与装载 lint 收口（docs/44 R16）', () => {
+  it('A5：v1 旧档校验失败时优先展示 v1 分支错误（不再被 v3 分支字段淹没）', () => {
+    const raw = JSON.parse(JSON.stringify(v1NoteClickDoc)) as { content: { questions: unknown[] } }
+    raw.content.questions = []
+    const r = validateEnvelope('level', raw)
+    expect(r.ok).toBe(false)
+    // v1 分支错误：questions 数量不足；v3 分支会报 schemaVersion/content.table 等无关字段
+    expect(r.errors.some((e) => e.includes('questions'))).toBe(true)
+    expect(r.errors.some((e) => e.includes('文档声明为 v1 旧格式'))).toBe(true)
+  })
+
+  it('A5：根级/未知路径错误不以「 · 」开头', () => {
+    const raw = { schemaVersion: 3, kind: 'level' } as Record<string, unknown>
+    const r = validateEnvelope('level', raw)
+    expect(r.ok).toBe(false)
+    for (const e of r.errors) expect(e.startsWith(' · ')).toBe(false)
+    expect(r.errors.some((e) => e.includes('content'))).toBe(true)
+  })
+
+  it('F6：lintLoadedLevel 同时覆盖 flow.pass 语法与悬空视图（与保存路径同口径）', () => {
+    const doc = JSON.parse(JSON.stringify(noteClickDoc)) as LevelDoc
+    doc.content.flow = { pass: { expr: 'v.score >=' } }
+    doc.content.components.push({ id: 'dangling', type: 'label', view: 'ghost' } as never)
+    const warnings = lintLoadedLevel(doc)
+    expect(warnings.some((w) => w.includes('flow.pass') && w.includes('语法错误'))).toBe(true)
+    expect(warnings.some((w) => w.includes('不存在的视图') && w.includes('ghost'))).toBe(true)
   })
 })

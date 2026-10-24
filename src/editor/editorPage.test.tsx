@@ -1018,3 +1018,33 @@ describe('EditorPage JSON 草稿 stale（docs/42 §5.1-13）', () => {
     expect(applyBtn().disabled).toBe(false)
   })
 })
+
+describe('EditorPage 装载 lint（F6 / docs/44 R16）', () => {
+  it('打开关卡即展示 flow.pass 语法错误与悬空视图告警（与保存路径同口径）', async () => {
+    const base = blankLevelDoc()
+    const seeded = {
+      ...base,
+      id: DOC_ID,
+      meta: { ...base.meta, title: '测试关卡' },
+      content: {
+        ...base.content,
+        flow: { pass: { expr: 'v.score >=' } },
+        components: [{ id: 'dangling', type: 'label', view: 'ghost' }],
+      },
+    } as LevelDoc
+    await db.resources.put({
+      id: DOC_ID,
+      kind: 'level',
+      version: seeded.version,
+      title: '测试关卡',
+      doc: seeded,
+      importedAt: Date.now(),
+      builtIn: 0,
+    })
+    await mountEditor(DOC_ID)
+    const lint = container!.querySelector('.editor-lint')?.textContent ?? ''
+    expect(lint).toContain('flow.pass')
+    expect(lint).toContain('不存在的视图')
+    expect(lint).toContain('ghost')
+  })
+})

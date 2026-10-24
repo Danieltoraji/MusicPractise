@@ -279,3 +279,43 @@ describe('capture_screen debug 目标（批次9）', () => {
     expect(res2).toContain('debug_control')
   })
 })
+
+describe('F18 read_doc 分段截断（docs/44 R16）', () => {
+  /** 超长文档：120 个组件 + 长文案，组件段远超 8000 字预算 */
+  function hugeDoc(): LevelDoc {
+    const doc = makeDoc()
+    doc.content.components = Array.from({ length: 120 }, (_, i) => ({
+      id: `long${i}`,
+      type: 'button',
+      view: 'main',
+      name: `组件${i}`,
+      props: { text: `很长的按钮文案${'字'.repeat(40)}` },
+    })) as never
+    return doc
+  }
+
+  it('全文超预算：保留 meta/契约段并提示分段读取（不再把后段静默丢弃）', () => {
+    const text = tool('read_doc').exec({}, ctxFor(hugeDoc())) as string
+    expect(text.length).toBeLessThanOrEqual(8000 + 300)
+    expect(text).toContain('## meta')
+    expect(text).toContain('## components')
+    expect(text).toContain('分段')
+    expect(text).toMatch(/part=(components|table|flow|lifecycle)/)
+  })
+
+  it('单段读取超长：截断并给出 part= 与 read_json 指引', () => {
+    const text = tool('read_doc').exec({ part: 'components' }, ctxFor(hugeDoc())) as string
+    expect(text.length).toBeLessThanOrEqual(8000 + 200)
+    expect(text).toContain('part=components')
+    expect(text).toContain('read_json')
+  })
+
+  it('小文档不受分段逻辑影响：仍是完整输出（既有口径不回退）', () => {
+    const all = tool('read_doc').exec({}, ctxFor(makeDoc())) as string
+    expect(all).toContain('## meta')
+    expect(all).toContain('## components')
+    expect(all).toContain('## table')
+    expect(all).toContain('## logic 概要')
+    expect(all).not.toContain('分段读取')
+  })
+})

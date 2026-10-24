@@ -70,27 +70,45 @@ const readScriptTool: AiTool = {
 
 const MAX_DOC_CHARS = 8000
 const MAX_ROWS = 10
+/** F18/F19：read_doc 分段名唯一来源（工具 schema enum 由此派生） */
+const READ_DOC_PARTS = ['all', 'meta', 'components', 'table', 'flow'] as const
+
+/**
+ * F18（docs/44 R16）：单段超长时优先在行边界截断，并明确提示「可分段读取」——
+ * 此前整篇 8000 字硬截断会把后面的段落（数据表/推进配置/逻辑概要）静默丢掉。
+ */
+function clipDocSection(name: string, text: string, budget: number): string {
+  if (text.length <= budget) return text
+  const hint = `\n…（${name} 段超长已截断，可 read_doc part=${name} 或 read_json 查看原始内容）`
+  const room = Math.max(0, budget - hint.length)
+  let head = text.slice(0, room)
+  const nl = head.lastIndexOf('\n')
+  if (nl > room * 0.6) head = head.slice(0, nl)
+  return head + hint
+}
 
 const readDocTool: AiTool = {
   name: 'read_doc',
   description:
     '读取关卡文档的结构化摘要（meta/视图/组件/变量/数据表/推进配置）。' +
     '组件段附每个组件的事件/命令/查询契约与 props 字段（name/type/options/default，写入逻辑与改 props 前以此为准，不要臆测事件名）；' +
-    '另附生命周期事件目录（level.started/level.finished/question.loaded/view.entered 及 payload）。看逻辑用 read_script，看原始 JSON 用 read_json',
+    '另附生命周期事件目录（level.started/level.finished/question.loaded/view.entered 及 payload）。看逻辑用 read_script，看原始 JSON 用 read_json。' +
+    '全文超长会按段截断并提示可 read_doc part=… 分段读取',
   parameters: {
     type: 'object',
     properties: {
-      part: { type: 'string', enum: ['all', 'meta', 'components', 'table', 'flow'], description: '只看某一节，默认 all' },
+      part: { type: 'string', enum: [...READ_DOC_PARTS], description: '只看某一节，默认 all' },
     },
   },
   exec: (args, ctx) => {
     const doc = ctx.getDoc()
     const part = typeof args.part === 'string' ? args.part : 'all'
     const content = doc.content
-    const sections: string[] = []
+    /** 段优先级：0=必留（meta/logic 概要）；1=契约/核心（components/lifecycle）；2=次要（table/flow） */
+    const sections: { name: string; text: string; priority: number }[] = []
 
     if (part === 'all' || part === 'meta') {
-      sections.push(`## meta\n${JSON.stringify(doc.meta, null, 2)}`)
+      sections.push({ name: 'meta', text: `## meta\n${JSON.stringify(doc.meta, null, 2)}`, priority: 0 })
     }
     if (part === 'all' || part === 'components') {
       const comps = content.components.map((c) => {
@@ -133,30 +151,76 @@ const readDocTool: AiTool = {
           ...(propsFields.length > 0 ? { propsFields } : {}),
         }
       })
-      sections.push(`## components（${comps.length} 个）\n${JSON.stringify(comps, null, 2)}`)
+      sections.push({ name: 'components', text: `## components（${comps.length} 个）\n${JSON.stringify(comps, null, 2)}`, priority: 1 })
       // 生命周期事件目录（F3 缺口）：on 入口可用的事件名与 payload，从零写逻辑不用猜
-      sections.push(`## 生命周期事件（on 入口可用）\n${LIFECYCLE_CATALOG}`)
+      sections.push({ name: 'lifecycle', text: `## 生命周期事件（on 入口可用）\n${LIFECYCLE_CATALOG}`, priority: 1 })
     }
     if (part === 'all' || part === 'table') {
       const rows = content.table.rows.slice(0, MAX_ROWS)
       const more = content.table.rows.length > MAX_ROWS ? `\n…（仅显示前 ${MAX_ROWS} 行，共 ${content.table.rows.length} 行）` : ''
-      sections.push(
-        `## table\n列: ${JSON.stringify(content.table.columns)}\n行: ${JSON.stringify(rows, null, 2)}${more}`,
-      )
+      sections.push({
+        name: 'table',
+        text: `## table\n列: ${JSON.stringify(content.table.columns)}\n行: ${JSON.stringify(rows, null, 2)}${more}`,
+        priority: 2,
+      })
     }
     if (part === 'all' || part === 'flow') {
-      sections.push(`## flow\n${JSON.stringify(content.flow ?? {}, null, 2)}`)
+      sections.push({ name: 'flow', text: `## flow\n${JSON.stringify(content.flow ?? {}, null, 2)}`, priority: 2 })
     }
     if (part === 'all') {
-      sections.push(
-        `## logic 概要\n${content.logic.nodes.length} 节点 / ${content.logic.edges.length} 连线；事件入口: ${content.logic.nodes
-          .filter((n) => n.kind === 'on')
-          .map((n) => (n as { event: string }).event)
-          .join('、') || '无'}`,
+      sections.push({
+        name: 'logic',
+        text: `## logic 概要\n${content.logic.nodes.length} 节点 / ${content.logic.edges.length} 连线；事件入口: ${
+          content.logic.nodes
+            .filter((n) => n.kind === 'on')
+            .map((n) => (n as { event: string }).event)
+            .join('、') || '无'
+        }`,
+        priority: 0,
+      })
+    }
+
+    const joined = sections.map((s) => s.text).join('\n\n')
+    if (joined.length <= MAX_DOC_CHARS) return joined
+
+    // 单段读取：只裁这一段，并提示分段/原始 JSON
+    if (sections.length === 1) return clipDocSection(sections[0].name, sections[0].text, MAX_DOC_CHARS)
+
+    // 全文超预算：必留段先占预算；components 优先给足并在超限时截断；table/flow 可省略并提示
+    const reservedHint = 220
+    const mandatoryLen = sections
+      .filter((s) => s.priority === 0)
+      .reduce((n, s, i) => n + s.text.length + (i > 0 ? 2 : 0), 0)
+    let budget = Math.max(0, MAX_DOC_CHARS - reservedHint - mandatoryLen)
+    const kept: string[] = []
+    const incomplete: string[] = []
+    for (const sec of sections) {
+      if (sec.priority === 0) {
+        kept.push(sec.text)
+        continue
+      }
+      const sep = kept.length > 0 ? 2 : 0
+      const cost = sep + sec.text.length
+      if (cost <= budget) {
+        kept.push(sec.text)
+        budget -= cost
+        continue
+      }
+      incomplete.push(sec.name)
+      // components 是契约核心：宁可截断也给一部分；table/flow 直接省略，靠分段读取
+      if (sec.priority === 1 && budget > 320) {
+        kept.push(clipDocSection(sec.name, sec.text, Math.max(0, budget - sep)))
+        budget = 0
+      }
+    }
+    if (incomplete.length > 0) {
+      kept.push(
+        `## 分段读取\n全文超出 ${MAX_DOC_CHARS} 字预算，已省略/截断：${incomplete
+          .map((n) => `\`read_doc part=${n}\``)
+          .join(' / ')}（也可用 read_json 获取完整 JSON）`,
       )
     }
-    const text = sections.join('\n\n')
-    return text.length > MAX_DOC_CHARS ? `${text.slice(0, MAX_DOC_CHARS)}\n…（已截断）` : text
+    return kept.join('\n\n')
   },
 }
 
