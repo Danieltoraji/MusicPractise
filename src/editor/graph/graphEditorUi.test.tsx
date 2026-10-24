@@ -154,6 +154,27 @@ describe('GraphEditor（jsdom 冒烟）', () => {
     expect(added).toMatchObject({ target: 'question', method: 'next', args: [] })
   })
 
+  it('O9 回归：同一 task 内连续两次编辑以最新 pending doc 为基线，不丢前一笔', () => {
+    // 背景：onNodesChange/onEdgesChange（或两次快速编辑）在同一 task 内先后触发时，
+    // 第二次 apply 若以渲染期闭包 doc 为基线会覆盖第一次修改。修复 = pendingDocRef 单基线。
+    let doc = baseDoc()
+    const onChange = vi.fn((next: LevelDoc) => {
+      doc = next
+    })
+    const container = renderEl(<GraphEditor doc={doc} onChange={onChange} aiOpen={false} onToggleAi={() => {}} />)
+    const addBtn = [...container.querySelectorAll('.glib-item')].find((b) => b.textContent?.includes('进入下一题'))!
+    act(() => {
+      ;(addBtn as HTMLElement).click()
+      ;(addBtn as HTMLElement).click()
+    })
+    expect(onChange).toHaveBeenCalledTimes(2)
+    const calls = onChange.mock.calls.map((c) => c[0] as LevelDoc)
+    expect(calls[0].content.logic.nodes).toHaveLength(3)
+    // 第二次提交必须包含第一次新增节点（基线是最新 pending doc，而不是旧 prop）
+    expect(calls[1].content.logic.nodes).toHaveLength(4)
+    expect(calls[1].content.logic.nodes.filter((n) => n.kind === 'call' && n.method === 'next')).toHaveLength(2)
+  })
+
   it('点击选中节点后按 Delete 删除该节点（受控 select 回填是删除前提）', async () => {
     // 回归背景：受控模式下 select change 被宿主忽略 → 画布选区恒空
     // → Delete 删不掉任何东西。修复 = select change 回填到受控 nodes + 自有 window 键监听删除。

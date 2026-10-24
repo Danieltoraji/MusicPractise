@@ -6,6 +6,7 @@ import { db, deleteResource, ensureSeeded, getProgress, getResource, listProgres
 beforeEach(async () => {
   await db.resources.clear()
   await db.progress.clear()
+  await db.aiSessions.clear()
   await ensureSeeded()
 })
 
@@ -75,6 +76,31 @@ describe('资源库（Dexie，简化单态）', () => {
     await putResource(temp)
     await deleteResource(temp.id)
     expect(await getResource(temp.id)).toBeUndefined()
+  })
+
+  it('F10（docs/44 R19）：删除关卡级联清理 aiSessions 持久化记录', async () => {
+    const seeded = (await listResources('level'))[0]
+    const temp = {
+      schemaVersion: 1,
+      kind: 'level' as const,
+      id: 'res_01J9C0C0C0C0C0C0C0C0C0C0C0',
+      version: '1.0.0',
+      meta: { title: '临时关卡' },
+      refs: [],
+      content: seeded.doc,
+    }
+    await putResource(temp)
+    await db.aiSessions.put({
+      docId: temp.id,
+      messages: [{ role: 'user', content: '旧对话' }],
+      plan: null,
+      mode: 'ask',
+      updatedAt: Date.now(),
+    })
+    await deleteResource(temp.id)
+    expect(await db.aiSessions.get(temp.id)).toBeUndefined()
+    // 内置示例仍拒绝删除（级联事务不应改变该约束）
+    await expect(deleteResource(seeded.id)).rejects.toThrow(/内置/)
   })
 
   it('ensureSeeded 不覆盖用户导入的同 id 文档（P1 回归）', async () => {

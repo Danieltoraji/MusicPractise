@@ -485,20 +485,36 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
     return map
   }, [lintIssues])
 
+  // O9（docs/44 R19）：React Flow 的 onNodesChange/onEdgesChange 可能在**同一 task** 内先后触发，
+  // 而 onChange 回写经 React 提交后 doc prop 才更新——第二次 apply 若仍以渲染期闭包 doc 为基线，
+  // 会丢掉第一次的修改（升级 RF/自建批量入口时更易触发）。pendingDocRef 记录「已通过 onChange
+  // 提交、但尚未随渲染回流」的最新 doc；渲染提交后 effect 清空，回到以 doc prop 为真源。
+  const docRef = useRef(doc)
+  docRef.current = doc
+  const pendingDocRef = useRef<LevelDoc | null>(null)
+  useEffect(() => {
+    pendingDocRef.current = null
+  }, [doc])
+
   /** graphOps 变换 → 回写 doc；抛错转错误条（画布受控回滚）。返回是否成功（供表单还原输入） */
   const apply = useCallback(
     (fn: (prog: GraphProgram) => GraphProgram): boolean => {
       try {
-        const logic = fn(doc.content.logic)
+        const base = pendingDocRef.current ?? docRef.current
+        const logic = fn(base.content.logic)
         setError(null)
-        if (logic !== doc.content.logic) onChange({ ...doc, content: { ...doc.content, logic } })
+        if (logic !== base.content.logic) {
+          const next = { ...base, content: { ...base.content, logic } }
+          pendingDocRef.current = next
+          onChange(next)
+        }
         return true
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
         return false
       }
     },
-    [doc, onChange],
+    [onChange],
   )
 
   // Delete/Backspace 删除 RF 受控选中集（节点级联断边；走统一 keyGuard 守卫——弹窗打开短路、

@@ -42,6 +42,8 @@ export interface ProgressRecord {
 /** AI 会话持久化（批次6b）：每个关卡文档一条，刷新/重开后恢复对话 */
 export interface AiSessionRecord {
   docId: string
+  /** F10（docs/44 R19）：记录结构版本；未来版本拒绝载入（见 ai/session.sanitizePersistedSession） */
+  schemaVersion?: number
   messages: unknown[]
   plan: unknown
   mode: 'ask' | 'plan' | 'agent'
@@ -143,7 +145,12 @@ export async function deleteResource(id: string): Promise<void> {
   const record = await db.resources.get(id)
   if (!record) return
   if (record.builtIn) throw new Error('内置示例不可删除')
-  await db.resources.delete(id)
+  // F10（docs/44 R19）：删除资源级联清 AI 会话持久化记录——此前删关卡后 aiSessions 残留，
+  // 同 id 重新导入会“复活”旧对话（配合会话记录版本/清洗，避免跨文档串档）。
+  await db.transaction('rw', db.resources, db.aiSessions, async () => {
+    await db.resources.delete(id)
+    await db.aiSessions.delete(id)
+  })
 }
 
 // ---------------------------------------------------------------------------
