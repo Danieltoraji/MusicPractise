@@ -44,12 +44,17 @@ describe('G1 节点图窄屏断点（index.css 文件尾）', () => {
     expect(body).toMatch(/\.graph-narrow-tip\s*\{[^}]*display:\s*inline/)
   })
 
-  it('媒体块位于文件尾（编辑器 ≤900 块之后，且 ≤1100 块之后只有空白）', () => {
+  it('媒体块位于文件尾（编辑器 ≤900 块之后，且 ≤1100 块之后只有空白或 G11 减少动效块）', () => {
     const last900 = lastIndexOrThrow('@media (max-width: 900px)')
     const graph1280 = lastIndexOrThrow('@media (max-width: 1280px)')
     const graph1100 = lastIndexOrThrow('@media (max-width: 1100px)')
     expect(graph1280).toBeGreaterThan(last900)
     expect(graph1100).toBeGreaterThan(graph1280)
-    expect(css.slice(blockRange(css, graph1100).end).trim()).toBe('')
+    const afterTail = css.slice(blockRange(css, graph1100).end).trim()
+    if (afterTail !== '') {
+      // G11（docs/44 R26）：文件尾允许「系统减少动效」媒体块；但不得再有 max-width 断点
+      expect(afterTail).toContain('@media (prefers-reduced-motion: reduce)')
+      expect(afterTail).not.toContain('@media (max-width')
+    }
   })
 })

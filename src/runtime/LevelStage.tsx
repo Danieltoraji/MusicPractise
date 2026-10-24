@@ -14,6 +14,13 @@ import type { ComponentStore } from './store'
 export const STAGE_W = 800
 export const STAGE_H = 470
 
+/** G11（docs/44 R26）：纯函数 fit 计算，便于单测边界/稳定性（宽 0 兜底 scale 0，保持既有语义） */
+export function computeStageFit(width: number): { scale: number; left: number } {
+  const w = Number.isFinite(width) && width > 0 ? width : 0
+  const scale = Math.min(1, w / STAGE_W)
+  return { scale, left: Math.max(0, (w - STAGE_W * scale) / 2) }
+}
+
 export function LevelStage({
   doc,
   store,
@@ -39,14 +46,27 @@ export function LevelStage({
   useLayoutEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    const update = () => {
-      const scale = Math.min(1, el.clientWidth / STAGE_W)
-      setFit({ scale, left: Math.max(0, (el.clientWidth - STAGE_W * scale) / 2) })
+    // G11（docs/44 R26）：ResizeObserver 回调经 rAF 合并 + Object.is 短路——
+    // 连续回调不再每次都 setState 新对象（此前舞台整棵树随每次 ResizeObserver 重渲染）。
+    let raf = 0
+    const apply = (): void => {
+      const next = computeStageFit(el.clientWidth)
+      setFit((prev) => (prev.scale === next.scale && prev.left === next.left ? prev : next))
     }
-    update()
-    const ro = new ResizeObserver(update)
+    const schedule = (): void => {
+      if (raf !== 0) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        apply()
+      })
+    }
+    apply() // 首帧同步测量，避免缩放闪跳
+    const ro = new ResizeObserver(schedule)
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => {
+      ro.disconnect()
+      if (raf !== 0) cancelAnimationFrame(raf)
+    }
   }, [])
 
   const firstView = doc.content.views[0]?.id ?? 'main'

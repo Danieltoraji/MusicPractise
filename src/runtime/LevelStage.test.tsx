@@ -5,7 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { addComponent, blankLevelDoc } from '../editor/docState'
 import type { LevelDoc } from '../engine/level'
 import { ComponentStore } from './store'
-import { LevelStage } from './LevelStage'
+import { LevelStage, computeStageFit } from './LevelStage'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -58,6 +58,23 @@ function simpleDoc(): LevelDoc {
   } as LevelDoc
   return doc
 }
+
+describe('computeStageFit（G11 / docs/44 R26）', () => {
+  it('宽屏不放大（多出宽度水平居中）；窄屏等比缩小；宽 0/非法值兜底 scale 0', () => {
+    expect(computeStageFit(1600)).toEqual({ scale: 1, left: 400 })
+    expect(computeStageFit(800)).toEqual({ scale: 1, left: 0 })
+    expect(computeStageFit(1000)).toEqual({ scale: 1, left: 100 })
+    expect(computeStageFit(400)).toEqual({ scale: 0.5, left: 0 })
+    expect(computeStageFit(600)).toEqual({ scale: 0.75, left: 0 })
+    expect(computeStageFit(0)).toEqual({ scale: 0, left: 0 })
+    expect(computeStageFit(Number.NaN)).toEqual({ scale: 0, left: 0 })
+  })
+
+  it('同一输入幂等（rAF 合并 + Object.is 短路依赖纯函数稳定输出）', () => {
+    expect(computeStageFit(500)).toEqual(computeStageFit(500))
+    expect(computeStageFit(500).scale).toBeCloseTo(0.625, 10)
+  })
+})
 
 describe('LevelStage（共享游玩舞台，批次12）', () => {
   it('渲染当前视图组件；点击组件派发真实事件', async () => {

@@ -6768,3 +6768,18 @@ progress {
     display: inline;
   }
 }
+
+/* ================= 系统减少动效偏好（docs/40 G11，docs/44 R26） =================
+   节点图选中辉光/脉冲、对话框过渡等动画在此降级为「瞬态」；放文件尾保证覆盖
+   前面的 animation/transition 声明（G7 教训：媒体查询必须晚于被覆盖区块）。
+   注：不改变布局/颜色，仅关闭动效——无障碍基线，不影响视觉矩阵静态截图。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
