@@ -119,4 +119,41 @@ describe('G2 语义 token 层（R17a）', () => {
     }
     expect(offenders).toEqual([])
   })
+
+  it('R17b：颜色收敛第一批已提升为 .graph-editor 共享规则；.ge-dark 规则数设预算防回涨', () => {
+    // 第一批从 `.ge-dark X { color }` 提升为 `.graph-editor X { color: var(--ui-*) }`（浅色取值与原基础样式等价）
+    const hoisted = [
+      '.gnode-line',
+      '.graph-lint-count',
+      '.graph-canvas .gport-label',
+      '.ai-mode-tab',
+      '.gdock-close:hover',
+      '.glib-title',
+      '.graph-issue',
+      '.graph-log-entry',
+      '.graph-log-kind.command',
+      '.graph-log-node',
+      '.graph-issue-code',
+      '.canvas-map-box span',
+      '.gdock-title',
+      '.ai-panel-head b',
+      '.ai-msg',
+      '.ai-msg-assistant',
+      '.ai-tool-calls',
+    ]
+    const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    for (const sel of hoisted) {
+      expect(
+        new RegExp(`\\.ge-dark\\s+${esc(sel)}(?=\\s*[{,])`).test(section),
+        `仍存在 .ge-dark 单色覆盖：${sel}`,
+      ).toBe(false)
+      expect(
+        new RegExp(`\\.graph-editor\\s+${esc(sel)}(?=\\s*[{,])`).test(section),
+        `缺少共享 token 规则：${sel}`,
+      ).toBe(true)
+    }
+    // 预算：当前 143 行为基线（R17a 时约 158 行）；只允许不增，后续批次可下调
+    const darkSelectorLines = css.split('\n').filter((l) => /^\s*\.ge-dark/.test(l)).length
+    expect(darkSelectorLines).toBeLessThanOrEqual(143)
+  })
 })

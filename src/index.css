@@ -3306,9 +3306,6 @@ path.gedge-false {
 .ge-dark .muted {
   color: var(--ui-muted);
 }
-.ge-dark .graph-lint-count {
-  color: var(--ui-warn);
-}
 .ge-dark .graph-toolbar button.graph-lint-count {
   color: var(--ui-warn);
   border-color: color-mix(in srgb, var(--ui-warn) 45%, transparent);
@@ -3332,9 +3329,6 @@ path.gedge-false {
 }
 
 /* 左栏节点库 */
-.ge-dark .glib-title {
-  color: var(--ui-ink);
-}
 .ge-dark .glib-group-head {
   color: var(--ui-muted);
   border-bottom-color: var(--ui-line-soft);
@@ -3361,9 +3355,6 @@ path.gedge-false {
   color: var(--ui-ink);
   box-shadow: 0 4px 16px rgba(var(--ui-shadow-rgb), 0.5), inset 0 1px 0 rgb(255 255 255 / 0.05);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
-}
-.ge-dark .gnode-line {
-  color: var(--ui-ink-soft);
 }
 .ge-dark .gnode.is-selected {
   border-color: var(--ui-accent);
@@ -3400,10 +3391,6 @@ path.gedge-false {
   background: var(--ui-bad) !important;
   border-color: var(--ui-bg0) !important;
 }
-.ge-dark .graph-canvas .gport-label {
-  color: var(--ui-muted);
-}
-
 /* 执行边：深底高亮描线 + 选中辉光 */
 .ge-dark .graph-canvas .gedge .react-flow__edge-path,
 .ge-dark .graph-canvas path.gedge {
@@ -3446,17 +3433,11 @@ path.gedge-false {
 .ge-dark .graph-issue:hover {
   background: color-mix(in srgb, var(--ui-warn) 10%, transparent);
 }
-.ge-dark .graph-issue {
-  color: var(--ui-ink);
-}
 .ge-dark .graph-log,
 .ge-dark .gvars,
 .ge-dark .gevents {
   background: var(--ui-panel);
   border-color: var(--ui-line);
-}
-.ge-dark .graph-log-entry {
-  color: var(--ui-ink-soft);
 }
 .ge-dark .graph-log-entry:hover {
   background: color-mix(in srgb, var(--ui-accent) 7%, transparent);
@@ -3475,15 +3456,6 @@ path.gedge-false {
 .ge-dark .graph-log-entry.has-node:hover {
   border-color: var(--ui-accent);
 }
-.ge-dark .graph-log-kind.command {
-  color: var(--ui-ink-faint);
-}
-.ge-dark .graph-log-node {
-  color: var(--ui-node-link);
-}
-.ge-dark .graph-issue-code {
-  color: var(--ui-warn);
-}
 .ge-dark .canvas-map {
   background: color-mix(in srgb, var(--ui-minimap-bg) 94%, transparent);
   border-color: var(--ui-line);
@@ -3494,9 +3466,6 @@ path.gedge-false {
 }
 .ge-dark .canvas-map-box {
   background: rgba(56, 72, 110, 0.55);
-}
-.ge-dark .canvas-map-box span {
-  color: var(--ui-ink);
 }
 .ge-dark .canvas-map-box.is-focus {
   outline-color: var(--ui-accent);
@@ -4221,14 +4190,8 @@ a.lib-title:hover {
 .ge-dark .gdock-head {
   border-bottom-color: var(--ui-line);
 }
-.ge-dark .gdock-title {
-  color: var(--ui-ink);
-}
 .ge-dark .gdock-close {
   color: var(--ui-muted);
-}
-.ge-dark .gdock-close:hover {
-  color: var(--ui-bad);
 }
 .ge-dark .gem-new input {
   background: var(--ui-panel-2);
@@ -4264,9 +4227,6 @@ a.lib-title:hover {
 .ge-dark .ai-panel-head {
   border-bottom-color: var(--ui-line);
 }
-.ge-dark .ai-panel-head b {
-  color: var(--ui-ink);
-}
 .ge-dark .ai-mode-chip {
   color: var(--ui-accent);
   border-color: var(--ui-accent);
@@ -4278,17 +4238,10 @@ a.lib-title:hover {
 .ge-dark .ai-panel-close:hover {
   color: var(--ui-ink);
 }
-.ge-dark .ai-msg,
-.ge-dark .ai-msg-assistant {
-  color: var(--ui-ink);
-}
 .ge-dark .ai-msg-user {
   background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
 }
 .ge-dark .ai-msg-tool summary {
-  color: var(--ui-muted);
-}
-.ge-dark .ai-tool-calls {
   color: var(--ui-muted);
 }
 .ge-dark .ai-panel-empty,
@@ -4424,9 +4377,6 @@ a.lib-title:hover {
 }
 .ge-dark .ai-mode-tabs {
   border-color: var(--ui-line);
-}
-.ge-dark .ai-mode-tab {
-  color: var(--ui-muted);
 }
 .ge-dark .ai-mode-tab.active {
   background: var(--ui-accent);
@@ -5010,6 +4960,27 @@ a.lib-title:hover {
   border-left-color: var(--ui-line);
   color: var(--ui-muted);
 }
+
+/* G2（docs/44 R17b）：颜色收敛第一批——以下 17 条原本是 .ge-dark 单色覆盖规则，
+   现提升为 .graph-editor 作用域的 --ui-* 共享规则（浅色取值经 --ui 映射与原基础样式等价：
+   文本色与继承的 --ink/--muted 一致；深色值不变）。仅收敛「纯 color」规则，不动深色结构差异。 */
+.graph-editor .graph-lint-count { color: var(--ui-warn); }
+.graph-editor .gnode-line { color: var(--ui-ink-soft); }
+.graph-editor .graph-canvas .gport-label { color: var(--ui-muted); }
+.graph-editor .ai-mode-tab { color: var(--ui-muted); }
+.graph-editor .gdock-close:hover { color: var(--ui-bad); }
+.graph-editor .glib-title { color: var(--ui-ink); }
+.graph-editor .graph-issue { color: var(--ui-ink); }
+.graph-editor .graph-log-entry { color: var(--ui-ink-soft); }
+.graph-editor .graph-log-kind.command { color: var(--ui-ink-faint); }
+.graph-editor .graph-log-node { color: var(--ui-node-link); }
+.graph-editor .graph-issue-code { color: var(--ui-warn); }
+.graph-editor .canvas-map-box span { color: var(--ui-ink); }
+.graph-editor .gdock-title { color: var(--ui-ink); }
+.graph-editor .ai-panel-head b { color: var(--ui-ink); }
+.graph-editor .ai-msg,
+.graph-editor .ai-msg-assistant { color: var(--ui-ink); }
+.graph-editor .ai-tool-calls { color: var(--ui-muted); }
 
 /* ---------------------------------------------------------------------------
    调试布局与画面（批次9 可视化）：会话激活时工作台切换为
