@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:dist": "node scripts/verify-dist.mjs",
     "bench:update": "node scripts/bench-update.mjs"
   },
   "dependencies": {
