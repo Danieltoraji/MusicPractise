@@ -1356,15 +1356,11 @@ a.level-row:hover {
 }
 .editor-canvas-layout {
   display: flex;
-  flex-wrap: wrap;
   gap: var(--sp-4);
-  align-items: flex-start;
 }
-/* 提示文字独占一行，不与画布争抢宽度（此前它作为 flex 子项按内容宽度
-   挤压了 flex:1 的画布，导致关卡界面只剩 126px） */
-.editor-canvas-layout > p {
-  flex-basis: 100%;
-}
+/* G7（docs/44 R27）：删除两处历史死声明——基础块 flex-wrap:wrap/align-items:flex-start
+   被后置三栏规则同特异性覆盖；直接子段落的 flex-basis 选择器已无匹配元素（空态提示
+   在 .editor-canvas 内）。行为等价，静态守卫 g7Css.test.ts 防回退。 */
 .editor-canvas-layout .editor-canvas {
   flex: 1 1 0%;
   min-width: 0;
