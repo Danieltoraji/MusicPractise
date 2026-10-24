@@ -1,6 +1,6 @@
 # AGENTS.md — MusicPractise（音乐练习 UGC 平台）
 
-> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-24 由 ZCode 会话修订（docs/40 编辑器审计、docs/41 R1–R12 修复、docs/42 独立验收、docs/43 R13 返工、docs/44 后续批次 R14/R15/R16a/R16b/R17a/R17b1/R18/R19/R20/R21/R22/R23/R24/R25 落地；测试基线 805 → 808 → 861 → 915 → 929 → 938 → 967 → 971 → 972 → 974 → 980 → 981 → 986 → 988 → 992 → 996 → **997 项 / 108 文件**）。
+> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-24 由 ZCode 会话修订（docs/40 编辑器审计、docs/41 R1–R12 修复、docs/42 独立验收、docs/43 R13 返工、docs/44 后续批次 R14/R15/R16a/R16b/R17a/R17b1/R18/R19/R20/R21/R22/R23/R24/R25/R26 落地；测试基线 805 → 808 → 861 → 915 → 929 → 938 → 967 → 971 → 972 → 974 → 980 → 981 → 986 → 988 → 992 → 996 → 997 → **1001 项 / 109 文件**）。
 
 ## 项目定位
 
@@ -9,7 +9,7 @@
 ## 命令与工程基线
 
 - `npm run dev` 纯前端（5173，`/api` 代理到 wrangler 8787）；`npm run dev:worker` 全栈（先 `npm run build`）；`npm run db:migrate:local` 本地 D1 迁移；`npm test`（Vitest）；`npm run build` = `tsc --noEmit && vite build`。
-- 质量门禁：全量测试全绿（现行基线 **997 项 / 108 文件**，R25 后；历史见 docs/41/43/44；**全局 console 门禁已启用，非预期 console.error/warn 即失败**）+ `tsc`/`build` 干净（build 以 exit 0 + 无新增告警为准；vexflow >500kB 警告为已知项）+ 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环；写路径性能改动先跑 `npm run bench:update`（R11 门控，docs/44 §5）；编辑器交互新增/修改需同时补 `data-testid`（G3 契约，见 `src/test/g3Anchors.test.ts`）；双用 hook class 从 `src/editor/editorHooks.ts` 引用（G14 契约）。
+- 质量门禁：全量测试全绿（现行基线 **1001 项 / 109 文件**，R26 后；历史见 docs/41/43/44；**全局 console 门禁已启用，非预期 console.error/warn 即失败**）+ `tsc`/`build` 干净（build 以 exit 0 + 无新增告警为准；vexflow >500kB 警告为已知项）+ 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环；写路径性能改动先跑 `npm run bench:update`（R11 门控，docs/44 §5）；编辑器交互新增/修改需同时补 `data-testid`（G3 契约，见 `src/test/g3Anchors.test.ts`）；双用 hook class 从 `src/editor/editorHooks.ts` 引用（G14 契约）。
 - 设计/评审/落地记录按编号归档 `docs/`（如 docs/02 数据结构契约、docs/27 数据表 2.0、docs/31 后端、docs/36 UI 全量重设计、docs/37 运行时 UI 改造、docs/38 编辑器界面改造）；数据模型或接口变更须同步对应文档与契约表。
 
 ## 目录与架构要点
@@ -85,10 +85,11 @@
 - **双用 hook class / `--ge-*` 白名单（G14/G13 / docs/44 R23）**：`.editor-body`/`.editor-canvas`/`.tlist-modal`/`.gtoggle`/`stage-*`/`gdb-stage-canvas` 等是 JS/CSS/测试共用契约，统一从 `src/editor/editorHooks.ts` 引用，勿散落裸字符串；`var(--ge-*)` 只允许「33 条深色映射 + 5 处 gdb 双写 fallback」（R25 后），新增直用会被 `themeTokens.test` 拦截（浅色主题会静默失效）。
 - **深色工作台裸色（G8 / docs/44 R25）**：`.ge-dark` 主题区只允许调色板定义、`rgba(var(--ui-shadow-rgb))` 阴影与白/黑遮罩原语；画布缩略图叠色走 `--ui-map-box-bg`（第 33 个语义 token），不要再写字面量（裸色扫描会失败）。
 - **z-index / 弹窗外壳（G10/G12 / docs/44 R24）**：新增浮层必须用 `--z-*` 语义令牌（`themeTokens.test` 守卫 15 条声明/无裸数值；档位值保留既有精确值，合并 5 档需视觉矩阵）；弹窗外壳用通用 `.modal-backdrop/.modal-shell/.modal-head`，`.tjson-*` 是兼容 alias——新弹窗不要再只写 `.tjson-*`（`modalShell.test` 守卫）。
+- **动效 / 舞台 fit（G11 / docs/44 R26）**：`prefers-reduced-motion: reduce` 降级块固定在 index.css 文件尾（`motionPreference.test` 守卫；新增媒体查询不要放到它之后）；LevelStage 缩放统一走纯函数 `computeStageFit`，ResizeObserver 回调必须 rAF 合并 + `Object.is` 等值短路（尺寸不变返回旧 state，避免舞台整树重渲染）。
 
 ## 待办与搁置（2026-10-23 修订）
 
-- **R13 后仍开放（后续批次见 docs/44）**：G2 `.ge-dark` 剩余结构性收敛与视觉矩阵（R17a 语义 token 层 + R17b1 单色规则首批收敛：17 选择器提升、选择器行 158→143、预算 ≤143 防回涨；像素矩阵仍外依赖）、G3 视觉回归（R15 起步、**R21 锚点扩到 127 处/静态唯一 52 并加静态契约**；视觉 smoke 仍外依赖）、H2 视觉覆盖（R15 canvas 噪音清零、**R20 全局 console 门禁已闭环**；浏览器视觉矩阵仍外依赖）、G4/G5 已由 R22 落地机制、G13/G14 已由 R23 落地、G10/G12 已由 R24 落地、G6/G8 已由 R25 落地（首帧预置静态链/顺序、画布缩略图第 33 token 收编）、G7/G9/G11/G15 其余主题机制仍开放、编辑器移动端适配。**R16a/R16b 已闭环 F8/F13/F18/F19/F9/E18/O2/A5/F6**，**D1 已由 R14 闭环**，**R18/R11 热路径 patch 化已完成**（基准 P95 0.02–0.03ms；增删/整表深拷贝为残余；bundle 评估暂不改造，docs/44 §5），**R19 已闭环 F10/O9**（docs/44 §6），**R20 已闭环 H2 console 门禁**（docs/44 §7），**R21 已落地 G3 锚点增量**（docs/44 §8），**R22 已落地 G4/G5 机制**（docs/44 §9），**R23 已落地 G13/G14**（docs/44 §10），**R24 已落地 G10/G12 机制**（docs/44 §11），**R25 已落地 G6/G8**（docs/44 §12）；R17b2（剩余收敛+视觉矩阵）待外依赖。
+- **R13 后仍开放（后续批次见 docs/44）**：G2 `.ge-dark` 剩余结构性收敛与视觉矩阵（R17a 语义 token 层 + R17b1 单色规则首批收敛：17 选择器提升、选择器行 158→143、预算 ≤143 防回涨；像素矩阵仍外依赖）、G3 视觉回归（R15 起步、**R21 锚点扩到 127 处/静态唯一 52 并加静态契约**；视觉 smoke 仍外依赖）、H2 视觉覆盖（R15 canvas 噪音清零、**R20 全局 console 门禁已闭环**；浏览器视觉矩阵仍外依赖）、G4/G5 已由 R22 落地机制、G13/G14 已由 R23 落地、G10/G12 已由 R24 落地、G6/G8 已由 R25 落地、G11 主要项已由 R26 落地（reduced-motion + fit 渲染合并；选中态伪元素/边阴影重构仍开放）、G7/G9/G15 其余主题机制仍开放、编辑器移动端适配。**R16a/R16b 已闭环 F8/F13/F18/F19/F9/E18/O2/A5/F6**，**D1 已由 R14 闭环**，**R18/R11 热路径 patch 化已完成**（基准 P95 0.02–0.03ms；增删/整表深拷贝为残余；bundle 评估暂不改造，docs/44 §5），**R19 已闭环 F10/O9**（docs/44 §6），**R20 已闭环 H2 console 门禁**（docs/44 §7），**R21 已落地 G3 锚点增量**（docs/44 §8），**R22 已落地 G4/G5 机制**（docs/44 §9），**R23 已落地 G13/G14**（docs/44 §10），**R24 已落地 G10/G12 机制**（docs/44 §11），**R25 已落地 G6/G8**（docs/44 §12），**R26 已落地 G11 主要项**（docs/44 §13）；R17b2（剩余收敛+视觉矩阵）待外依赖。
 - **云盘共享与关卡库已全部落地（docs/39，H1–H6）**：资源库文件管理器、云盘文件夹化、公共/精选/官方/群组关卡库、申请公开审核、admin 审核队列与官方/群组管理。后续候选：下载排行榜/排序参数、通知系统、拖拽整理、移动端适配（延续 docs/38 口径）。
 - Bundle 瘦身已部分落地（vexflow/smplr/pitchy/fflate 惰性或动态 import、react vendor chunk，见 vite.config.ts；主包峰值曾 1.83MB/gzip ~906KB，目标 gzip ~450–550KB）；MusicXML 导入未启动。
 - 移动端适配：游玩舞台已适配（批次12 fit-scale + 触屏），**编辑器等重交互表面的移动端适配未启动**（docs/38 裁决不纳入，当前为 0）。
