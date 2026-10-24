@@ -949,10 +949,7 @@ a.level-row:hover {
   padding: 2px 10px;
   font-weight: 600;
 }
-.badge.pass {
-  background: var(--ok-soft-strong);
-  color: var(--ok);
-}
+
 
 /* ---------- 关卡编辑器 ---------- */
 
@@ -4766,16 +4763,7 @@ a.lib-title:hover {
   flex: 1;
   font-weight: 600;
 }
-.ai-plan-run {
-  flex: none;
-  background: var(--accent);
-  color: var(--accent-ink);
-  border: none;
-  border-radius: 7px;
-  padding: 4px 12px;
-  font-size: 12.5px;
-  cursor: pointer;
-}
+
 .ai-plan-run:disabled {
   opacity: 0.5;
   cursor: default;
@@ -6585,10 +6573,7 @@ progress {
   border-radius: var(--r-lg);
   padding: var(--sp-5) var(--sp-6) var(--sp-5);
 }
-.docs-article p,
-.docs-article li {
-  line-height: 1.75;
-}
+
 .docs-callout {
   border-radius: var(--r-md);
   padding: var(--sp-3) var(--sp-4);
