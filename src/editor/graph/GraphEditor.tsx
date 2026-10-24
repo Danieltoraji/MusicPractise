@@ -967,8 +967,10 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
         minZoom={0.2}
         colorMode={theme}
       >
-        <Background variant={BackgroundVariant.Dots} gap={26} size={1.6} color="#26355a" />
-        <MiniMap pannable zoomable nodeColor="#41598c" nodeStrokeColor="#6f86b8" />
+        {/* G9（docs/44 R28）：点阵/小地图颜色走语义 token（明暗由 --ui-* 作用域解析），
+            不再硬编码深色 hex——浅色主题此前误用深色点阵/小地图色。 */}
+        <Background variant={BackgroundVariant.Dots} gap={26} size={1.6} color="var(--ui-line)" />
+        <MiniMap pannable zoomable nodeColor="var(--ui-node-line)" nodeStrokeColor="var(--ui-edge)" />
         <Controls showInteractive={false} />
       </ReactFlow>
       {showMap && (
