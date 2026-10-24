@@ -559,13 +559,13 @@ function MoveDialog(props: {
 
   return (
     <div
-      className="tjson-backdrop"
+      className="tjson-backdrop modal-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) props.onClose()
       }}
     >
-      <div className={`tjson-modal ${EDITOR_HOOKS.tlistModal}`}>
-        <div className="tjson-modal-head">
+      <div className={`tjson-modal modal-shell ${EDITOR_HOOKS.tlistModal}`}>
+        <div className="tjson-modal-head modal-head">
           <b>
             {verb}
             {kindLabel}「{rec.title}」到…

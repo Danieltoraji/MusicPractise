@@ -218,4 +218,21 @@ describe('G2 语义 token 层（R17a）', () => {
       mapping.length + fallback.length,
     )
   })
+
+  // ---------------------------------------------------------------------------
+  // R24（docs/44）：G10 z-index 层级令牌（裸数值守卫）
+  // ---------------------------------------------------------------------------
+  it('G10：z-index 全部走 --z-* 语义令牌；引用必须有定义', () => {
+    const decls = [...css.matchAll(/z-index:\s*([^;]+);/g)].map((m) => m[1].trim())
+    expect(decls.length, 'z-index 声明数量变化：新增/删除浮层需同步本守卫与 docs/44').toBe(15)
+    for (const value of decls) {
+      expect(value, `裸 z-index 数值未走令牌：${value}`).toMatch(/^var\(--z-[a-z0-9-]+\)$/)
+    }
+    const defined = new Set([...css.matchAll(/--z-[a-z0-9-]+:/g)].map((m) => m[0].slice(0, -1)))
+    expect(defined.size, '--z-* 令牌表漂移').toBeGreaterThanOrEqual(10)
+    for (const value of decls) {
+      const name = value.match(/--z-[a-z0-9-]+/)![0]
+      expect(defined.has(name), `z-index 引用了未定义令牌 ${name}`).toBe(true)
+    }
+  })
 })

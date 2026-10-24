@@ -68,20 +68,20 @@ export function Modal(props: {
 
   return (
     <div
-      className="tjson-backdrop"
+      className="tjson-backdrop modal-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) props.onClose()
       }}
     >
       <div
         ref={panelRef}
-        className={`tjson-modal${props.contentClassName ? ` ${props.contentClassName}` : ''}`}
+        className={`tjson-modal modal-shell${props.contentClassName ? ` ${props.contentClassName}` : ''}`}
         role="dialog"
         aria-modal="true"
         data-testid="modal"
         tabIndex={-1}
       >
-        <div className="tjson-modal-head">
+        <div className="tjson-modal-head modal-head">
           <b>{props.title}</b>
           {props.actions}
         </div>

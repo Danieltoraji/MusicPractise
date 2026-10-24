@@ -365,13 +365,13 @@ export function CloudPage() {
 
       {pickerOpen && (
         <div
-          className="tjson-backdrop"
+          className="tjson-backdrop modal-backdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setPickerOpen(false)
           }}
         >
-          <div className={`tjson-modal ${EDITOR_HOOKS.tlistModal}`}>
-            <div className="tjson-modal-head">
+          <div className={`tjson-modal modal-shell ${EDITOR_HOOKS.tlistModal}`}>
+            <div className="tjson-modal-head modal-head">
               <b>从本机资源库上传…</b>
               <button type="button" className="link" onClick={() => setPickerOpen(false)}>
                 取消
@@ -414,13 +414,13 @@ export function CloudPage() {
 
       {publishDialog && (
         <div
-          className="tjson-backdrop"
+          className="tjson-backdrop modal-backdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setPublishDialog(null)
           }}
         >
-          <div className="tjson-modal">
-            <div className="tjson-modal-head">
+          <div className="tjson-modal modal-shell">
+            <div className="tjson-modal-head modal-head">
               <b>
                 申请公开「{publishDialog.title}」
               </b>
