@@ -1,18 +1,38 @@
 /**
- * G15（docs/40 / docs/44 R29–R32）：CSS 顶层重复/死声明守卫。
+ * G15（docs/40 / docs/44 R29–R34）：CSS 顶层重复/死声明/死类样式守卫。
  *
  * - R29：删除「同选择器 + 完全相同声明」的重复规则（1020→1017 条顶层规则），零完全重复；
  * - R30：删除「同选择器、被后置规则完全覆盖」的 60 条死声明（非 !important、非 @media），
  *   本守卫重算同一分析并要求归零——新增同名覆盖规则时必须先清理旧声明，避免死代码回涨；
- * - R32：删除 `.level-canvas` 整条死规则（宽高/定位被 LevelStage 内联 style 与 `.stage-canvas` 完全覆盖）。
+ * - R32：删除 `.level-canvas` 整条死规则（宽高/定位被 LevelStage 内联 style 与 `.stage-canvas` 完全覆盖）；
+ * - R34：删除 11 个在 src/ 中完全未被引用的死类样式（rules-editor/rule-card/rule-head/action-list/
+ *   action-add/gevents/gdb-preset/ai-mode-chip/library-actions/box-type/docs-callout-warn）；
+ *   本守卫反向扫描 CSS 类名并要求「每个静态类名在 src/ 中出现」——动态拼接类名前缀白名单见 DYNAMIC_PREFIXES。
  * 残余：56 组同名选择器中的**不同属性/不同用途**冲突（如 base 与 .ge-dark/媒体查询），
  * 需人工分类 + 视觉矩阵，未在本守卫范围内。
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
 const levelStage = readFileSync(new URL('../runtime/LevelStage.tsx', import.meta.url), 'utf8')
+
+function collectSourceFiles(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const path = `${dir}/${name}`
+    if (statSync(path).isDirectory()) collectSourceFiles(path, out)
+    else if (/\.(ts|tsx)$/.test(name)) out.push(path)
+  }
+  return out
+}
+const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url))
+const SRC_TEXT = collectSourceFiles(SRC_ROOT)
+  .map((path) => readFileSync(path, 'utf8'))
+  .join('\n')
+
+/** CSS 类名由代码动态拼接的前缀（模板字符串），无法按字面量出现在源码中 */
+const DYNAMIC_PREFIXES = ['react-flow__', 'bar-', 'tone-', 'st-', 'gedge-', 'skin-preview-']
 
 interface Rule {
   sel: string
@@ -95,6 +115,16 @@ describe('G15 CSS 重复/死声明守卫（docs/44 R29–R30）', () => {
     expect(levelStage).toContain('width: STAGE_W')
     expect(levelStage).toContain('height: STAGE_H')
     expect(levelStage).toContain('left: fit.left')
+  })
+
+  it('不存在 src/ 中完全未引用的静态类样式（死类名防回涨）', () => {
+    const classTokens = new Set([...css.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map((m) => m[1]))
+    expect(classTokens.size, 'CSS 类名数量异常（文件被破坏？）').toBeGreaterThan(400)
+    const dead = [...classTokens]
+      .filter((token) => !SRC_TEXT.includes(token))
+      .filter((token) => !DYNAMIC_PREFIXES.some((prefix) => token.startsWith(prefix)))
+      .sort()
+    expect(dead, `存在 src/ 中完全未引用的死类样式（请删除或加入动态前缀白名单）：\n${dead.join('\n')}`).toEqual([])
   })
 
   it('花括号平衡（删除重复规则/死声明后结构完整）', () => {

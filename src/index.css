@@ -802,12 +802,6 @@ input::placeholder {
 
 /* ---------- 资源库 ---------- */
 
-.library-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin: 14px 0 18px;
-}
 .button-like {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1082,14 +1076,6 @@ a.level-row:hover {
 }
 .ai-panel-head b {
   font-size: var(--fs-2);
-}
-.ai-mode-chip {
-  font-size: var(--fs-0);
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  padding: 0 8px;
-  line-height: 18px;
 }
 .ai-panel-clear {
   font-size: var(--fs-0);
@@ -1422,9 +1408,6 @@ a.level-row:hover {
   z-index: var(--z-label);
   pointer-events: none;
 }
-.box-type {
-  color: var(--muted);
-}
 .inspector {
   width: 300px;
   flex: none;
@@ -1469,7 +1452,6 @@ a.level-row:hover {
 .inspector .danger {
   color: var(--bad);
 }
-.rules-editor,
 .questions-editor {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1482,48 +1464,6 @@ a.level-row:hover {
   align-items: center;
   margin-bottom: var(--sp-3);
 }
-.rule-card {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: var(--sp-3);
-  margin-bottom: var(--sp-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-.rule-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.rule-card label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--fs-1);
-  color: var(--muted);
-}
-.rule-card input,
-.rule-card textarea,
-.rule-card select {
-  font-family: inherit;
-  font-size: var(--fs-1);
-  padding: 6px 8px;
-  border-radius: var(--r-sm);
-  color: var(--ink);
-}
-.rule-card textarea {
-  font-family: var(--font-mono);
-  font-size: var(--fs-1);
-}
-.action-list {
-  border-top: 1px dashed var(--line);
-  padding-top: 8px;
-}
-.action-list > b {
-  font-size: 12px;
-  color: var(--muted);
-}
 .action-row {
   display: flex;
   gap: 8px;
@@ -1532,10 +1472,6 @@ a.level-row:hover {
 }
 .action-row input {
   flex: 1;
-}
-.action-add {
-  display: flex;
-  gap: 8px;
 }
 /* 纵向 flex：textarea flex:1 撑满剩余高度（docs/40 G7——此前无 display:flex，textarea 高度塌缩） */
 .json-tab {
@@ -3439,8 +3375,7 @@ path.gedge-false {
   background: color-mix(in srgb, var(--ui-warn) 10%, transparent);
 }
 .ge-dark .graph-log,
-.ge-dark .gvars,
-.ge-dark .gevents {
+.ge-dark .gvars {
   background: var(--ui-panel);
   border-color: var(--ui-line);
 }
@@ -3703,25 +3638,6 @@ a.lib-title:hover {
 .editor-box:hover .box-resize,
 .editor-box.is-selected .box-resize {
   opacity: 1;
-}
-
-/* 事件面板（与变量面板同风格） */
-.gevents {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 12.5px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-.gevents .glib-group-head {
-  font-size: 11.5px;
-  color: var(--muted);
-  font-weight: 600;
 }
 
 /* emit 负载：两列表格化（键 | 值） */
@@ -4227,10 +4143,6 @@ a.lib-title:hover {
 .ge-dark .ai-panel-head {
   border-bottom-color: var(--ui-line);
 }
-.ge-dark .ai-mode-chip {
-  color: var(--ui-accent);
-  border-color: var(--ui-accent);
-}
 .ge-dark .ai-panel-clear,
 .ge-dark .ai-panel-close {
   color: var(--ui-muted);
@@ -4683,7 +4595,6 @@ a.lib-title:hover {
 .ge-dark .gdb-log-row.command .gdb-log-kind {
   color: var(--ui-muted);
 }
-.ge-dark .gdb-preset,
 .ge-dark .ai-preset {
   background: var(--ui-panel-2);
   border-color: var(--ui-line);
@@ -5592,13 +5503,6 @@ a.lib-title:hover {
 }
 .docs-callout p {
   margin: 6px 0 0;
-}
-.docs-callout-warn {
-  border-left-color: var(--warn);
-  background: var(--warn-soft);
-}
-.docs-callout-warn b {
-  color: var(--warn-ink);
 }
 .docs-code {
   background: var(--code-bg);
