@@ -10,6 +10,7 @@ import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toPng } from 'html-to-image'
+import { EDITOR_HOOKS } from '../editorHooks'
 import { runAgentTurn, stopAgent } from '../../ai/agent'
 import { appendCapped, downscaleImage, fileToDataUrl, imageFilesFromClipboard, MAX_ATTACH_IMAGES } from '../../ai/imageAttach'
 import { clearCheckpoint, getCheckpoint, saveCheckpoint } from '../../ai/checkpoint'
@@ -197,11 +198,11 @@ export function AiPanel({ doc, selection, onClose, onApplyDoc, getRevision, getL
       captureScreenshot: async (target: 'graph' | 'canvas' | 'debug' = 'graph') => {
         const el =
           target === 'canvas'
-            ? document.querySelector('.editor-body .editor-canvas')
+            ? document.querySelector(`.${EDITOR_HOOKS.editorBody} .${EDITOR_HOOKS.editorCanvas}`)
             : target === 'debug'
-              ? document.querySelector('.gdb-stage-canvas')
-              : document.querySelector('.graph-editor .react-flow__nodes') ??
-                document.querySelector('.graph-editor .react-flow')
+              ? document.querySelector(`.${EDITOR_HOOKS.debugStageCanvas}`)
+              : document.querySelector(`.${EDITOR_HOOKS.graphNodes}`) ??
+                document.querySelector(`.${EDITOR_HOOKS.graphFlow}`)
         if (!el) return null
         try {
           const capture = toPng(el as HTMLElement, {

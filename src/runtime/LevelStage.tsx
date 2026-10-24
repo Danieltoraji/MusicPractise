@@ -6,6 +6,7 @@
  */
 import { useLayoutEffect, useRef, useState } from 'react'
 import { ComponentView } from '../components/views'
+import { EDITOR_HOOKS } from '../editor/editorHooks'
 import type { LevelDoc } from '../engine/level'
 import type { Json } from '../engine/expr'
 import type { ComponentStore } from './store'
@@ -53,10 +54,10 @@ export function LevelStage({
   const comps = doc.content.components.filter((c) => (c.view ?? firstView) === viewId)
 
   return (
-    <div ref={wrapRef} className={`stage-viewport${viewportClassName ? ` ${viewportClassName}` : ''}`}>
+    <div ref={wrapRef} className={`${EDITOR_HOOKS.stageViewport}${viewportClassName ? ` ${viewportClassName}` : ''}`}>
       <div
         key={sessionKey}
-        className={`stage-canvas${canvasClassName ? ` ${canvasClassName}` : ''}`}
+        className={`${EDITOR_HOOKS.stageCanvas}${canvasClassName ? ` ${canvasClassName}` : ''}`}
         style={{
           transform: `scale(${fit.scale})`,
           width: STAGE_W,

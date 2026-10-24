@@ -23,6 +23,7 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { EDITOR_HOOKS } from '../editorHooks'
 import type { LevelDoc } from '../../engine/level'
 import type { GNode } from '../../engine/graphProgram'
 import {
@@ -1044,7 +1045,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
           </span>
           <button
             type="button"
-            className="gtoggle"
+            className={EDITOR_HOOKS.graphToggle}
             onClick={() => {
               stopDebugRun()
               setDbgPane('stage')
@@ -1055,7 +1056,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
           </button>
           <button
             type="button"
-            className={`gtoggle${dbgPane === 'stage' ? ' active' : ''}`}
+            className={`${EDITOR_HOOKS.graphToggle}${dbgPane === 'stage' ? ' active' : ''}`}
             onClick={() => setDbgPane('stage')}
             title="左侧显示可交互的游玩画面"
           >
@@ -1063,7 +1064,7 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
           </button>
           <button
             type="button"
-            className={`gtoggle${dbgPane === 'graph' ? ' active' : ''}`}
+            className={`${EDITOR_HOOKS.graphToggle}${dbgPane === 'graph' ? ' active' : ''}`}
             onClick={() => setDbgPane('graph')}
             title="左侧显示节点图（断点圆点与暂停高亮）"
           >
@@ -1115,22 +1116,22 @@ function GraphEditorInner({ doc, onChange, aiOpen, onToggleAi, getRevision, getL
   return (
     <div ref={rootRef} className={`graph-editor ge-${theme}${fullscreen ? ' is-fullscreen' : ''}`} data-testid="graph-editor">
       <div className="graph-toolbar">
-        <button type="button" data-testid="graph-panel-toggle-library" className={`gtoggle${panelVisible('library') ? ' active' : ''}`} onClick={() => togglePanel('library')} title="组件库面板（节点/模板菜单）">
+        <button type="button" data-testid="graph-panel-toggle-library" className={`${EDITOR_HOOKS.graphToggle}${panelVisible('library') ? ' active' : ''}`} onClick={() => togglePanel('library')} title="组件库面板（节点/模板菜单）">
           🧩 组件库
         </button>
-        <button type="button" data-testid="graph-panel-toggle-events" className={`gtoggle${panelVisible('events') ? ' active' : ''}`} onClick={() => togglePanel('events')} title="事件管理面板（系统/组件/内部事件 → 一键落节点）">
+        <button type="button" data-testid="graph-panel-toggle-events" className={`${EDITOR_HOOKS.graphToggle}${panelVisible('events') ? ' active' : ''}`} onClick={() => togglePanel('events')} title="事件管理面板（系统/组件/内部事件 → 一键落节点）">
           ⚡ 事件
         </button>
-        <button type="button" data-testid="graph-panel-toggle-vars" className={`gtoggle${panelVisible('vars') ? ' active' : ''}`} onClick={() => togglePanel('vars')} title="变量面板（声明/初值）">
+        <button type="button" data-testid="graph-panel-toggle-vars" className={`${EDITOR_HOOKS.graphToggle}${panelVisible('vars') ? ' active' : ''}`} onClick={() => togglePanel('vars')} title="变量面板（声明/初值）">
           🧮 变量
         </button>
-        <button type="button" data-testid="graph-panel-toggle-inspector" className={`gtoggle${panelVisible('inspector') ? ' active' : ''}`} onClick={() => togglePanel('inspector')} title="节点属性面板">
+        <button type="button" data-testid="graph-panel-toggle-inspector" className={`${EDITOR_HOOKS.graphToggle}${panelVisible('inspector') ? ' active' : ''}`} onClick={() => togglePanel('inspector')} title="节点属性面板">
           ⚙ 属性
         </button>
-        <button type="button" data-testid="graph-panel-toggle-ai" className={`gtoggle${aiOpen ? ' active' : ''}`} onClick={onToggleAi} title="AI 助手面板（统一对话，随主题换肤）">
+        <button type="button" data-testid="graph-panel-toggle-ai" className={`${EDITOR_HOOKS.graphToggle}${aiOpen ? ' active' : ''}`} onClick={onToggleAi} title="AI 助手面板（统一对话，随主题换肤）">
           🤖 AI
         </button>
-        <button type="button" data-testid="graph-panel-toggle-debug" className={`gtoggle${panelVisible('debug') ? ' active' : ''}`} onClick={() => togglePanel('debug')} title="调试面板（断点/单步/变量观察与赋值/实时日志/手动触发事件；仅编辑器内可用）">
+        <button type="button" data-testid="graph-panel-toggle-debug" className={`${EDITOR_HOOKS.graphToggle}${panelVisible('debug') ? ' active' : ''}`} onClick={() => togglePanel('debug')} title="调试面板（断点/单步/变量观察与赋值/实时日志/手动触发事件；仅编辑器内可用）">
           🐞 调试
         </button>
         <span className="graph-tb-sep" aria-hidden />

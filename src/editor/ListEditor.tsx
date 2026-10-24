@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { registerModalOpen } from './keyGuard'
 import { Modal } from './Modal'
+import { EDITOR_HOOKS } from './editorHooks'
 
 /** 单元格任意 Json 值 → 可编辑字符串条目（尽力转换，永不失败；null/undefined → 空列表） */
 export function listEntriesFromCell(v: unknown): string[] {
@@ -40,7 +41,7 @@ export function ListEditorModal(props: {
     setItems([...items, ''])
     // 新条目输入框自动聚焦：新增后最后一个 input 挂载，等一帧再找
     requestAnimationFrame(() => {
-      const inputs = document.querySelectorAll<HTMLInputElement>('.tlist-modal .tlist-row input')
+      const inputs = document.querySelectorAll<HTMLInputElement>(`.${EDITOR_HOOKS.tlistModal} .tlist-row input`)
       inputs[inputs.length - 1]?.focus()
     })
   }
@@ -49,7 +50,7 @@ export function ListEditorModal(props: {
     <Modal
       title={props.converting ? `${props.title}（原数据将转换为文本列表）` : props.title}
       onClose={props.onClose}
-      contentClassName="tlist-modal"
+      contentClassName={EDITOR_HOOKS.tlistModal}
       actions={
         <>
           <button type="button" onClick={props.onClose}>

@@ -10,6 +10,7 @@ import type { LibraryRecord } from '../library/db'
 import { loadLevelDoc } from '../library/validate'
 import { putResource } from '../library/db'
 import { ErrorBoundary } from '../library/ErrorBoundary'
+import { EDITOR_HOOKS } from './editorHooks'
 import { allContracts, ComponentStore, getDef } from '../runtime/store'
 import { ComponentView } from '../components/views'
 import { makeDirtyHashHandler } from './graph/dirtyGuard'
@@ -588,7 +589,7 @@ export function EditorPage({ id }: Props) {
         </button>
       </div>
 
-      <div className="editor-body">
+      <div className={EDITOR_HOOKS.editorBody}>
         <ErrorBoundary>
           {tab === 'canvas' && (
             <EditorCanvas
@@ -870,7 +871,7 @@ function EditorCanvas({
         </div>
         <div
           ref={canvasRef}
-          className="editor-canvas"
+          className={EDITOR_HOOKS.editorCanvas}
           onPointerDown={() => onSelect(null)}
         >
           {viewComps.map((comp) => {

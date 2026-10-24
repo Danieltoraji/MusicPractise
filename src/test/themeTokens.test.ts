@@ -201,4 +201,21 @@ describe('G2 语义 token 层（R17a）', () => {
       expect(decl(island.body, shadow), `内容岛未重算 --${shadow}`).toContain('var(--shadow-rgb)')
     }
   })
+
+  // ---------------------------------------------------------------------------
+  // R23（docs/44）：G13 --ge-* 引用白名单（深色映射 + gdb 双写 fallback）
+  // ---------------------------------------------------------------------------
+  it('G13：--ge-* 变量只允许「深色映射」与「gdb 双写 fallback」两类引用', () => {
+    const mapping = [...css.matchAll(/--ui-[a-z0-9-]+:\s*var\(--ge-[a-z0-9-]+\);/g)]
+    const fallback = [...css.matchAll(/var\(--ge-[a-z0-9-]+, var\(--[a-z0-9-]+\)\)/g)]
+    const refs = [...css.matchAll(/var\(--ge-[a-z0-9-]+/g)]
+    // 32 个语义 token 的深色映射（UI_TOKENS.length）
+    expect(mapping.length, '深色映射行数漂移（新增 --ui-* 时同步 UI_TOKENS）').toBe(UI_TOKENS.length)
+    // gdb-stage 的明暗双主题取值机制：5 处（改数量需同步 docs/40 G13 与 AGENTS）
+    expect(fallback.length, 'gdb 双写 fallback 数量漂移').toBe(5)
+    // 其它任何 var(--ge-*) 直用都会破坏「浅色回落」契约
+    expect(refs.length, '出现未登记的 var(--ge-*) 直用（应改用 --ui-* 或双写 fallback）').toBe(
+      mapping.length + fallback.length,
+    )
+  })
 })

@@ -25,6 +25,7 @@ import {
   type TopicDoc,
 } from '../library/manage'
 import { blankLevelDoc } from '../editor/docState'
+import { EDITOR_HOOKS } from '../editor/editorHooks'
 import { getAccountSnapshot, subscribeAccount } from '../account/store'
 import { uploadLibraryFolder, uploadLibraryLevel } from '../cloud/api'
 
@@ -563,7 +564,7 @@ function MoveDialog(props: {
         if (e.target === e.currentTarget) props.onClose()
       }}
     >
-      <div className="tjson-modal tlist-modal">
+      <div className={`tjson-modal ${EDITOR_HOOKS.tlistModal}`}>
         <div className="tjson-modal-head">
           <b>
             {verb}

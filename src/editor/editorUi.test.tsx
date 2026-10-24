@@ -6,6 +6,7 @@ import type { LevelDoc } from '../engine/level'
 import { SCHEMA_LIMITS } from '../library/schemaLimits'
 import { checkExprText } from './EditorPage'
 import { TableEditor } from './TableGrid'
+import { EDITOR_HOOKS } from './editorHooks'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -146,7 +147,7 @@ describe('TableEditor（jsdom 渲染）', () => {
       act(() => {
         ;(cell.querySelector('.tlist-open') as HTMLElement).click()
       })
-      const modal = container.querySelector('.tlist-modal')!
+      const modal = container.querySelector(`.${EDITOR_HOOKS.tlistModal}`)!
       expect(modal.querySelectorAll('.tlist-row').length).toBe(2)
       act(() => {
         ;[...modal.querySelectorAll('button')].find((b) => b.textContent === '+ 添加条目')!.click()
@@ -162,7 +163,7 @@ describe('TableEditor（jsdom 渲染）', () => {
         ;[...modal.querySelectorAll('button')].find((b) => b.textContent === '应用')!.click()
       })
       expect(current.content.table.rows[0].options).toEqual(['C 大调', 'G 大调', 'D 大调'])
-      expect(container.querySelector('.tlist-modal')).toBeNull()
+      expect(container.querySelector(`.${EDITOR_HOOKS.tlistModal}`)).toBeNull()
     } finally {
       act(() => root.unmount())
       container.remove()
@@ -192,7 +193,7 @@ describe('TableEditor（jsdom 渲染）', () => {
       act(() => {
         ;(cell.querySelector('.tlist-open') as HTMLElement).click()
       })
-      const modal = container.querySelector('.tlist-modal')!
+      const modal = container.querySelector(`.${EDITOR_HOOKS.tlistModal}`)!
       const inputs = modal.querySelectorAll('.tlist-row input')
       expect(inputs.length).toBe(2)
       expect((inputs[0] as HTMLInputElement).value).toBe('1')

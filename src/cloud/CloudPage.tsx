@@ -14,6 +14,7 @@ import { collectSeriesDocs } from '../library/manage'
 import { importDocuments, type ImportReport } from '../library/io'
 import { hubApi, type HubMineItem } from '../hub/api'
 import { cloudApi, CLOUD_LIMIT, uploadLibraryFolder, uploadLibraryLevel, type CloudFolder, type CloudSlot } from './api'
+import { EDITOR_HOOKS } from '../editor/editorHooks'
 
 const KIND_ICON: Record<string, string> = { series: '📚', topic: '📂', level: '🎯', instrument: '🎹' }
 
@@ -369,7 +370,7 @@ export function CloudPage() {
             if (e.target === e.currentTarget) setPickerOpen(false)
           }}
         >
-          <div className="tjson-modal tlist-modal">
+          <div className={`tjson-modal ${EDITOR_HOOKS.tlistModal}`}>
             <div className="tjson-modal-head">
               <b>从本机资源库上传…</b>
               <button type="button" className="link" onClick={() => setPickerOpen(false)}>
