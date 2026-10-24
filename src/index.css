@@ -3118,7 +3118,7 @@ path.gedge-false {
 /* ---------- 节点图 · 千星深色工作台主题（深色 = .graph-editor.ge-dark；浅色走基础规则） ---------- */
 
 /* G2（docs/44 R17a）：节点图语义 token 层。组件规则只消费 --ui-*；
-   浅色取全局设计令牌，深色在 .graph-editor.ge-dark 内一次性映射到千星色板--
+   浅色取全局设计令牌，深色在 .graph-editor.ge-dark 内一次性映射到千星色板；
    换肤/明暗切换只改映射，不再逐条改色值。 */
 .graph-editor {
   --ui-bg0: var(--soft);
