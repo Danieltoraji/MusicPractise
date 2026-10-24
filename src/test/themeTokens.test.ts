@@ -156,4 +156,49 @@ describe('G2 语义 token 层（R17a）', () => {
     const darkSelectorLines = css.split('\n').filter((l) => /^\s*\.ge-dark/.test(l)).length
     expect(darkSelectorLines).toBeLessThanOrEqual(143)
   })
+
+  // ---------------------------------------------------------------------------
+  // R22（docs/44）：G4 派生 token 作用域重算 + G5 内容岛 token/字体钉死
+  // ---------------------------------------------------------------------------
+  it('G4：ge-dark 作用域重算 focus-ring/shadow-*（派生 token 不再取 :root 一次性值）', () => {
+    expect(dark, '缺少 .graph-editor.ge-dark 块').toBeTruthy()
+    expect(decl(dark!.body, 'focus-ring'), 'ge-dark 未重算 --focus-ring').toContain('var(--ui-accent)')
+    for (const shadow of ['shadow-1', 'shadow-2', 'shadow-3']) {
+      expect(decl(dark!.body, shadow), `ge-dark 未重算 --${shadow}`).toContain('var(--ui-shadow-rgb)')
+    }
+  })
+
+  it('G5：内容岛钉全套内容 token + 派生 token + 字体栈（文本度量/阴影不随皮肤漂移）', () => {
+    const marker = css.indexOf('内容层浅色岛')
+    expect(marker, '缺少内容层浅色岛注释').toBeGreaterThanOrEqual(0)
+    const islandStart = css.indexOf('.stage-canvas,', marker)
+    expect(islandStart, '缺少 .stage-canvas/.editor-canvas 钉值块').toBeGreaterThanOrEqual(0)
+    const island = blockBody(css, islandStart)
+    const CORE = [
+      'panel', 'panel-2', 'soft', 'line', 'ink', 'muted',
+      'accent', 'accent-ink', 'accent-soft', 'accent-soft-strong', 'accent-soft-2',
+      'ok', 'ok-soft', 'ok-soft-strong', 'bad', 'bad-soft', 'bad-soft-strong',
+      'warn', 'warn-soft', 'warn-soft-strong', 'warn-ink', 'warn-ink-2',
+      'paper', 'shadow-rgb',
+    ]
+    const ST = [
+      'st-key-white', 'st-key-white-soft', 'st-key-white-hover',
+      'st-key-black', 'st-key-black-line', 'st-key-black-hover', 'st-keybed',
+      'st-device-synth-bg', 'st-device-synth-ink', 'st-device-synth-muted',
+      'st-device-sound-bg', 'st-device-sound-ink', 'st-device-sound-muted',
+    ]
+    const FONT = ['font-ui', 'font-display', 'font-mono', 'user-font-ui', 'user-font-display']
+    const DERIVED = ['focus-ring', 'shadow-1', 'shadow-2', 'shadow-3']
+    for (const token of [...CORE, ...ST, ...FONT, ...DERIVED]) {
+      expect(decl(island.body, token), `内容岛缺少 --${token}`).not.toBeNull()
+    }
+    // 字体：岛内直接落 font-family（只钉 token 不足以覆盖 body 上已计算/继承的字体）
+    expect(island.body).toContain('font-family: var(--font-ui)')
+    expect(decl(island.body, 'user-font-ui')).toBe('var(--font-ui)') // 屏蔽用户字体覆盖（内容层稳定性）
+    // 派生 token 用岛内变量重算
+    expect(decl(island.body, 'focus-ring')).toContain('var(--accent)')
+    for (const shadow of ['shadow-1', 'shadow-2', 'shadow-3']) {
+      expect(decl(island.body, shadow), `内容岛未重算 --${shadow}`).toContain('var(--shadow-rgb)')
+    }
+  })
 })
