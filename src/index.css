@@ -3175,6 +3175,8 @@ path.gedge-false {
   --ui-controls-bg: var(--panel);
   --ui-controls-bg-hover: var(--panel-2);
   --ui-shadow-rgb: var(--shadow-rgb);
+  /* G8（docs/44 R25）：画布缩略图自定义叠色收编为语义 token（深色映射见 .ge-dark 色板） */
+  --ui-map-box-bg: color-mix(in srgb, var(--panel-2) 55%, transparent);
 }
 
 .graph-editor.ge-dark {
@@ -3215,6 +3217,7 @@ path.gedge-false {
   --ui-controls-bg: var(--ge-controls-bg);
   --ui-controls-bg-hover: var(--ge-controls-bg-hover);
   --ui-shadow-rgb: var(--ge-shadow-rgb);
+  --ui-map-box-bg: var(--ge-map-box-bg);
   /* G4（docs/44 R22）：派生 token 在 ge-dark 作用域重算——:root 一次性算好的
      focus-ring/shadow-* 不会随作用域内 --ui-* 变化（深色选中环/阴影此前取的是皮肤浅色值）。 */
   --shadow-1: 0 1px 3px rgba(var(--ui-shadow-rgb), 0.1), 0 1px 2px rgba(var(--ui-shadow-rgb), 0.06);
@@ -3253,6 +3256,7 @@ path.gedge-false {
   --ge-controls-bg: #16213a;
   --ge-controls-bg-hover: #1d2a47;
   --ge-shadow-rgb: 3, 8, 20;
+  --ge-map-box-bg: rgba(56, 72, 110, 0.55);
 
   color: var(--ui-ink); /* 子树默认文字色：未显式设色的面板标题/菜单分组全部可读 */
   background: linear-gradient(170deg, var(--ui-bg1), var(--ui-bg0)); /* 工作台深底（P0：问题列表等根级元素不可透出浅色 body） */
@@ -3493,7 +3497,7 @@ path.gedge-false {
   border-color: var(--ui-line);
 }
 .ge-dark .canvas-map-box {
-  background: rgba(56, 72, 110, 0.55);
+  background: var(--ui-map-box-bg);
 }
 .ge-dark .canvas-map-box.is-focus {
   outline-color: var(--ui-accent);

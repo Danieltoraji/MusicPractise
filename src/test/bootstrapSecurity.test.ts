@@ -75,4 +75,14 @@ describe('G6 首帧皮肤预置（index.html / public/skin-boot.js）', () => {
     expect(runBoot('{not json')).toEqual({ skin: undefined, threw: false })
     expect(runBoot(null)).toEqual({ skin: undefined, threw: false })
   })
+
+  it('文档顺序：skin-boot.js 先于主模块入口（首帧绘制前设置 data-skin）', () => {
+    const bootAt = INDEX_HTML.indexOf('skin-boot.js')
+    const mainAt = INDEX_HTML.indexOf('/src/main.tsx')
+    expect(bootAt, 'index.html 未引用 skin-boot.js').toBeGreaterThanOrEqual(0)
+    expect(mainAt, 'index.html 未引用 main.tsx').toBeGreaterThan(bootAt)
+    // 且脚本位于 <head> 内（Vite 构建会保留 head 中的同步外链脚本顺序）
+    const headEnd = INDEX_HTML.toLowerCase().indexOf('</head>')
+    expect(bootAt).toBeLessThan(headEnd)
+  })
 })

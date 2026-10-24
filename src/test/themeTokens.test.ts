@@ -19,6 +19,7 @@ const UI_TOKENS = [
   'accent', 'accent-ink', 'cap', 'cap-ink', 'gold', 'warn', 'ok', 'bad', 'bad-ink', 'related',
   'node-bg', 'node-line', 'node-link', 'handle-bg', 'handle-line', 'edge',
   'input-bg', 'minimap-bg', 'controls-bg', 'controls-bg-hover', 'shadow-rgb',
+  'map-box-bg',
 ]
 
 /** 主题区范围：从节点图主题注释到调试布局章节（之前） */
@@ -95,14 +96,14 @@ describe('G2 语义 token 层（R17a）', () => {
   })
 
   it('主题区规则无新增裸色值（调色板/允许遮罩除外）', () => {
-    // 允许：色板定义行、由语义 token 派生的阴影、白/黑遮罩、画布小地图的既有自定义叠色
+    // 允许：色板定义行、由语义 token 派生的阴影、白/黑遮罩（视觉原语）。
+    // G8（R25）后画布缩略图叠色已收编 --ui-map-box-bg，不再允许 rgba(56,72,110)。
     const ALLOW = [
       /^\s*--ge-[a-z0-9-]+:/,
       /var\(--ui-shadow-rgb\)/,
       /rgb\(255 255 255 \//,
       /rgba\(255, 255, 255/,
       /rgba\(0, 0, 0/,
-      /rgba\(56, 72, 110/,
     ]
     const colorRe = /#[0-9a-fA-F]{3,8}\b|rgba?\(/
     const offenders: string[] = []
