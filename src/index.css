@@ -1333,12 +1333,12 @@ a.level-row:hover {
   margin-bottom: 1px;
 }
 .ge-dark .ai-attach-del {
-  background: var(--ge-panel-2);
+  background: var(--ui-panel-2);
 }
 .ge-dark .ai-attach-warn {
-  color: var(--ge-warn);
-  background: color-mix(in srgb, var(--ge-warn) 10%, transparent);
-  border-color: color-mix(in srgb, var(--ge-warn) 35%, transparent);
+  color: var(--ui-warn);
+  background: color-mix(in srgb, var(--ui-warn) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ui-warn) 35%, transparent);
 }
 .editor-canvas-layout {
   display: flex;
@@ -3117,11 +3117,82 @@ path.gedge-false {
 
 /* ---------- 节点图 · 千星深色工作台主题（深色 = .graph-editor.ge-dark；浅色走基础规则） ---------- */
 
+/* G2（docs/44 R17a）：节点图语义 token 层。组件规则只消费 --ui-*；
+   浅色取全局设计令牌，深色在 .graph-editor.ge-dark 内一次性映射到千星色板--
+   换肤/明暗切换只改映射，不再逐条改色值。 */
+.graph-editor {
+  --ui-bg0: var(--soft);
+  --ui-bg1: var(--panel-2);
+  --ui-panel: var(--panel);
+  --ui-panel-2: var(--panel-2);
+  --ui-line: var(--line);
+  --ui-line-soft: var(--line);
+  --ui-ink: var(--ink);
+  --ui-ink-soft: var(--ink);
+  --ui-ink-faint: var(--muted);
+  --ui-muted: var(--muted);
+  --ui-placeholder: var(--muted);
+  --ui-accent: var(--accent);
+  --ui-accent-ink: var(--accent-ink);
+  --ui-cap: var(--accent);
+  --ui-cap-ink: var(--accent);
+  --ui-gold: var(--warn);
+  --ui-warn: var(--warn);
+  --ui-ok: var(--ok);
+  --ui-bad: var(--bad);
+  --ui-bad-ink: var(--bad);
+  --ui-related: var(--accent);
+  --ui-node-bg: var(--panel);
+  --ui-node-line: var(--line);
+  --ui-node-link: var(--accent);
+  --ui-handle-bg: var(--panel);
+  --ui-handle-line: var(--line);
+  --ui-edge: var(--muted);
+  --ui-input-bg: var(--panel);
+  --ui-minimap-bg: var(--panel);
+  --ui-controls-bg: var(--panel);
+  --ui-controls-bg-hover: var(--panel-2);
+  --ui-shadow-rgb: var(--shadow-rgb);
+}
+
 .graph-editor.ge-dark {
   /* 深色工作台色板：深海蓝底 + 青色选中 + 金色模板（千星奇域风格）。
      docs/38 E5 裁决：深色板固定、跨皮肤一致；体系内衍生色全部走变量/color-mix。
      G2 第一步（docs/40）：原生控件（滚动条/下拉/checkbox）随深色渲染，不再泄漏浅色 UA。 */
   color-scheme: dark;
+  /* G2（R17a）：语义 token 的深色映射——色板仍由 --ge-* 固定，组件不直接依赖 --ge-* */
+  --ui-bg0: var(--ge-bg0);
+  --ui-bg1: var(--ge-bg1);
+  --ui-panel: var(--ge-panel);
+  --ui-panel-2: var(--ge-panel-2);
+  --ui-line: var(--ge-line);
+  --ui-line-soft: var(--ge-line-soft);
+  --ui-ink: var(--ge-ink);
+  --ui-ink-soft: var(--ge-ink-soft);
+  --ui-ink-faint: var(--ge-ink-faint);
+  --ui-muted: var(--ge-muted);
+  --ui-placeholder: var(--ge-placeholder);
+  --ui-accent: var(--ge-accent);
+  --ui-accent-ink: var(--ge-accent-ink);
+  --ui-cap: var(--ge-cap);
+  --ui-cap-ink: var(--ge-cap-ink);
+  --ui-gold: var(--ge-gold);
+  --ui-warn: var(--ge-warn);
+  --ui-ok: var(--ge-ok);
+  --ui-bad: var(--ge-bad);
+  --ui-bad-ink: var(--ge-bad-ink);
+  --ui-related: var(--ge-related);
+  --ui-node-bg: var(--ge-node-bg);
+  --ui-node-line: var(--ge-node-line);
+  --ui-node-link: var(--ge-node-link);
+  --ui-handle-bg: var(--ge-handle-bg);
+  --ui-handle-line: var(--ge-handle-line);
+  --ui-edge: var(--ge-edge);
+  --ui-input-bg: var(--ge-input-bg);
+  --ui-minimap-bg: var(--ge-minimap-bg);
+  --ui-controls-bg: var(--ge-controls-bg);
+  --ui-controls-bg-hover: var(--ge-controls-bg-hover);
+  --ui-shadow-rgb: var(--ge-shadow-rgb);
   --ge-bg0: #0b1120;
   --ge-bg1: #131e36;
   --ge-panel: #141e34;
@@ -3155,39 +3226,39 @@ path.gedge-false {
   --ge-controls-bg-hover: #1d2a47;
   --ge-shadow-rgb: 3, 8, 20;
 
-  color: var(--ge-ink); /* 子树默认文字色：未显式设色的面板标题/菜单分组全部可读 */
-  background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0)); /* 工作台深底（P0：问题列表等根级元素不可透出浅色 body） */
+  color: var(--ui-ink); /* 子树默认文字色：未显式设色的面板标题/菜单分组全部可读 */
+  background: linear-gradient(170deg, var(--ui-bg1), var(--ui-bg0)); /* 工作台深底（P0：问题列表等根级元素不可透出浅色 body） */
   border-radius: var(--r-md);
   padding: var(--sp-2);
 }
 
 /* 深色面板拉伸语义与基础规则一致（高度链见 .graph-canvas），此处只覆写配色 */
 .ge-dark .graph-canvas {
-  border-color: var(--ge-line);
-  background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0));
+  border-color: var(--ui-line);
+  background: linear-gradient(170deg, var(--ui-bg1), var(--ui-bg0));
 }
 .ge-dark .glib,
 .ge-dark .ginsp {
-  border-color: var(--ge-line);
-  background: var(--ge-panel);
+  border-color: var(--ui-line);
+  background: var(--ui-panel);
 }
 
 /* 面板通用：深色玻璃质感 */
 .ge-dark .graph-toolbar {
-  background: linear-gradient(180deg, var(--ge-panel-2), var(--ge-panel));
-  border: 1px solid var(--ge-line);
+  background: linear-gradient(180deg, var(--ui-panel-2), var(--ui-panel));
+  border: 1px solid var(--ui-line);
   border-radius: var(--r-md);
   padding: 6px 10px;
 }
 .ge-dark button {
-  color: var(--ge-ink);
+  color: var(--ui-ink);
 }
 /* G2（docs/40）：深色工作台的 primary 按钮整体切 ge 色板——背景仍走皮肤 --accent、
    前景却吃 --ge-ink 的组合在 liuhua 下对比度仅 1.66:1（审计 G2 实测）。
    与 .ai-panel-form button.primary 的既有做法（:4248 一带）一致。 */
 .ge-dark button.primary {
-  background: var(--ge-accent);
-  color: var(--ge-accent-ink);
+  background: var(--ui-accent);
+  color: var(--ui-accent-ink);
 }
 .ge-dark .graph-toolbar button,
 .ge-dark .graph-log-head button,
@@ -3196,120 +3267,120 @@ path.gedge-false {
 .ge-dark .gvar-row button,
 .ge-dark .gvar-add button,
 .ge-dark .glib button {
-  background: var(--ge-panel-2);
-  border: 1px solid var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border: 1px solid var(--ui-line);
+  color: var(--ui-ink);
   border-radius: var(--r-sm);
 }
 .ge-dark .graph-toolbar button:hover,
 .ge-dark .graph-log-head button:hover,
 .ge-dark .ginsp button:not(.danger):not(.ginsp-argdel):hover,
 .ge-dark .glib button:hover {
-  border-color: var(--ge-accent);
-  color: var(--ge-accent);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
 }
 .ge-dark .graph-toolbar button.active,
 .ge-dark .ginsp-modes button.active {
-  border-color: var(--ge-accent);
-  color: var(--ge-accent);
-  background: color-mix(in srgb, var(--ge-accent) 10%, transparent);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 10%, transparent);
 }
 /* 特异性补齐：:not(x):not(y) 通用规则 (0,4,1) 压过模式选中态——此处在其后以同级特异性夺回（评审 P1-1） */
 .ge-dark .ginsp .ginsp-modes button.active {
-  border-color: var(--ge-accent);
-  color: var(--ge-accent);
-  background: color-mix(in srgb, var(--ge-accent) 12%, transparent);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
 }
 .ge-dark .graph-toolbar button.danger,
 .ge-dark .ginsp button.danger {
-  color: var(--ge-bad);
-  border-color: color-mix(in srgb, var(--ge-bad) 40%, transparent);
-  background: color-mix(in srgb, var(--ge-bad) 6%, transparent);
+  color: var(--ui-bad);
+  border-color: color-mix(in srgb, var(--ui-bad) 40%, transparent);
+  background: color-mix(in srgb, var(--ui-bad) 6%, transparent);
 }
 .ge-dark .ginsp-argdel {
-  background: var(--ge-panel-2);
-  border: 1px solid var(--ge-line);
-  color: var(--ge-bad);
+  background: var(--ui-panel-2);
+  border: 1px solid var(--ui-line);
+  color: var(--ui-bad);
 }
 .ge-dark .graph-toolbar-hint,
 .ge-dark .muted {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 .ge-dark .graph-lint-count {
-  color: var(--ge-warn);
+  color: var(--ui-warn);
 }
 .ge-dark .graph-toolbar button.graph-lint-count {
-  color: var(--ge-warn);
-  border-color: color-mix(in srgb, var(--ge-warn) 45%, transparent);
-  background: color-mix(in srgb, var(--ge-warn) 7%, transparent);
+  color: var(--ui-warn);
+  border-color: color-mix(in srgb, var(--ui-warn) 45%, transparent);
+  background: color-mix(in srgb, var(--ui-warn) 7%, transparent);
 }
 
 /* 输入控件 */
 .ge-dark input,
 .ge-dark select,
 .ge-dark textarea {
-  background: var(--ge-input-bg);
-  border: 1px solid var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-input-bg);
+  border: 1px solid var(--ui-line);
+  color: var(--ui-ink);
 }
 .ge-dark input::placeholder,
 .ge-dark textarea::placeholder {
-  color: var(--ge-placeholder);
+  color: var(--ui-placeholder);
 }
 .ge-dark label {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 
 /* 左栏节点库 */
 .ge-dark .glib-title {
-  color: var(--ge-ink);
+  color: var(--ui-ink);
 }
 .ge-dark .glib-group-head {
-  color: var(--ge-muted);
-  border-bottom-color: var(--ge-line-soft);
+  color: var(--ui-muted);
+  border-bottom-color: var(--ui-line-soft);
 }
 .ge-dark .glib-item {
-  background: var(--ge-panel-2);
-  border-color: var(--ge-line);
-  color: var(--ge-ink-soft);
+  background: var(--ui-panel-2);
+  border-color: var(--ui-line);
+  color: var(--ui-ink-soft);
 }
 .ge-dark .glib-item:hover {
-  border-color: var(--ge-accent);
-  color: var(--ge-accent);
-  background: color-mix(in srgb, var(--ge-accent) 8%, transparent);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 8%, transparent);
 }
 .ge-dark .glib-item-tpl {
-  color: var(--ge-gold);
+  color: var(--ui-gold);
 }
 
 /* 节点信息卡：深空卡片 + 分类色带 + 选中辉光 */
 .ge-dark .gnode {
-  background: var(--ge-node-bg);
-  border: 1px solid var(--ge-node-line);
+  background: var(--ui-node-bg);
+  border: 1px solid var(--ui-node-line);
   border-radius: var(--r-md);
-  color: var(--ge-ink);
-  box-shadow: 0 4px 16px rgba(var(--ge-shadow-rgb), 0.5), inset 0 1px 0 rgb(255 255 255 / 0.05);
+  color: var(--ui-ink);
+  box-shadow: 0 4px 16px rgba(var(--ui-shadow-rgb), 0.5), inset 0 1px 0 rgb(255 255 255 / 0.05);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .ge-dark .gnode-line {
-  color: var(--ge-ink-soft);
+  color: var(--ui-ink-soft);
 }
 .ge-dark .gnode.is-selected {
-  border-color: var(--ge-accent);
+  border-color: var(--ui-accent);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--ge-accent) 35%, transparent),
-    0 0 22px color-mix(in srgb, var(--ge-accent) 28%, transparent),
-    0 4px 16px rgba(var(--ge-shadow-rgb), 0.5);
+    0 0 0 2px color-mix(in srgb, var(--ui-accent) 35%, transparent),
+    0 0 22px color-mix(in srgb, var(--ui-accent) 28%, transparent),
+    0 4px 16px rgba(var(--ui-shadow-rgb), 0.5);
 }
 .ge-dark .gnode.has-error {
-  border-color: var(--ge-bad);
+  border-color: var(--ui-bad);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--ge-bad) 30%, transparent),
-    0 0 18px color-mix(in srgb, var(--ge-bad) 22%, transparent);
+    0 0 0 2px color-mix(in srgb, var(--ui-bad) 30%, transparent),
+    0 0 18px color-mix(in srgb, var(--ui-bad) 22%, transparent);
 }
 .ge-dark .gnode.is-related {
-  outline: 2px dashed var(--ge-related);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ge-related) 16%, transparent);
+  outline: 2px dashed var(--ui-related);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ui-related) 16%, transparent);
 }
 
 /* 端口：圆形彩色触点 */
@@ -3317,128 +3388,128 @@ path.gedge-false {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: var(--ge-handle-bg);
-  border: 2px solid var(--ge-handle-line);
+  background: var(--ui-handle-bg);
+  border: 2px solid var(--ui-handle-line);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 .ge-dark .graph-canvas .gport-true {
-  background: var(--ge-ok) !important;
-  border-color: var(--ge-bg0) !important;
+  background: var(--ui-ok) !important;
+  border-color: var(--ui-bg0) !important;
 }
 .ge-dark .graph-canvas .gport-false {
-  background: var(--ge-bad) !important;
-  border-color: var(--ge-bg0) !important;
+  background: var(--ui-bad) !important;
+  border-color: var(--ui-bg0) !important;
 }
 .ge-dark .graph-canvas .gport-label {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 
 /* 执行边：深底高亮描线 + 选中辉光 */
 .ge-dark .graph-canvas .gedge .react-flow__edge-path,
 .ge-dark .graph-canvas path.gedge {
-  stroke: var(--ge-edge);
+  stroke: var(--ui-edge);
   stroke-width: 2;
 }
 .ge-dark .graph-canvas .gedge-true .react-flow__edge-path,
 .ge-dark .graph-canvas path.gedge-true {
-  stroke: var(--ge-ok);
+  stroke: var(--ui-ok);
 }
 .ge-dark .graph-canvas .gedge-false .react-flow__edge-path,
 .ge-dark .graph-canvas path.gedge-false {
-  stroke: var(--ge-bad);
+  stroke: var(--ui-bad);
 }
 .ge-dark .graph-canvas .react-flow__edge.selected .react-flow__edge-path {
-  stroke: var(--ge-accent);
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--ge-accent) 65%, transparent));
+  stroke: var(--ui-accent);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--ui-accent) 65%, transparent));
 }
 .ge-dark .graph-canvas .react-flow__minimap {
-  background: var(--ge-minimap-bg);
-  border: 1px solid var(--ge-line);
+  background: var(--ui-minimap-bg);
+  border: 1px solid var(--ui-line);
   border-radius: var(--r-sm);
 }
 .ge-dark .graph-canvas .react-flow__controls {
   border-radius: var(--r-sm);
   overflow: hidden;
-  border: 1px solid var(--ge-line);
+  border: 1px solid var(--ui-line);
 }
 
 /* 右键菜单 / 问题列表 / 日志 / 对照图 */
 .ge-dark .gmenu {
-  background: var(--ge-panel);
-  border-color: var(--ge-line);
-  box-shadow: 0 12px 32px rgba(var(--ge-shadow-rgb), 0.6);
+  background: var(--ui-panel);
+  border-color: var(--ui-line);
+  box-shadow: 0 12px 32px rgba(var(--ui-shadow-rgb), 0.6);
 }
 .ge-dark .graph-issues {
-  background: color-mix(in srgb, var(--ge-warn) 6%, transparent);
-  border-color: color-mix(in srgb, var(--ge-warn) 45%, transparent);
+  background: color-mix(in srgb, var(--ui-warn) 6%, transparent);
+  border-color: color-mix(in srgb, var(--ui-warn) 45%, transparent);
 }
 .ge-dark .graph-issue:hover {
-  background: color-mix(in srgb, var(--ge-warn) 10%, transparent);
+  background: color-mix(in srgb, var(--ui-warn) 10%, transparent);
 }
 .ge-dark .graph-issue {
-  color: var(--ge-ink);
+  color: var(--ui-ink);
 }
 .ge-dark .graph-log,
 .ge-dark .gvars,
 .ge-dark .gevents {
-  background: var(--ge-panel);
-  border-color: var(--ge-line);
+  background: var(--ui-panel);
+  border-color: var(--ui-line);
 }
 .ge-dark .graph-log-entry {
-  color: var(--ge-ink-soft);
+  color: var(--ui-ink-soft);
 }
 .ge-dark .graph-log-entry:hover {
-  background: color-mix(in srgb, var(--ge-accent) 7%, transparent);
+  background: color-mix(in srgb, var(--ui-accent) 7%, transparent);
 }
 .ge-dark .graph-script-head button {
-  background: var(--ge-panel-2);
-  border: 1px solid var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border: 1px solid var(--ui-line);
+  color: var(--ui-ink);
   border-radius: var(--r-sm);
 }
 .ge-dark .editor-errors {
-  background: color-mix(in srgb, var(--ge-bad) 8%, transparent);
-  border-color: color-mix(in srgb, var(--ge-bad) 40%, transparent);
-  color: var(--ge-bad-ink);
+  background: color-mix(in srgb, var(--ui-bad) 8%, transparent);
+  border-color: color-mix(in srgb, var(--ui-bad) 40%, transparent);
+  color: var(--ui-bad-ink);
 }
 .ge-dark .graph-log-entry.has-node:hover {
-  border-color: var(--ge-accent);
+  border-color: var(--ui-accent);
 }
 .ge-dark .graph-log-kind.command {
-  color: var(--ge-ink-faint);
+  color: var(--ui-ink-faint);
 }
 .ge-dark .graph-log-node {
-  color: var(--ge-node-link);
+  color: var(--ui-node-link);
 }
 .ge-dark .graph-issue-code {
-  color: var(--ge-warn);
+  color: var(--ui-warn);
 }
 .ge-dark .canvas-map {
-  background: rgba(16, 26, 48, 0.94);
-  border-color: var(--ge-line);
+  background: color-mix(in srgb, var(--ui-minimap-bg) 94%, transparent);
+  border-color: var(--ui-line);
   backdrop-filter: blur(6px);
 }
 .ge-dark .canvas-map-body {
-  border-color: var(--ge-line);
+  border-color: var(--ui-line);
 }
 .ge-dark .canvas-map-box {
   background: rgba(56, 72, 110, 0.55);
 }
 .ge-dark .canvas-map-box span {
-  color: #dbe4f5;
+  color: var(--ui-ink);
 }
 .ge-dark .canvas-map-box.is-focus {
-  outline-color: var(--ge-accent);
-  background: color-mix(in srgb, var(--ge-accent) 22%, transparent);
+  outline-color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 22%, transparent);
 }
 
 .ge-dark .graph-canvas .react-flow__controls-button {
-  background: var(--ge-controls-bg);
-  border-color: var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-controls-bg);
+  border-color: var(--ui-line);
+  color: var(--ui-ink);
 }
 .ge-dark .graph-canvas .react-flow__controls-button:hover {
-  background: var(--ge-controls-bg-hover);
+  background: var(--ui-controls-bg-hover);
 }
 
 /* ---------- 资源库：文件夹树（系列 ▸ 专题 ▸ 关卡） ---------- */
@@ -3618,7 +3689,7 @@ a.lib-title:hover {
 }
 .ge-dark:fullscreen,
 .ge-dark.is-fullscreen {
-  background: linear-gradient(170deg, var(--ge-bg1), var(--ge-bg0));
+  background: linear-gradient(170deg, var(--ui-bg1), var(--ui-bg0));
 }
 
 /* ---------- 编辑器画布：右栏属性 + 组件缩放手柄 + 事件面板（3-6） ---------- */
@@ -4144,136 +4215,136 @@ a.lib-title:hover {
 /* --- 深色主题（ge-dark 作用域） --- */
 
 .ge-dark .gdock {
-  border-color: var(--ge-line);
-  background: var(--ge-panel);
+  border-color: var(--ui-line);
+  background: var(--ui-panel);
 }
 .ge-dark .gdock-head {
-  border-bottom-color: var(--ge-line);
+  border-bottom-color: var(--ui-line);
 }
 .ge-dark .gdock-title {
-  color: var(--ge-ink);
+  color: var(--ui-ink);
 }
 .ge-dark .gdock-close {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 .ge-dark .gdock-close:hover {
-  color: var(--ge-bad);
+  color: var(--ui-bad);
 }
 .ge-dark .gem-new input {
-  background: var(--ge-panel-2);
-  border-color: var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border-color: var(--ui-line);
+  color: var(--ui-ink);
 }
 .ge-dark .gem-new button,
 .ge-dark .gem .gem-add,
 .ge-dark .gem .gem-act {
-  background: var(--ge-panel-2);
-  border: 1px solid var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border: 1px solid var(--ui-line);
+  color: var(--ui-ink);
   border-radius: 7px;
 }
 .ge-dark .gem .gem-add:hover,
 .ge-dark .gem .gem-act:not(:disabled):hover {
-  border-color: var(--ge-accent);
-  color: var(--ge-accent);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
 }
 .ge-dark .gsplit::after {
-  background: var(--ge-line);
+  background: var(--ui-line);
 }
 .ge-dark .gsplit:hover::after,
 .ge-dark .gsplit.is-dragging::after {
-  background: var(--ge-accent);
+  background: var(--ui-accent);
 }
 
 /* AI 助手面板入坞深色（graph tab 内随工作台主题换肤，docs/29） */
 .ge-dark .ai-panel {
-  border-color: var(--ge-line);
-  background: var(--ge-panel);
+  border-color: var(--ui-line);
+  background: var(--ui-panel);
 }
 .ge-dark .ai-panel-head {
-  border-bottom-color: var(--ge-line);
+  border-bottom-color: var(--ui-line);
 }
 .ge-dark .ai-panel-head b {
-  color: var(--ge-ink);
+  color: var(--ui-ink);
 }
 .ge-dark .ai-mode-chip {
-  color: var(--ge-accent);
-  border-color: var(--ge-accent);
+  color: var(--ui-accent);
+  border-color: var(--ui-accent);
 }
 .ge-dark .ai-panel-clear,
 .ge-dark .ai-panel-close {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 .ge-dark .ai-panel-close:hover {
-  color: var(--ge-ink);
+  color: var(--ui-ink);
 }
 .ge-dark .ai-msg,
 .ge-dark .ai-msg-assistant {
-  color: var(--ge-ink);
+  color: var(--ui-ink);
 }
 .ge-dark .ai-msg-user {
-  background: rgba(56, 189, 248, 0.12);
+  background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
 }
 .ge-dark .ai-msg-tool summary {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 .ge-dark .ai-tool-calls {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 .ge-dark .ai-panel-empty,
 .ge-dark .ai-panel-hint,
 .ge-dark .ai-busy {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 .ge-dark .ai-panel-error {
-  border-color: rgba(248, 113, 113, 0.5);
-  background: rgba(248, 113, 113, 0.08);
-  color: var(--ge-bad);
+  border-color: color-mix(in srgb, var(--ui-bad) 50%, transparent);
+  background: color-mix(in srgb, var(--ui-bad) 8%, transparent);
+  color: var(--ui-bad);
 }
 .ge-dark .ai-panel-error-close {
-  color: var(--ge-bad);
+  color: var(--ui-bad);
 }
 .ge-dark .ai-panel-error-retry {
-  border-color: rgba(248, 113, 113, 0.6);
-  color: var(--ge-bad);
+  border-color: color-mix(in srgb, var(--ui-bad) 60%, transparent);
+  color: var(--ui-bad);
 }
 .ge-dark .ai-panel-error-retry:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.15);
+  background: color-mix(in srgb, var(--ui-bad) 15%, transparent);
 }
 .ge-dark .ai-panel-capbar {
-  border-color: rgba(129, 140, 248, 0.55);
-  background: rgba(99, 102, 241, 0.12);
-  color: var(--ge-ink);
+  border-color: color-mix(in srgb, var(--ui-cap) 55%, transparent);
+  background: color-mix(in srgb, var(--ui-cap) 12%, transparent);
+  color: var(--ui-ink);
 }
 .ge-dark .ai-panel-cap-run {
-  border-color: color-mix(in srgb, var(--ge-cap) 60%, transparent);
-  color: var(--ge-cap-ink);
+  border-color: color-mix(in srgb, var(--ui-cap) 60%, transparent);
+  color: var(--ui-cap-ink);
 }
 .ge-dark .ai-panel-cap-run:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ge-cap) 20%, transparent);
+  background: color-mix(in srgb, var(--ui-cap) 20%, transparent);
 }
 .ge-dark .ai-panel-form {
-  border-top-color: var(--ge-line);
+  border-top-color: var(--ui-line);
 }
 .ge-dark .ai-panel-form textarea {
-  background: var(--ge-panel-2);
-  border-color: var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border-color: var(--ui-line);
+  color: var(--ui-ink);
 }
 .ge-dark .ai-panel-form button {
-  background: var(--ge-panel-2);
-  border: 1px solid var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border: 1px solid var(--ui-line);
+  color: var(--ui-ink);
   border-radius: 7px;
 }
 .ge-dark .ai-panel-form button:hover {
-  border-color: var(--ge-accent);
-  color: var(--ge-accent);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
 }
 .ge-dark .ai-panel-form button.primary {
-  background: var(--ge-accent);
-  border-color: var(--ge-accent);
-  color: var(--ge-accent-ink);
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent-ink);
   font-weight: 600;
 }
 
@@ -4300,18 +4371,18 @@ a.lib-title:hover {
 
 /* --- 面板调换深色（ge-dark） --- */
 .ge-dark .gsplit-h::after {
-  background: var(--ge-line);
+  background: var(--ui-line);
 }
 .ge-dark .gsplit-h:hover::after,
 .ge-dark .gsplit-h.is-dragging::after {
-  background: var(--ge-accent);
+  background: var(--ui-accent);
 }
 .ge-dark .gdock-insert {
-  border-top-color: var(--ge-accent);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--ge-accent) 50%, transparent);
+  border-top-color: var(--ui-accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ui-accent) 50%, transparent);
 }
 .ge-dark .graph-dock-col.drop-target {
-  outline-color: var(--ge-accent);
+  outline-color: var(--ui-accent);
 }
 
 /* AI 模式分段切换 + 检查点回滚（批次2a） */
@@ -4352,20 +4423,20 @@ a.lib-title:hover {
   background: var(--warn-soft-strong);
 }
 .ge-dark .ai-mode-tabs {
-  border-color: var(--ge-line);
+  border-color: var(--ui-line);
 }
 .ge-dark .ai-mode-tab {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 .ge-dark .ai-mode-tab.active {
-  background: var(--ge-accent);
-  color: var(--ge-accent-ink);
+  background: var(--ui-accent);
+  color: var(--ui-accent-ink);
   font-weight: 600;
 }
 .ge-dark .ai-panel-rollback {
-  border-color: color-mix(in srgb, var(--ge-warn) 60%, transparent);
-  color: var(--ge-warn);
-  background: color-mix(in srgb, var(--ge-warn) 8%, transparent);
+  border-color: color-mix(in srgb, var(--ui-warn) 60%, transparent);
+  color: var(--ui-warn);
+  background: color-mix(in srgb, var(--ui-warn) 8%, transparent);
 }
 
 /* plan 模式执行计划确认条（批次2b） */
@@ -4394,9 +4465,9 @@ a.lib-title:hover {
   cursor: pointer;
 }
 .ge-dark .ai-plan-bar {
-  border-color: var(--ge-accent);
-  background: rgba(56, 189, 248, 0.1);
-  color: var(--ge-ink);
+  border-color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 10%, transparent);
+  color: var(--ui-ink);
 }
 
 /* 空态预设指令（批次4）：li 内整行按钮 */
@@ -4631,45 +4702,45 @@ a.lib-title:hover {
 
 /* 调试面板深色（ge-dark） */
 .ge-dark .gdb button:not(.primary):not(.danger):not(.gnode-bp) {
-  background: var(--ge-panel-2);
-  border: 1px solid var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border: 1px solid var(--ui-line);
+  color: var(--ui-ink);
   border-radius: 7px;
 }
 .ge-dark .gdb button:not(.primary):not(.danger):not(.gnode-bp):hover:not(:disabled) {
-  border-color: var(--ge-accent);
-  color: var(--ge-accent);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
 }
 .ge-dark .gdb button.danger {
-  color: var(--ge-bad);
-  border-color: color-mix(in srgb, var(--ge-bad) 40%, transparent);
-  background: color-mix(in srgb, var(--ge-bad) 6%, transparent);
+  color: var(--ui-bad);
+  border-color: color-mix(in srgb, var(--ui-bad) 40%, transparent);
+  background: color-mix(in srgb, var(--ui-bad) 6%, transparent);
 }
 .ge-dark .gdb-var-row input,
 .ge-dark .gdb-payload,
 .ge-dark .gdb select {
-  background: var(--ge-panel-2);
-  border-color: var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border-color: var(--ui-line);
+  color: var(--ui-ink);
 }
 .ge-dark .gdb-var-name {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 .ge-dark .gdb-log-row.error .gdb-log-kind,
 .ge-dark .gdb-log-row.error .gdb-log-text {
-  color: var(--ge-bad);
+  color: var(--ui-bad);
 }
 .ge-dark .gdb-log-row.command .gdb-log-kind {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 .ge-dark .gdb-preset,
 .ge-dark .ai-preset {
-  background: var(--ge-panel-2);
-  border-color: var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border-color: var(--ui-line);
+  color: var(--ui-ink);
 }
 .ge-dark .gdb-sec > .glib-group-head {
-  color: var(--ge-muted);
+  color: var(--ui-muted);
 }
 
 /* AI 高亮（批次5）：highlight_nodes 指认的节点 */
@@ -4679,8 +4750,8 @@ a.lib-title:hover {
   box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .ge-dark .gnode.is-aihl {
-  outline-color: var(--ge-accent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--ge-accent) 50%, transparent);
+  outline-color: var(--ui-accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--ui-accent) 50%, transparent);
 }
 
 /* AI 消息截图 */
@@ -4777,12 +4848,12 @@ a.lib-title:hover {
   text-decoration: line-through;
 }
 .ge-dark .ai-plan-card {
-  border-color: var(--ge-accent);
-  background: color-mix(in srgb, var(--ge-accent) 8%, transparent);
-  color: var(--ge-ink);
+  border-color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-accent) 8%, transparent);
+  color: var(--ui-ink);
 }
 .ge-dark .ai-plan-head {
-  border-bottom-color: var(--ge-line);
+  border-bottom-color: var(--ui-line);
 }
 
 /* 流式输出光标（批次6a） */
@@ -4823,13 +4894,13 @@ a.lib-title:hover {
   color: var(--accent);
 }
 .ge-dark .ai-presets button {
-  background: var(--ge-panel-2);
-  border-color: var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel-2);
+  border-color: var(--ui-line);
+  color: var(--ui-ink);
 }
 .ge-dark .ai-presets button:hover {
-  border-color: var(--ge-accent);
-  color: var(--ge-accent);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
 }
 
 /* ---------- AI 回复 Markdown 渲染（批次7） ---------- */
@@ -4923,21 +4994,21 @@ a.lib-title:hover {
 /* ge-dark：markdown 排版变体 */
 .ge-dark .ai-md code {
   background: rgba(255, 255, 255, 0.08);
-  color: var(--ge-ink);
+  color: var(--ui-ink);
 }
 .ge-dark .ai-md th {
   background: rgba(255, 255, 255, 0.06);
 }
 .ge-dark .ai-md th,
 .ge-dark .ai-md td {
-  border-color: var(--ge-line);
+  border-color: var(--ui-line);
 }
 .ge-dark .ai-md pre {
   background: rgba(0, 0, 0, 0.35);
 }
 .ge-dark .ai-md blockquote {
-  border-left-color: var(--ge-line);
-  color: var(--ge-muted);
+  border-left-color: var(--ui-line);
+  color: var(--ui-muted);
 }
 
 /* ---------------------------------------------------------------------------
@@ -5052,19 +5123,19 @@ a.lib-title:hover {
 }
 /* 深色工作台：外框/顶底条随主题，画面视口保持玩家页浅色观感 */
 .ge-dark .gdb-stage {
-  background: var(--ge-panel);
-  border-color: var(--ge-line);
-  color: var(--ge-ink);
+  background: var(--ui-panel);
+  border-color: var(--ui-line);
+  color: var(--ui-ink);
 }
 .ge-dark .gdb-stage-badge {
-  color: var(--ge-warn);
-  background: color-mix(in srgb, var(--ge-warn) 12%, transparent);
-  border-color: color-mix(in srgb, var(--ge-warn) 40%, transparent);
+  color: var(--ui-warn);
+  background: color-mix(in srgb, var(--ui-warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ui-warn) 40%, transparent);
 }
 .ge-dark .gdb-live {
-  color: var(--ge-warn);
-  background: color-mix(in srgb, var(--ge-warn) 12%, transparent);
-  border-color: color-mix(in srgb, var(--ge-warn) 40%, transparent);
+  color: var(--ui-warn);
+  background: color-mix(in srgb, var(--ui-warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ui-warn) 40%, transparent);
 }
 
 /* ---------------------------------------------------------------------------
