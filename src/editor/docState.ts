@@ -72,6 +72,29 @@ export function bumpVersion(doc: LevelDoc): LevelDoc {
 }
 
 // ---------------------------------------------------------------------------
+// R11（docs/44 R18）：写路径结构共享
+//
+// 历史实现每个变换都 structuredClone 整份文档（512 行 × 32 列 ≈ 数百 KB），逐键输入
+// 热路径 P95 >5ms（docs/42 浏览器实测）。改为「只复制变更路径」：doc → content → 分支
+// （table/rows 或 components 或 logic.variables），未变更分支保持引用。
+//
+// 安全前提（与 docs/40 §12.1 纪律一致）：全仓禁原地 mutation——任何变换都不会修改入参
+// 已共享的对象，因此历史栈按引用存档仍成立（旧 doc 树永不被改写）。
+// ---------------------------------------------------------------------------
+
+function withContent(doc: LevelDoc, patch: Partial<LevelDoc['content']>): LevelDoc {
+  return { ...doc, content: { ...doc.content, ...patch } }
+}
+
+function withTable(doc: LevelDoc, tablePatch: Partial<DataTable>): LevelDoc {
+  return withContent(doc, { table: { ...doc.content.table, ...tablePatch } })
+}
+
+function withLogic(doc: LevelDoc, logicPatch: Partial<LevelDoc['content']['logic']>): LevelDoc {
+  return withContent(doc, { logic: { ...doc.content.logic, ...logicPatch } })
+}
+
+// ---------------------------------------------------------------------------
 // 视图管理（v3）
 // ---------------------------------------------------------------------------
 
@@ -87,11 +110,10 @@ export function addView(doc: LevelDoc, name?: string): { doc: LevelDoc; id: stri
 }
 
 export function updateView(doc: LevelDoc, id: string, patch: Partial<Omit<ViewDef, 'id'>>): LevelDoc {
-  const next = structuredClone(doc)
-  const view = next.content.views.find((v) => v.id === id)
-  if (!view) return next
-  if (patch.name !== undefined) view.name = patch.name
-  return next
+  const idx = doc.content.views.findIndex((v) => v.id === id)
+  if (idx < 0) return { ...doc }
+  const views = doc.content.views.map((v, i) => (i === idx && patch.name !== undefined ? { ...v, name: patch.name } : v))
+  return withContent(doc, { views })
 }
 
 export function removeView(doc: LevelDoc, id: string): LevelDoc {
@@ -134,10 +156,10 @@ export function addComponent(doc: LevelDoc, type: string, viewId?: string): Leve
 }
 
 export function updateComponent(doc: LevelDoc, cid: string, patch: Partial<ComponentInstance>): LevelDoc {
-  const next = structuredClone(doc)
-  const comp = next.content.components.find((c) => c.id === cid)
-  if (comp) Object.assign(comp, patch)
-  return next
+  const idx = doc.content.components.findIndex((c) => c.id === cid)
+  if (idx < 0) return { ...doc }
+  const components = doc.content.components.map((c, i) => (i === idx ? { ...c, ...patch } : c))
+  return withContent(doc, { components })
 }
 
 export function removeComponent(doc: LevelDoc, cid: string): LevelDoc {
@@ -185,18 +207,18 @@ export function removeTableColumn(doc: LevelDoc, key: string): LevelDoc {
 }
 
 export function updateTableColumnLabel(doc: LevelDoc, key: string, label: string): LevelDoc {
-  const next = structuredClone(doc)
-  const col = next.content.table.columns.find((c) => c.key === key)
-  if (col) col.label = label
-  return next
+  const idx = doc.content.table.columns.findIndex((c) => c.key === key)
+  if (idx < 0) return { ...doc }
+  const columns = doc.content.table.columns.map((c, i) => (i === idx ? { ...c, label } : c))
+  return withTable(doc, { columns })
 }
 
 /** 列类型（编辑器按类型渲染单元格编辑器；切换类型不改写既有数据，仅改变渲染与编辑方式） */
 export function setTableColumnType(doc: LevelDoc, key: string, type: ColumnType): LevelDoc {
-  const next = structuredClone(doc)
-  const col = next.content.table.columns.find((c) => c.key === key)
-  if (col) col.type = type
-  return next
+  const idx = doc.content.table.columns.findIndex((c) => c.key === key)
+  if (idx < 0) return { ...doc }
+  const columns = doc.content.table.columns.map((c, i) => (i === idx ? { ...c, type } : c))
+  return withTable(doc, { columns })
 }
 
 export function addTableRow(doc: LevelDoc, afterIndex?: number): LevelDoc {
@@ -216,10 +238,10 @@ export function removeTableRow(doc: LevelDoc, index: number): LevelDoc {
 
 /** 单元格更新（浅合并到该行） */
 export function updateTableCell(doc: LevelDoc, index: number, patch: Record<string, Json>): LevelDoc {
-  const next = structuredClone(doc)
-  const row = next.content.table.rows[index]
-  if (row) Object.assign(row, patch)
-  return next
+  const row = doc.content.table.rows[index]
+  if (!row) return { ...doc }
+  const rows = doc.content.table.rows.map((r, i) => (i === index ? { ...r, ...patch } : r))
+  return withTable(doc, { rows })
 }
 
 export function setTable(doc: LevelDoc, table: DataTable): LevelDoc {
@@ -235,19 +257,16 @@ export function setTable(doc: LevelDoc, table: DataTable): LevelDoc {
  * 「清除」语义 = 删键（结算默认通过 / 全部行）。
  */
 export function setFlow(doc: LevelDoc, patch: Partial<NonNullable<LevelDoc['content']['flow']>>): LevelDoc {
-  const next = structuredClone(doc)
-  const merged: Record<string, unknown> = { ...(next.content.flow ?? {}), ...patch }
+  const merged: Record<string, unknown> = { ...(doc.content.flow ?? {}), ...patch }
   for (const k of Object.keys(merged)) {
     if (merged[k] === null || merged[k] === undefined) delete merged[k]
   }
-  next.content.flow = merged as NonNullable<LevelDoc['content']['flow']>
-  return next
+  return withContent(doc, { flow: merged as NonNullable<LevelDoc['content']['flow']> })
 }
 
 export function setMeta(doc: LevelDoc, patch: Partial<LevelDoc['meta']>): LevelDoc {
-  const next = structuredClone(doc)
-  Object.assign(next.meta, patch)
-  return next
+  // 浅合并；Partial 的 undefined 值不会写入（Object.assign 旧语义），类型上用 LevelDoc['meta'] 收口
+  return { ...doc, meta: { ...doc.meta, ...patch } as LevelDoc['meta'] }
 }
 
 // ---------------------------------------------------------------------------
@@ -268,28 +287,22 @@ export function parseScalarInput(text: string): number | boolean | string | Json
 }
 
 export function setVariable(doc: LevelDoc, name: string, value: number | boolean | string): LevelDoc {
-  const next = structuredClone(doc)
-  next.content.logic.variables = { ...(next.content.logic.variables ?? {}), [name]: value }
-  return next
+  return withLogic(doc, { variables: { ...(doc.content.logic.variables ?? {}), [name]: value } })
 }
 
 export function renameVariable(doc: LevelDoc, oldName: string, newName: string): LevelDoc {
-  const next = structuredClone(doc)
-  const vars = { ...(next.content.logic.variables ?? {}) }
+  const vars = { ...(doc.content.logic.variables ?? {}) }
   if (oldName in vars) {
     vars[newName] = vars[oldName]
     delete vars[oldName]
   }
-  next.content.logic.variables = vars
-  return next
+  return withLogic(doc, { variables: vars })
 }
 
 export function removeVariable(doc: LevelDoc, name: string): LevelDoc {
-  const next = structuredClone(doc)
-  const vars = { ...(next.content.logic.variables ?? {}) }
+  const vars = { ...(doc.content.logic.variables ?? {}) }
   delete vars[name]
-  next.content.logic.variables = vars
-  return next
+  return withLogic(doc, { variables: vars })
 }
 
 /** 解析 JSON 文本；失败返回 null（调用方显示错误） */

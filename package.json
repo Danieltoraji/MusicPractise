@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench:update": "node scripts/bench-update.mjs"
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",

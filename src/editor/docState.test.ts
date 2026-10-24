@@ -12,10 +12,13 @@ import {
   renameTableColumn,
   removeVariable,
   renameVariable,
+  setMeta,
   setTable,
   setTableColumnType,
   setFlow,
   setVariable,
+  updateComponent,
+  updateTableColumnLabel,
   updateTableCell,
 } from './docState'
 
@@ -154,6 +157,72 @@ describe('bumpVersion（docs/40 A3 裁决：保存自动升修订号）', () => 
     const next = bumpVersion(doc)
     expect(next).not.toBe(doc)
     expect(doc.version).toBe('0.1.0')
+  })
+})
+
+describe('R11 写路径结构共享（docs/44 R18）', () => {
+  /** 两行一列 + 一个按钮的最小文档 */
+  function fixture() {
+    let doc = blankLevelDoc()
+    doc = setTable(doc, {
+      columns: [{ key: 'title', label: '题面', type: 'text' }],
+      rows: [{ title: 'a' }, { title: 'b' }],
+    })
+    doc = addComponent(doc, 'button')
+    return doc
+  }
+
+  it('热路径只复制变更分支：未变更分支保持引用；入参树不被改写（历史栈安全）', () => {
+    const prev = fixture()
+
+    // 单元格：doc / content / table / rows / 该行 新引用；其它行与 components/logic 共享
+    const next = updateTableCell(prev, 1, { title: 'b2' })
+    expect(next).not.toBe(prev)
+    expect(next.content).not.toBe(prev.content)
+    expect(next.content.table).not.toBe(prev.content.table)
+    expect(next.content.table.rows).not.toBe(prev.content.table.rows)
+    expect(next.content.table.rows[1]).not.toBe(prev.content.table.rows[1])
+    expect(next.content.table.rows[0]).toBe(prev.content.table.rows[0])
+    expect(next.content.components).toBe(prev.content.components)
+    expect(next.content.logic).toBe(prev.content.logic)
+    expect(prev.content.table.rows[1].title).toBe('b') // 旧树不变
+
+    // 组件：只复制 components 分支；table/logic 与上一版共享
+    const comp = updateComponent(next, 'button1', { name: '确认' })
+    expect(comp.content.components).not.toBe(next.content.components)
+    expect(comp.content.components[0].name).toBe('确认')
+    expect(next.content.components[0].name).toBeUndefined()
+    expect(comp.content.table).toBe(next.content.table)
+    expect(comp.content.logic).toBe(next.content.logic)
+
+    // meta：只复制 meta 本身，content 整树共享
+    const meta = setMeta(comp, { title: '新标题' })
+    expect(meta.meta).not.toBe(comp.meta)
+    expect(meta.content).toBe(comp.content)
+    expect(comp.meta.title).not.toBe('新标题')
+
+    // 变量：只复制 logic.variables 分支
+    const vars = setVariable(meta, 'flag', true)
+    expect(vars.content.logic).not.toBe(meta.content.logic)
+    expect(vars.content.table).toBe(meta.content.table)
+    expect(vars.content.components).toBe(meta.content.components)
+
+    // 列显示名/类型：只复制 columns 分支
+    const label = updateTableColumnLabel(vars, 'title', '题干')
+    expect(label.content.table.columns).not.toBe(vars.content.table.columns)
+    expect(label.content.table.rows).toBe(vars.content.table.rows)
+    const typed = setTableColumnType(label, 'title', 'number')
+    expect(typed.content.table.columns[0].type).toBe('number')
+    expect(label.content.table.columns[0].type).toBe('text')
+  })
+
+  it('未命中的目标返回新 doc 但共享整树（保持「调用后返回新引用」语义）', () => {
+    const prev = fixture()
+    const noRow = updateTableCell(prev, 99, { title: 'x' })
+    expect(noRow).not.toBe(prev)
+    expect(noRow.content).toBe(prev.content)
+    const noComp = updateComponent(prev, 'ghost', { name: 'x' })
+    expect(noComp.content).toBe(prev.content)
   })
 })
 
