@@ -11,7 +11,7 @@ npm install
 npm run dev              # http://localhost:5173（纯前端；/api 走 vite 代理 → wrangler dev）
 npm run db:migrate:local # D1 迁移应用到本地模拟库（本地全栈流程一次）
 npm run dev:worker       # wrangler dev 全栈验证（先 npm run build 产出 dist/）
-npm test                 # Vitest：引擎/运行时/编辑器/AI/资源库/云盘/关卡库 + worker API（现行基线 1011 项全绿 / 112 文件；全局 console 门禁）
+npm test                 # Vitest：引擎/运行时/编辑器/AI/资源库/云盘/关卡库 + worker API（现行基线 1015 项全绿 / 113 文件；全局 console 门禁）
 npm run bench:update     # R11 写路径基准（373.8KB 混合 schema 满配，P50/P95；可 --json）
 npm run build            # tsc strict + Vite 生产构建
 ```
@@ -22,7 +22,7 @@ npm run build            # tsc strict + Vite 生产构建
 练习进度（最高分/通过/次数）存 IndexedDB，只升不降；登录后自动云端同步（多端单调合并，离线/未登录完全不受影响）。
 内置 10 个示例关卡与入门系列自动入库；支持导入 `.json` 关卡与 `.zip` 系列包、导出自包含 zip（同 id 同版本跳过、异版本覆盖）。
 
-**创作**：`#/edit/:id` 关卡编辑器，五 Tab = 画布 / 节点图 / 伪代码 / 数据表 / JSON（同一逻辑程序的三个投影）；
+**创作**：`#/edit/:id` 关卡编辑器，五 Tab = 画布 / 节点图 / 脚本 / 数据表 / JSON（同一逻辑程序的三种投影）；
 内置 AI 助手（ask / plan / agent 三模式，写操作全走「生成→校验→应用→自纠」管线 + 检查点回滚）与调试模式（断点/单步/变量快照/AI 试玩人机共享）。
 `#/graph/:id` 为只读逻辑图谱。资源库 `#/library` 提供文件夹树 / 文件管理器 / 就地编辑（保存自动另存副本）。
 
@@ -108,6 +108,6 @@ worker/            单通道 API：路由/会话/限流/管理员/密码哈希/�
 
 - 组件只暴露统一契约（events / commands / state），数据应用收口为 `call` 三命令 `setText` / `setOptions` / `setMusic`；
 - 逻辑是控制流图 **GraphProgram v2**（wait/分支/循环），采用「单一 IR 三视图」：伪代码、节点图、JSON 是同一程序的投影，先设计代码再设计节点图；
-- 表达式在沙箱求值（作用域根仅 `$q.` / `$event.` / `$v.`，函数白名单 + 步数预算，拒绝赋值/循环/原型逃逸）；
-- 题目是纯数据，经 `$q.xxx` 绑定随题注入——一个关卡模板出任意多题，判定逻辑零硬编码；
+- 表达式在沙箱求值（作用域根仅 `q.` / `event.` / `v.`，函数白名单 + 步数预算，拒绝赋值/循环/原型逃逸；`$` 前缀仅 v1 迁移输入，新代码禁用）；
+- 题目是纯数据，经 `q.xxx` 绑定随题注入——一个关卡模板出任意多题，判定逻辑零硬编码；
 - AI 辅助创作与人工编辑走同一条「生成 → `loadLevelDoc` 校验 → 应用 → 被拒不回喂自纠」管线，附检查点回滚。
