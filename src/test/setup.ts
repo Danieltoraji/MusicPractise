@@ -7,6 +7,7 @@
  * 既有测试文件的重复样板不强迁——新测试可直接依赖这里的全局状态。
  */
 import { installCanvasStub } from './canvasStub'
+import { installConsoleGate } from './consoleGate'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -27,5 +28,20 @@ if (typeof HTMLElement !== 'undefined') {
   HTMLElement.prototype.scrollIntoView = ((): void => {}) as typeof HTMLElement.prototype.scrollIntoView
 }
 
+// H2（docs/44 R20）：jsdom 无 ResizeObserver——React Flow / 部分页面组件依赖它；
+// 之前 ErrorBoundary 负向用例会额外抛出 ResizeObserver is not defined，干扰 console 门禁。
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class ResizeObserverStub {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub
+}
+
 // jsdom 环境（HTMLCanvasElement 存在）安装；node 环境自动跳过
 installCanvasStub()
+
+// H2（docs/44 R20）：全局 console 失败门禁——每用例结束检查非预期 console.error/warn；
+// `CONSOLE_GATE_REPORT=1` 时改为只记录到 tmp-console-gate.log（建立基线用）
+installConsoleGate()

@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { captureConsole, withConsoleGuard } from './consoleGuard'
+import { isConsoleGateInstalled } from './consoleGate'
 
 describe('withConsoleGuard', () => {
   it('无日志时正常返回', async () => {
@@ -56,5 +57,21 @@ describe('captureConsole', () => {
       { level: 'warn', text: 'w1' },
       { level: 'error', text: 'e1' },
     ])
+  })
+})
+
+describe('全局 console 门禁（H2 / docs/44 R20）', () => {
+  it('setup 已安装全局门禁；与 withConsoleGuard 共存（预期日志由用例自管）', async () => {
+    expect(isConsoleGateInstalled()).toBe(true)
+    await expect(
+      withConsoleGuard(
+        '共存',
+        async () => {
+          console.error('预期错误')
+          return 1
+        },
+        { allow: [/预期错误/] },
+      ),
+    ).resolves.toBe(1)
   })
 })
