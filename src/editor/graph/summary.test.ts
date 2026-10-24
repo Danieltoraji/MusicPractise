@@ -52,4 +52,14 @@ describe('summarizeNode', () => {
   it('未知实例 id 原样显示（不猜名字）', () => {
     expect(summarizeNode({ id: 'x', kind: 'call', target: 'ghost', method: 'stop', args: [] }, comps)).toEqual(['ghost·stop'])
   })
+
+  it('E18：views.goto 对象写法与多参数摘要（不再只读 args[0]）', () => {
+    expect(summarizeNode({ id: 'g', kind: 'call', target: 'views', method: 'goto', args: ["{ id: 'v2' }"] })).toEqual([
+      'views.goto "v2"',
+    ])
+    expect(summarizeNode({ id: 'm', kind: 'call', target: 'question', method: 'next', args: ['a', 'b'] }, comps)).toEqual([
+      'question·next',
+      'a, b',
+    ])
+  })
 })

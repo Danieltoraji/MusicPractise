@@ -6,9 +6,14 @@ import {
   condToExpr,
   exprToCond,
   exprToOperand,
+  formatObjectArg,
+  formatViewsGotoArgs,
+  normalizeCallArgs,
+  objectArgEntries,
   operandToExpr,
   paramDefaultExpr,
   parseCommandParams,
+  parseViewsGotoArgs,
   splitObjectLiteral,
 } from './exprBridge'
 
@@ -125,6 +130,38 @@ describe('splitObjectLiteral / args 视图', () => {
     expect(argViewToArgs({ mode: 'advanced', sources: ['5', '6'] })).toEqual(['5', '6'])
     // 空对象保持对象形态（用户显式选了按名传参）
     expect(argViewToArgs({ mode: 'object', entries: [] })).toEqual(['{}'])
+  })
+})
+
+describe('E18 call argv 单一真源（docs/44 R16b）', () => {
+  it('normalizeCallArgs：保留全部参数，非字符串按 JSON 文本化，非数组为空', () => {
+    expect(normalizeCallArgs(['5', '6'])).toEqual(['5', '6'])
+    expect(normalizeCallArgs(['5', { id: 'v' }])).toEqual(['5', '{"id":"v"}'])
+    expect(normalizeCallArgs(undefined)).toEqual([])
+    expect(normalizeCallArgs('x')).toEqual([])
+  })
+
+  it('objectArgEntries：仅单对象字面量进对象模式；多参数返回 null（不丢 args[1..]）', () => {
+    expect(objectArgEntries(['{a: 1}'])).toEqual([{ key: 'a', source: '1' }])
+    expect(objectArgEntries(['{a: 1}', '{b: 2}'])).toBeNull()
+    expect(objectArgEntries(['5'])).toBeNull()
+    expect(objectArgEntries([])).toBeNull()
+  })
+
+  it('formatObjectArg 与 splitObjectLiteral 互逆（唯一格式化实现）', () => {
+    expect(formatObjectArg([])).toBe('{}')
+    expect(formatObjectArg([{ key: 'a', source: '1' }, { key: 'b', source: '"x"' }])).toBe('{ a: 1, b: "x" }')
+    expect(splitObjectLiteral(formatObjectArg([{ key: 'a', source: '1' }]))).toEqual([{ key: 'a', source: '1' }])
+  })
+
+  it('views.goto：兼容字符串/对象两种历史写法；多参数不误解析；构造沿用字符串形态', () => {
+    expect(parseViewsGotoArgs(['"main"'])).toBe('main')
+    expect(parseViewsGotoArgs(["'v2'"])).toBe('v2')
+    expect(parseViewsGotoArgs(["{ id: 'v3' }"])).toBe('v3')
+    expect(parseViewsGotoArgs(['a', 'b'])).toBeNull()
+    expect(parseViewsGotoArgs([])).toBeNull()
+    expect(formatViewsGotoArgs('main')).toEqual(['"main"'])
+    expect(parseViewsGotoArgs(formatViewsGotoArgs('view-2'))).toBe('view-2')
   })
 })
 

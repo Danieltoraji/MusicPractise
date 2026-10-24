@@ -234,6 +234,39 @@ export function removeGraphVariable(prog: GraphProgram, name: string): GraphProg
 
 const EVENT_RE = /^[A-Za-z_][A-Za-z0-9_]*([.:][A-Za-z_][A-Za-z0-9_]*)+$/
 
+// ---------------------------------------------------------------------------
+// O2（docs/44 R16b）：事件候选派生收口——事件面板 / 节点库 / Inspector / 摘要共用，
+// 避免多处各写一份「内部事件」聚合而漂移（曾出现 Inspector 与事件面板列表不一致）。
+// ---------------------------------------------------------------------------
+
+/** 内部事件名判定：必须带 `:` 分隔且符合事件名语法（如 app:hint） */
+export function isInternalEventName(name: unknown): name is string {
+  return typeof name === 'string' && name.includes(':') && EVENT_RE.test(name)
+}
+
+/** 图中 on/emit 引用过的内部事件（去重，按节点顺序——列表稳定可测试） */
+export function collectInternalEvents(program: GraphProgram): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const node of program.nodes) {
+    if ((node.kind !== 'on' && node.kind !== 'emit') || !isInternalEventName(node.event)) continue
+    if (seen.has(node.event)) continue
+    seen.add(node.event)
+    out.push(node.event)
+  }
+  return out
+}
+
+/** 内部事件 → 首个 on 处理器节点 id（事件面板「定位」用；只有 emit 引用时不在表中） */
+export function internalEventHandlers(program: GraphProgram): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const node of program.nodes) {
+    if (node.kind !== 'on' || !isInternalEventName(node.event) || map.has(node.event)) continue
+    map.set(node.event, node.id)
+  }
+  return map
+}
+
 export type LintCode =
   | 'syntax'
   | 'undeclared-var'

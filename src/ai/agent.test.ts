@@ -755,6 +755,59 @@ describe('F1 创作者手动编辑冲突（docs/42 §4.3 返工：修订号基�
   })
 })
 
+describe('F9 提示预算压缩（docs/44 R16b）', () => {
+  /** 40 条历史：第 1/2 条是超长 tool_calls + 对应 tool 结果（落在 OVER_BUDGET_TAIL 之外） */
+  function historyWithOldPair(): ChatMessage[] {
+    const history: ChatMessage[] = [
+      { role: 'user', content: '开始' },
+      {
+        role: 'assistant',
+        content: '',
+        toolCalls: [
+          {
+            id: 'c-old',
+            type: 'function',
+            function: { name: 'read_json', arguments: JSON.stringify({ payload: 'y'.repeat(900) }) },
+          },
+        ],
+      },
+      { role: 'tool', toolCallId: 'c-old', name: 'read_json', content: 'x'.repeat(1000) },
+    ]
+    for (let i = 0; i < 37; i++) history.push({ role: i % 2 === 0 ? 'user' : 'assistant', content: `消息 ${i}` })
+    return history
+  }
+
+  it('promptTokens 超预算：远期 tool 结果与 tool_calls 参数深度压缩，配对保留、最近消息不动', () => {
+    const out = buildModelMessages('S', historyWithOldPair(), { promptTokens: 40_000 })
+    const tool = out.find((m) => m.role === 'tool')!
+    expect(tool.toolCallId).toBe('c-old')
+    expect(tool.content.length).toBeLessThan(400)
+    expect(tool.content).toContain('上下文预算紧张')
+    const assistant = out.find((m) => m.role === 'assistant' && (m.toolCalls?.length ?? 0) > 0)!
+    expect(assistant.toolCalls![0].id).toBe('c-old')
+    const args = assistant.toolCalls![0].function.arguments
+    expect(args.length).toBeLessThan(500)
+    // 合法 JSON 占位：严格供应商不会因历史参数形状异常 4xx
+    expect(JSON.parse(args)).toMatchObject({ _truncated: true })
+    // 最近一条消息保持全量（未被预算压缩）
+    expect(out.at(-1)!.content).toBe('消息 36')
+  })
+
+  it('promptTokens 未超预算：历史原样下发（只有 system 前缀），不产生额外压缩', () => {
+    const out = buildModelMessages('S', historyWithOldPair(), { promptTokens: 5_000 })
+    const tool = out.find((m) => m.role === 'tool')!
+    expect(tool.content).toHaveLength(1000)
+    const assistant = out.find((m) => m.role === 'assistant' && (m.toolCalls?.length ?? 0) > 0)!
+    expect(assistant.toolCalls![0].function.arguments.length).toBeGreaterThan(900)
+  })
+
+  it('未提供 promptTokens（供应商不返回 usage）：保持旧行为（不启用超预算压缩）', () => {
+    const out = buildModelMessages('S', historyWithOldPair())
+    const tool = out.find((m) => m.role === 'tool')!
+    expect(tool.content).toHaveLength(1000)
+  })
+})
+
 describe('停止信号的循环内收尾（R5/F5）', () => {
   it('工具执行期间停止：不再发起下一轮请求，工具结果不落会话，错误为「已停止」', async () => {
     clearSession('res_agent_stop_tool')

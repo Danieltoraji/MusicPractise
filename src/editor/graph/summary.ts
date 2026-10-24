@@ -3,7 +3,7 @@
  * 的自然语言。纯函数、不依赖 React；事件尾部词与契约事件名对照，未收录的回退原文。
  */
 import type { GNode } from '../../engine/graphProgram'
-import { argsToArgView } from './exprBridge'
+import { argsToArgView, parseViewsGotoArgs } from './exprBridge'
 
 export interface CompInfo {
   id: string
@@ -54,11 +54,10 @@ const clip = (s: string, n = 22): string => (s.length > n ? `${s.slice(0, n)}…
 /** 摘要显示模式：en=默认（标识符为主）/ zh=结构动词全中文（变量、组件与方法名保留原文） */
 export type SummaryMode = 'en' | 'zh'
 
-/** 解析 views.goto 的目标视图 id（字符串或 {id:'…'} 形式） */
+/** 解析 views.goto 的目标视图 id（E18：统一走 exprBridge.parseViewsGotoArgs，兼容字符串/对象两种写法） */
 function viewsGotoId(node: Extract<GNode, { kind: 'call' }>): string | null {
   if (node.target !== 'views' || node.method !== 'goto') return null
-  const raw = (node.args[0] ?? '').trim()
-  return /^["']([^"']+)["']$/.exec(raw)?.[1] ?? /^\{\s*id\s*:\s*["']([^"']+)["']\s*\}$/.exec(raw)?.[1] ?? null
+  return parseViewsGotoArgs(node.args)
 }
 
 /** 参数摘要行（印卡用）：第一行主描述，后续行为参数明细 */
@@ -79,7 +78,8 @@ export function summarizeNode(node: GNode, comps?: CompInfo[], mode: SummaryMode
       if (view.mode === 'object') {
         return [view.entries.length > 0 ? `${head} { ${view.entries.map((e) => e.key).join(', ')} }` : head]
       }
-      return [head, clip(view.sources[0] ?? '', 26)]
+      // E18：多参数调用摘要展示全部参数（此前只显示 args[0]）
+      return [head, clip(view.sources.join(', '), 26)]
     }
     case 'assign': {
       const right =

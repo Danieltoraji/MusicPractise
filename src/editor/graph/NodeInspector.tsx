@@ -7,10 +7,19 @@
 import { useRef, useState } from 'react'
 import { exprFunctionNames } from '../../engine/expr'
 import { DATA_APPLY_ACCEPTED_TYPES, DATA_APPLY_COMMANDS, type LevelDoc } from '../../engine/level'
-import { LEVEL_METHODS, QUESTION_METHODS, ROW_POINTER_VAR, type GNode, type LintIssue } from '../../engine/graphProgram'
+import { LEVEL_METHODS, QUESTION_METHODS, ROW_POINTER_VAR, collectInternalEvents, type GNode, type LintIssue } from '../../engine/graphProgram'
 import { BASE_COMMANDS, type ContractDoc } from '../../runtime/componentDef'
 import { getDef } from '../../runtime/store'
-import { parseCommandParams, exprToOperand, splitObjectLiteral, type BridgeCtx, type Operand } from './exprBridge'
+import {
+  parseCommandParams,
+  exprToOperand,
+  formatObjectArg,
+  formatViewsGotoArgs,
+  objectArgEntries,
+  parseViewsGotoArgs,
+  type BridgeCtx,
+  type Operand,
+} from './exprBridge'
 import { buildEventGroups } from './palette'
 import { CallArgsEditor, ConditionBuilder, OperandBody, OperandPicker, QueryCallEditor, defaultOperandExprFor } from './controls'
 import { PlayArgsEditor } from './PlayArgsEditor'
@@ -82,18 +91,8 @@ function InspectorBody({ node, doc, issues, onPatch, onRemove }: Props & { node:
   }
   const ctx: BridgeCtx = { varNames, refPaths }
 
-  // on 事件候选：与「事件」面板共享同一数据源（buildEventGroups）
-  const internalEvents = [
-    ...new Set(
-      program.nodes.flatMap((n) =>
-        n.kind === 'on' && n.event.includes(':')
-          ? [n.event]
-          : n.kind === 'emit' && n.event.includes(':')
-            ? [n.event]
-            : [],
-      ),
-    ),
-  ]
+  // O2（R16b）：on 事件候选与「事件」面板共享同一数据源（engine collectInternalEvents + buildEventGroups）
+  const internalEvents = collectInternalEvents(program)
   const eventGroups = buildEventGroups(doc)
 
   // call 方法候选（契约命令 + 基座命令；level 用 facade 方法）
@@ -251,7 +250,8 @@ function CallNodeEditor(props: {
   const currentDoc = methods.find((m) => m.name === node.method)?.doc
   // views.goto 特化：参数不是通用键值对，而是视图下拉（低代码：不手写 id）
   const isViewsGoto = node.target === 'views' && node.method === 'goto'
-  const gotoId = isViewsGoto ? /^["'](.+)["']$/.exec((node.args[0] ?? '').trim())?.[1] ?? '' : ''
+  // E18（R16b）：目标解析统一走 exprBridge.parseViewsGotoArgs（字符串/对象两种历史写法）
+  const gotoId = isViewsGoto ? parseViewsGotoArgs(node.args) ?? '' : ''
   // sound/synth 的 play：音符可视化编辑（音名/频率选择，不再手写 [{midi:..}]）
   const compTypeOfTarget = comps.find((c) => c.id === node.target)?.type
   const isPlayCall = (compTypeOfTarget === 'sound' || compTypeOfTarget === 'synth') && node.method === 'play'
@@ -259,7 +259,7 @@ function CallNodeEditor(props: {
   // DATA_APPLY_COMMANDS[类型] 内层键是槽位名，按 .method 匹配当前命令（与 lint 同口径）
   const applyMap = compTypeOfTarget !== undefined ? DATA_APPLY_COMMANDS[compTypeOfTarget] : undefined
   const applyCmd = applyMap !== undefined ? Object.values(applyMap).find((e) => e.method === node.method) : undefined
-  const applyEntries = applyCmd !== undefined && typeof node.args[0] === 'string' ? splitObjectLiteral(node.args[0]) : null
+  const applyEntries = applyCmd !== undefined ? objectArgEntries(node.args) : null
   const applyEntry = applyEntries?.find((e) => e.key === applyCmd?.argKey)
   const isDataApply = applyCmd !== undefined && applyEntries !== null
 
@@ -330,7 +330,7 @@ function CallNodeEditor(props: {
             目标视图
             <select
               value={gotoId}
-              onChange={(e) => props.onPatch({ args: [`"${e.target.value}"`] } as unknown as Partial<GNode>)}
+              onChange={(e) => props.onPatch({ args: formatViewsGotoArgs(e.target.value) } as unknown as Partial<GNode>)}
             >
               {props.views.map((v) => (
                 <option key={v.id} value={v.id}>{`${v.name || v.id}（${v.id}）`}</option>
@@ -349,7 +349,7 @@ function CallNodeEditor(props: {
               accepted={DATA_APPLY_ACCEPTED_TYPES[node.method]}
               datalistId={exprDatalistId}
               onChange={(expr) =>
-                props.onPatch({ args: [`{ ${applyCmd!.argKey}: ${expr} }`] } as unknown as Partial<GNode>)
+                props.onPatch({ args: [formatObjectArg([{ key: applyCmd!.argKey, source: expr }])] } as unknown as Partial<GNode>)
               }
             />
           </>

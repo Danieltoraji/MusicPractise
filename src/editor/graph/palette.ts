@@ -5,7 +5,7 @@
  */
 import type { LevelDoc } from '../../engine/level'
 import type { Json } from '../../engine/expr'
-import type { GNode } from '../../engine/graphProgram'
+import { collectInternalEvents, type GNode } from '../../engine/graphProgram'
 import { allContracts } from '../../runtime/store'
 
 export type PaletteGroupId = 'action' | 'level' | 'view' | 'variable' | 'flow'
@@ -46,17 +46,8 @@ export function buildEventGroups(doc: LevelDoc): EventGroup[] {
       })
     }
   }
-  const internal = [
-    ...new Set(
-      doc.content.logic.nodes.flatMap((n) =>
-        n.kind === 'on' && n.event.includes(':')
-          ? [n.event]
-          : n.kind === 'emit' && n.event.includes(':')
-            ? [n.event]
-            : [],
-      ),
-    ),
-  ]
+  // O2（R16b）：内部事件派生统一走 engine/graphProgram.collectInternalEvents
+  const internal = collectInternalEvents(doc.content.logic)
   const groups: EventGroup[] = [
     { group: '关卡', items: LEVEL_EVENTS },
     { group: '题目', items: QUESTION_EVENTS },

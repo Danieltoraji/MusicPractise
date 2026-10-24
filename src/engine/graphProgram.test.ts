@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   addNode,
   blankGraphProgram,
+  collectInternalEvents,
   connect,
   disconnect,
+  internalEventHandlers,
   isGraphProgram,
+  isInternalEventName,
   lintGraphProgram,
   lintGraphProgramDetailed,
   moveNode,
@@ -524,5 +527,41 @@ describe('E19 契约白名单 lint（docs/40）', () => {
     }
     const unknownIssues = lintGraphProgramDetailed(unknown, ctx)
     expect(unknownIssues.some((i) => i.message.includes('没有命令') || i.message.includes('没有事件'))).toBe(false)
+  })
+})
+
+describe('O2 内部事件派生收口（docs/44 R16b）', () => {
+  const prog: GraphProgram = {
+    logicVersion: 2,
+    variables: {},
+    nodes: [
+      { id: 'on1', kind: 'on', event: 'app:go' },
+      { id: 'em1', kind: 'emit', event: 'app:go', payload: {} },
+      { id: 'on2', kind: 'on', event: 'level.started' },
+      { id: 'em2', kind: 'emit', event: 'other:x', payload: {} },
+      { id: 'em3', kind: 'emit', event: 'app:go', payload: {} },
+      { id: 'onX', kind: 'on', event: 'app:go' },
+    ],
+    edges: [],
+  }
+
+  it('isInternalEventName：必须带冒号且符合事件名语法（生命周期/组件事件不算内部事件）', () => {
+    expect(isInternalEventName('app:go')).toBe(true)
+    expect(isInternalEventName('app:sub:deep')).toBe(true)
+    expect(isInternalEventName('level.started')).toBe(false)
+    expect(isInternalEventName('app:')).toBe(false)
+    expect(isInternalEventName(':x')).toBe(false)
+    expect(isInternalEventName(42)).toBe(false)
+  })
+
+  it('collectInternalEvents：on/emit 去重且按节点顺序（事件面板/节点库/Inspector 同源）', () => {
+    expect(collectInternalEvents(prog)).toEqual(['app:go', 'other:x'])
+  })
+
+  it('internalEventHandlers：只收录 on 处理器且取首个（emit-only 事件不出现）', () => {
+    const handlers = internalEventHandlers(prog)
+    expect(handlers.get('app:go')).toBe('on1')
+    expect(handlers.has('other:x')).toBe(false)
+    expect(handlers.size).toBe(1)
   })
 })

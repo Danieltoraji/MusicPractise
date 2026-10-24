@@ -6,10 +6,8 @@
  */
 import { useMemo, useState } from 'react'
 import type { LevelDoc } from '../../engine/level'
+import { collectInternalEvents, internalEventHandlers, isInternalEventName } from '../../engine/graphProgram'
 import { buildEventGroups } from './palette'
-
-/** 引擎 graphProgram 的 EVENT_RE 同款（内部事件额外要求含 : 分隔） */
-const INTERNAL_EVENT_RE = /^[A-Za-z_][A-Za-z0-9_]*:[A-Za-z_][A-Za-z0-9_]*$/
 
 interface Props {
   doc: LevelDoc
@@ -24,16 +22,10 @@ export function EventManagerPanel({ doc, onAddOn, onAddEmit, onFocusNode }: Prop
   const [newErr, setNewErr] = useState<string | null>(null)
 
   const groups = useMemo(() => buildEventGroups(doc), [doc])
-  // 内部事件 → 首个 on 处理器节点 id（定位用；emit 声明但无人处理时不可定位）
-  const internalHandler = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const n of doc.content.logic.nodes) {
-      if (n.kind === 'on' && n.event.includes(':') && !map.has(n.event)) map.set(n.event, n.id)
-    }
-    return map
-  }, [doc])
+  // O2（R16b）：内部事件聚合/处理器定位统一走引擎 helper（与节点库、Inspector 同源）
+  const internalHandler = useMemo(() => internalEventHandlers(doc.content.logic), [doc])
+  const knownInternal = useMemo(() => new Set(collectInternalEvents(doc.content.logic)), [doc])
   const internalGroup = groups.find((g) => g.group === '内部事件')
-  const knownInternal = new Set((internalGroup?.items ?? []).map((i) => i.value))
 
   const f = filter.trim()
   const shown = groups
@@ -42,7 +34,7 @@ export function EventManagerPanel({ doc, onAddOn, onAddEmit, onFocusNode }: Prop
 
   const addInternal = (): void => {
     const name = newName.trim()
-    if (!INTERNAL_EVENT_RE.test(name)) {
+    if (!isInternalEventName(name)) {
       setNewErr('需形如「名:名」（字母数字下划线），如 app:hint')
       return
     }

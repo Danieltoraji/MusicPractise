@@ -252,23 +252,63 @@ export type ArgView =
   /** 非对象形态的参数（如纯表达式），按原样保留 */
   | { mode: 'advanced'; sources: string[] }
 
+// ---------------------------------------------------------------------------
+// E18（docs/44 R16b）：call argv 单一真源——参数规范化 / 对象字面量格式化 /
+// views.goto 目标解析都在这里；NodeInspector / summary / exprBridge 共用，
+// 不再各自用正则或只读 args[0] 而丢掉多参数。
+// ---------------------------------------------------------------------------
+
+/** call 参数统一为字符串数组（保留全部参数；非数组按空参数处理） */
+export function normalizeCallArgs(args: unknown): string[] {
+  if (!Array.isArray(args)) return []
+  return args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a)))
+}
+
+/** 单参数对象 argv 解析（仅 args 恰为一个对象字面量）；多参数返回 null，避免丢 args[1..] */
+export function objectArgEntries(args: unknown): KvEntry[] | null {
+  const list = normalizeCallArgs(args)
+  if (list.length !== 1) return null
+  return splitObjectLiteral(list[0])
+}
+
+/** 对象字面量的规范格式化（与 splitObjectLiteral 互逆的唯一实现） */
+export function formatObjectArg(entries: readonly KvEntry[]): string {
+  if (entries.length === 0) return '{}'
+  return `{ ${entries.map((e) => `${e.key}: ${e.source}`).join(', ')} }`
+}
+
+/** views.goto 目标视图 id：兼容历史两种写法 `"view"` 与 `{ id: "view" }`（无目标返回 null） */
+export function parseViewsGotoArgs(args: unknown): string | null {
+  const list = normalizeCallArgs(args)
+  if (list.length !== 1) return null
+  const raw = list[0].trim()
+  const literal = /^["']([^"']+)["']$/.exec(raw)
+  if (literal) return literal[1]
+  const idEntry = splitObjectLiteral(raw)?.find((e) => e.key === 'id')
+  if (!idEntry) return null
+  return /^["']([^"']*)["']$/.exec(idEntry.source.trim())?.[1] ?? null
+}
+
+/** 构造 views.goto 参数（沿用字符串形态，兼容既有节点与脚本生成） */
+export function formatViewsGotoArgs(id: string): string[] {
+  return [JSON.stringify(id)]
+}
+
 export function argsToArgView(args: unknown): ArgView {
-  if (!Array.isArray(args) || args.length === 0) return { mode: 'none' }
+  const list = normalizeCallArgs(args)
+  if (list.length === 0) return { mode: 'none' }
   // E18（docs/40）：多参数调用（如 query(target, arg2)）首项即使是对象字面量也不进
   // object 模式——该模式只回写首项，曾把 args[1..] 静默丢弃；advanced 保留全部参数
-  if (args.length === 1 && typeof args[0] === 'string') {
-    const entries = splitObjectLiteral(args[0])
+  if (list.length === 1) {
+    const entries = splitObjectLiteral(list[0])
     if (entries) return { mode: 'object', entries }
   }
-  return { mode: 'advanced', sources: args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))) }
+  return { mode: 'advanced', sources: list }
 }
 
 export function argViewToArgs(v: ArgView): string[] {
   if (v.mode === 'none') return []
-  if (v.mode === 'object') {
-    if (v.entries.length === 0) return ['{}']
-    return [`{ ${v.entries.map((e) => `${e.key}: ${e.source}`).join(', ')} }`]
-  }
+  if (v.mode === 'object') return [formatObjectArg(v.entries)]
   return v.sources
 }
 

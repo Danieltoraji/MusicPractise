@@ -18,10 +18,60 @@ const FULL_TAIL = 48
 /** 远期 tool 结果保留的字符数 */
 const OLD_TOOL_KEEP = 200
 
+/** F9（docs/44 R16b）：提示预算——供应商返回的 usage.promptTokens 超过该值时进一步压缩远期历史 */
+export const PROMPT_TOKEN_BUDGET = 24_000
+/** 超预算时：最近多少条消息保持全量（更早的 tool 结果/工具参数才加大压缩） */
+const OVER_BUDGET_TAIL = 24
+/** 超预算时远期 tool 结果保留字符数 */
+const OVER_BUDGET_TOOL_KEEP = 120
+/** 超预算时远期 assistant tool_calls 参数保留字符数（超出替换为合法 JSON 占位，配对结构不动） */
+const OVER_BUDGET_ARGS_KEEP = 320
+
+export interface ModelBudget {
+  /** 上一次请求的 usage.promptTokens（供应商未返回则 undefined → 不启用超预算压缩） */
+  promptTokens?: number
+  /** 预算阈值；缺省 {@link PROMPT_TOKEN_BUDGET} */
+  tokenBudget?: number
+}
+
 /** 远期（非最近 FULL_TAIL 条）tool 结果压缩为前 OLD_TOOL_KEEP 字符；结构与 tool_call_id 配对原样保留 */
 function compressOld(msg: ChatMessage, index: number, arr: ChatMessage[]): ChatMessage {
   if (index < arr.length - FULL_TAIL && msg.role === 'tool' && msg.content.length > OLD_TOOL_KEEP) {
     return { ...msg, content: `${msg.content.slice(0, OLD_TOOL_KEEP)}\n…（早期工具结果已截断，如需完整内容请重新读取）` }
+  }
+  return msg
+}
+
+/**
+ * F9：promptTokens 超预算时的二级压缩——远期 tool 结果缩到 120 字符；
+ * 远期 assistant tool_calls 的超长 arguments 换成合法 JSON 占位（保留 id/name 与 tool 配对，
+ * 避免严格供应商因参数形状异常 4xx）；最近 OVER_BUDGET_TAIL 条保持全量。
+ */
+function compressOverBudget(msg: ChatMessage, index: number, arr: ChatMessage[]): ChatMessage {
+  if (index >= arr.length - OVER_BUDGET_TAIL) return msg
+  if (msg.role === 'tool' && msg.content.length > OVER_BUDGET_TOOL_KEEP) {
+    return {
+      ...msg,
+      content: `${msg.content.slice(0, OVER_BUDGET_TOOL_KEEP)}\n…（上下文预算紧张：早期工具结果已深度截断，如需完整内容请重新读取）`,
+    }
+  }
+  if (msg.role === 'assistant' && (msg.toolCalls?.length ?? 0) > 0) {
+    let changed = false
+    const toolCalls = msg.toolCalls!.map((tc) => {
+      if (tc.function.arguments.length <= OVER_BUDGET_ARGS_KEEP) return tc
+      changed = true
+      return {
+        ...tc,
+        function: {
+          ...tc.function,
+          arguments: JSON.stringify({
+            _truncated: true,
+            _note: '上下文预算紧张：早期工具参数已截断，如需完整内容请重新读取',
+          }),
+        },
+      }
+    })
+    return changed ? { ...msg, toolCalls } : msg
   }
   return msg
 }
@@ -37,20 +87,30 @@ function usableForModel(m: ChatMessage): boolean {
  * 组装发给模型的请求消息：system + 最近窗口。
  * 超限时窗口起点前进到第一条 user 消息——不能从 assistant(tool_calls)/tool 对中间切开，
  * 否则 tool 消息失去前置 tool_calls，严格供应商会 4xx。只影响下发副本，不动会话。
+ * F9（R16b）：`budget.promptTokens` 超阈值时启用二级压缩（旧 tool 结果 120 字符、
+ * 超长 tool_calls 参数占位），保留 assistant/tool 配对与最近窗口全量。
  */
-export function buildModelMessages(systemPrompt: string, history: ChatMessage[]): ChatMessage[] {
+export function buildModelMessages(systemPrompt: string, history: ChatMessage[], budget?: ModelBudget): ChatMessage[] {
+  const overBudget =
+    budget?.promptTokens !== undefined && budget.promptTokens > (budget.tokenBudget ?? PROMPT_TOKEN_BUDGET)
+  const compress = (msg: ChatMessage, index: number, arr: ChatMessage[]): ChatMessage => {
+    const first = compressOld(msg, index, arr)
+    return overBudget ? compressOverBudget(first, index, arr) : first
+  }
   const usable = history.filter(usableForModel)
-  if (usable.length <= MODEL_MSG_LIMIT) return [{ role: 'system', content: systemPrompt }, ...usable.map(compressOld)]
+  if (usable.length <= MODEL_MSG_LIMIT) {
+    return [{ role: 'system', content: systemPrompt }, ...usable.map(compress)]
+  }
   let start = usable.length - MODEL_MSG_LIMIT
   while (start < usable.length && usable[start].role !== 'user') start++
   if (start >= usable.length) {
     // 窗口内没有 user 消息（极端情况）：保完整历史，宁可偏长不可断对
-    return [{ role: 'system', content: systemPrompt }, ...usable.map(compressOld)]
+    return [{ role: 'system', content: systemPrompt }, ...usable.map(compress)]
   }
   return [
     { role: 'system', content: systemPrompt },
     { role: 'system', content: `（更早的 ${start} 条消息已省略以控制上下文长度；如需更早的细节请让用户重新提供。）` },
-    ...usable.slice(start).map(compressOld),
+    ...usable.slice(start).map(compress),
   ]
 }
 
@@ -102,6 +162,8 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
     // 本轮对话的本地副本（会话真源由 session store 维护）；每次请求前按预算重新组装下发消息
     const history: ChatMessage[] = [...getSession(opts.docId).messages]
     const specs = toSpecs(opts.tools)
+    /** F9（R16b）：上一次请求的 promptTokens；首轮无值，供应商返回后用于下一轮预算压缩 */
+    let lastPromptTokens: number | undefined
     // 工具产生的图像（如 debug_screenshot）缓冲；一轮工具结果消费完后以带图 user 消息发给多模态模型
     const imageBuffer: string[] = []
     // 运行内写通道：applyDoc 经编辑器 React state 异步提交（getDoc 的外部引用要等渲染期才更新），
@@ -149,13 +211,18 @@ export async function runAgentTurn(opts: AgentTurnOptions): Promise<void> {
       const sys = typeof opts.systemPrompt === 'function' ? opts.systemPrompt(runDoc ?? opts.ctx.getDoc()) : opts.systemPrompt
       // 流式：先落一条 streaming 占位消息，delta 打字机填充，完成后用最终消息替换
       if (opts.stream) beginStreamingMessage(opts.docId)
-      const res = await chatCompleteRaw(opts.profile, buildModelMessages(sys, history), {
-        tools: specs,
-        signal: ctrl.signal,
-        stream: opts.stream === true,
-        onDelta: opts.stream ? (d) => streamAppendToLast(opts.docId, d) : undefined,
-      })
+      const res = await chatCompleteRaw(
+        opts.profile,
+        buildModelMessages(sys, history, { promptTokens: lastPromptTokens, tokenBudget: PROMPT_TOKEN_BUDGET }),
+        {
+          tools: specs,
+          signal: ctrl.signal,
+          stream: opts.stream === true,
+          onDelta: opts.stream ? (d) => streamAppendToLast(opts.docId, d) : undefined,
+        },
+      )
       abortIfStopped() // fetch 期间被停止：不再记账/执行工具
+      lastPromptTokens = res.usage?.promptTokens ?? lastPromptTokens
       addSessionUsage(opts.docId, res.usage)
       patchSession(opts.docId, { turnCount: turn + 1 })
       const finalMsg: ChatMessage = { role: 'assistant', content: res.content, toolCalls: res.toolCalls }
