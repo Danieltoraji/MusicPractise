@@ -3,12 +3,15 @@
  * R38（docs/44）：浏览器视觉矩阵自动化（EXT-1 执行器）。
  *
  * 无 npm 依赖：用已安装的 Edge + CDP（--remote-debugging-port=9222）驱动，
- * 数据来源为 `npm run preview` 的生产构建（默认 http://localhost:4173）。
+ * 数据来源为 `npm run preview` 的生产构建（默认 http://localhost:4173）；
+ * 全栈模式：设置 MATRIX_BASE=http://localhost:8787 + MATRIX_LOGIN_NICK/PASS（本机 wrangler dev + 本地 D1 + seed admin），
+ * 此时登录态 admin/云盘/关卡库也纳入矩阵，且控制台按严格模式（任何 error/warn 都算失败）。
  *
  * 用法：
  *   1) npm run build && npm run preview -- --port 4173 --strictPort
  *   2) Edge 启动：msedge --headless=new --remote-debugging-port=9222 --user-data-dir=<tmp> --window-size=1440,900
  *   3) node scripts/visual-matrix.mjs [--out=<dir>] [--quick]
+ *   全栈：wrangler dev --port 8787（另开），然后 MATRIX_BASE=http://localhost:8787 MATRIX_LOGIN_NICK=admin MATRIX_LOGIN_PASS=... node scripts/visual-matrix.mjs
  *
  * 输出：截图 + summary.json + README.md（默认 %TEMP%/mp-visual-matrix/<时间戳>）。
  * 说明：只做「可观察证据」采集（DOM/计算样式/控制台/截图），不修改业务代码、不写入应用 localStorage 以外的数据。
@@ -18,8 +21,12 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-const PREVIEW = process.env.MATRIX_PREVIEW ?? 'http://localhost:4173'
+const BASE = process.env.MATRIX_BASE ?? process.env.MATRIX_PREVIEW ?? 'http://localhost:4173'
 const CDP = process.env.MATRIX_CDP ?? 'http://127.0.0.1:9222'
+const LOGIN_NICK = process.env.MATRIX_LOGIN_NICK ?? ''
+const LOGIN_PASS = process.env.MATRIX_LOGIN_PASS ?? ''
+const FULLSTACK = Boolean(LOGIN_NICK)
+const STRICT = process.env.MATRIX_STRICT === '1' || FULLSTACK
 const QUICK = process.argv.includes('--quick')
 const ONLY = (process.env.MATRIX_ONLY ?? '').split(',').filter(Boolean)
 const OUT = (() => {
@@ -142,8 +149,9 @@ async function screenshot(client, file) {
   writeFileSync(file, Buffer.from(r.data, 'base64'))
 }
 
-function consoleSummary(events) {
+function consoleSummary(events, strict = false) {
   const all = events.slice()
+  if (strict) return { all, expected: [], unexpected: all }
   const expected = all.filter((e) => /\/api\b|ERR_CONNECTION|Failed to load resource|net::ERR/.test(e.text))
   const unexpected = all.filter((e) => !expected.includes(e))
   return { all, expected, unexpected }
@@ -170,6 +178,7 @@ const METRICS_JS = `(() => {
   return {
     url: location.href,
     title: document.title,
+    h1: document.querySelector('h1')?.textContent?.trim() ?? null,
     skin: document.documentElement.dataset.skin ?? null,
     rootBg: cs.getPropertyValue('--bg').trim(),
     rootInk: cs.getPropertyValue('--ink').trim(),
@@ -317,7 +326,8 @@ async function main() {
 
   const results = {
     startedAt: new Date().toISOString(),
-    preview: PREVIEW,
+    mode: FULLSTACK ? 'fullstack' : 'preview',
+    base: BASE,
     gitCommit: (() => {
       try {
         return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim()
@@ -337,8 +347,50 @@ async function main() {
     deviceScaleFactor: 1,
     mobile: false,
   })
-  await navigate(client, `${PREVIEW}/#/`)
+  await navigate(client, `${BASE}/#/`)
   await waitFor(client, `!!document.querySelector('.shell')`, 'shell', 20000)
+  await waitFor(client, `!!document.querySelector('.nav') || !!document.querySelector('.shell')`, 'shell chrome', 20000)
+
+  if (FULLSTACK) {
+    try {
+      const login = await evaluate(
+        client,
+        `(async () => {
+          const r = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ nickname: ${JSON.stringify(LOGIN_NICK)}, password: ${JSON.stringify(LOGIN_PASS)} }),
+          })
+          return { status: r.status, body: await r.text() }
+        })()`,
+        { awaitPromise: true },
+      )
+      await evaluate(client, `window.__matrixReloadSeq = (window.__matrixReloadSeq || 0) + 1`)
+      await client.send('Page.reload')
+      await waitFor(
+        client,
+        `document.readyState === 'complete' && typeof window.__matrixReloadSeq === 'undefined' && !!document.querySelector('.shell')`,
+        'fullstack login reload',
+        20000,
+      )
+      const me = await evaluate(
+        client,
+        `(async () => { const r = await fetch('/api/auth/me'); return { status: r.status, body: await r.text() } })()`,
+        { awaitPromise: true },
+      )
+      const meJson = JSON.parse(me.body)
+      results.auth = {
+        mode: 'login',
+        loginStatus: login.status,
+        meStatus: me.status,
+        user: meJson.user ?? null,
+      }
+      if (!meJson.user) throw new Error(`登录态未生效：login=${login.status} me=${me.body.slice(0, 200)}`)
+    } catch (err) {
+      results.auth = { mode: 'login', error: String(err?.message ?? err) }
+      throw new Error(`全栈登录失败：${String(err?.message ?? err)}`)
+    }
+  }
 
   await evaluate(client, `window.__matrixReloadSeq = (window.__matrixReloadSeq || 0) + 1`)
 
@@ -388,11 +440,21 @@ async function main() {
         if (step.id === 'P9' && !(await evaluate(client, `!!document.querySelector('.skin-cards')`))) {
           throw new Error('皮肤中心未加载')
         }
+        if (FULLSTACK) {
+          const bodyText = await evaluate(client, `document.body.innerText`)
+          if (step.id === 'P14' && (metrics.h1 !== '我的云盘' || /云盘需要登录/.test(bodyText))) {
+            throw new Error(`云盘未登录态异常：h1=${metrics.h1}`)
+          }
+          if (step.id === 'P16' && (metrics.h1 !== '管理后台' || /管理后台需要登录|仅管理员可见/.test(bodyText))) {
+            throw new Error(`管理后台未以管理员登录：h1=${metrics.h1}`)
+          }
+          if (step.id === 'P15' && metrics.h1 !== '关卡库') throw new Error(`关卡库标题异常：h1=${metrics.h1}`)
+        }
         const file = join(comboDir, `${step.id}.png`)
         await screenshot(client, file)
         entry.screenshot = file
         const newEvents = consoleEvents.slice(before)
-        entry.console = consoleSummary(newEvents)
+        entry.console = consoleSummary(newEvents, STRICT)
         if (entry.console.unexpected.length > 0) entry.pass = false
         // 横向溢出检查（视觉矩阵显式项）
         if (metrics.docScroll.w > metrics.viewport.w + 2) {
@@ -434,7 +496,7 @@ async function main() {
   // P13 减少动效（真实浏览器验证 G11 CSS 降级）
   try {
     await client.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
-    await navigate(client, `${PREVIEW}/#/edit/${SYNTH}`)
+    await navigate(client, `${BASE}/#/edit/${SYNTH}`)
     await waitFor(client, `!!document.querySelector('[data-testid="editor-tab-canvas"]')`, 'editor for reduced motion')
     const probe = async () =>
       evaluate(
@@ -488,7 +550,7 @@ async function main() {
       client,
       `localStorage.setItem('skin.prefs.v1', ${JSON.stringify(prefsFor('liuhua'))}); localStorage.setItem('graph-theme', 'dark')`,
     )
-    await navigate(client, `${PREVIEW}/?fouc=${Date.now()}#/`)
+    await navigate(client, `${BASE}/?fouc=${Date.now()}#/`)
     await waitFor(client, `!!document.querySelector('.shell')`, 'fouc shell', 20000)
     const timeline = await evaluate(client, `window.__fouc ?? null`)
     results.fouc = {
@@ -509,8 +571,8 @@ async function main() {
     `# 视觉矩阵执行结果（R38）`,
     ``,
     `- 时间：${results.startedAt}`,
+    `- 模式：${results.mode}（${BASE}）`,
     `- 提交：${results.gitCommit}`,
-    `- 预览：${PREVIEW}（生产构建）`,
     `- 组合：${COMBOS.length}（桌面 6 + 移动 2）`,
     `- 截图目录：${OUT}`,
     `- FAIL 项：${fails.length === 0 ? '无' : fails.length}`,
