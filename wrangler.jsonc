@@ -2,8 +2,10 @@
 // name 必须与已手动部署的 Worker 同名，CI 发布才会覆盖同一实例，
 // 对外 URL 保持 https://musicpractise.danieltoraji.workers.dev/ 不变。
 //
-// /api/* 请求先进 Worker 代码（run_worker_first），其余路径由静态资产直出
+// /api/* 请求先进 Worker 代码（assets.run_worker_first），其余路径由静态资产直出
 // （SPA fallback 不变）；D1 绑定名 DB（migrations/ 由 CI 部署前自动应用）。
+// R41：wrangler 4.147 的 schema 要求 run_worker_first 位于 assets 内（顶层会被忽略并告警，
+// 生产上 /api/* 可能被 SPA fallback 抢走——用 dry-run/dev 验证并加静态守卫）。
 {
   "name": "musicpractise",
   "main": "worker/index.ts",
@@ -11,9 +13,9 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
   },
-  "run_worker_first": ["/api/*"],
   "d1_databases": [
     {
       "binding": "DB",
