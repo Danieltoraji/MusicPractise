@@ -84,13 +84,13 @@ describe('TableEditor（jsdom 渲染）', () => {
       rerender()
     })
     try {
-      // notes 单元格：五线谱迷你预览（svg），不出现 JSON 文本（docs/27）
-      const noteCell = container.querySelector('.tcell-notes')!
+      // notes 单元格：五线谱迷你预览（svg），不出现 JSON 文本（docs/27）；G3 锚点走 data-testid
+      const noteCell = container.querySelector('[data-testid="tgrid-cell-0-notes"]')!
       expect(noteCell.querySelector('.tstaff .tstaff-svg svg')).not.toBeNull()
       expect(noteCell.textContent).not.toContain('midi')
       // 点击迷你谱 → 弹窗编辑器打开（谱面 + 工具条）；应用走 notesToCell 受控写回
       act(() => {
-        ;(noteCell.querySelector('.tstaff') as HTMLElement).click()
+        ;(noteCell as HTMLElement).click()
       })
       const modal = container.querySelector('.staff-modal')!
       expect(modal).not.toBeNull()

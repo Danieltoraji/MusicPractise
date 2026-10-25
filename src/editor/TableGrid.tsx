@@ -462,6 +462,7 @@ function CellEditorImpl(props: {
         type="checkbox"
         checked={value === true}
         title="布尔值"
+        data-testid={`tgrid-cell-${props.row}-${props.colKey}`}
         onChange={(e) => onCommit(e.target.checked)}
       />
     )
@@ -500,6 +501,7 @@ function CellEditorImpl(props: {
           type="button"
           className="tstaff tstaff-fix"
           title="该单元格不是标准音符数组——点击打开编辑器修复（可从文本导入，应用后替换）"
+          data-testid={`tgrid-cell-${props.row}-${props.colKey}`}
           onClick={openStaff}
         >
           <span className="tstaff-fix-text">⚠ 非标准音符数据 · 点击修复</span>
@@ -508,7 +510,13 @@ function CellEditorImpl(props: {
     }
     // 五线谱可视化（docs/27）：迷你谱预览（只显示一行，后面隐藏），点击打开谱面弹窗编辑
     return (
-      <button type="button" className="tstaff" title="点击编辑五线谱" onClick={openStaff}>
+      <button
+        type="button"
+        className="tstaff"
+        title="点击编辑五线谱"
+        data-testid={`tgrid-cell-${props.row}-${props.colKey}`}
+        onClick={openStaff}
+      >
         <StaffPreview notes={notes} width={props.width} height={Math.max(56, (props.height ?? 64) - 6)} />
       </button>
     )
@@ -519,7 +527,13 @@ function CellEditorImpl(props: {
     const items = listEntriesFromCell(value)
     const summary = items.length === 0 ? '（空）' : items.join('、')
     return (
-      <button type="button" className="tlist-open" title="点击编辑字符串列表" onClick={openList}>
+      <button
+        type="button"
+        className="tlist-open"
+        title="点击编辑字符串列表"
+        data-testid={`tgrid-cell-${props.row}-${props.colKey}`}
+        onClick={openList}
+      >
         <span className="tlist-summary">{clip(summary, 90)}</span>
         <span className="tlist-count">{items.length} 项</span>
       </button>
@@ -532,7 +546,7 @@ function CellEditorImpl(props: {
         <span className="tjson-text" title="JSON 高级列">
           {value === null || value === undefined ? '（空）' : clip(JSON.stringify(value))}
         </span>
-        <button type="button" onClick={openJson}>
+        <button type="button" data-testid={`tgrid-cell-${props.row}-${props.colKey}`} onClick={openJson}>
           编辑 JSON
         </button>
       </span>
