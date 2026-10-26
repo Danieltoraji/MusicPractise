@@ -56,6 +56,18 @@ const AiPanel = lazy(() => import('./ai/AiPanel').then((m) => ({ default: m.AiPa
  * W9 翻转后 EditorPage 的 v3 主体删除，入口只留它。
  */
 const EditorPageV4 = lazy(() => import('./v4/EditorPageV4').then((m) => ({ default: m.EditorPageV4 })))
+/** W7：v4 舞台/预览插槽（懒加载，仅进入对应 Tab 时才加载其 chunk） */
+const ShellTabV4 = lazy(() => import('./v4/ShellTab').then((m) => ({ default: m.ShellTab })))
+const PreviewTabV4 = lazy(() => import('./v4/PreviewTab').then((m) => ({ default: m.PreviewTab })))
+
+/**
+ * v4 编辑器插槽常量：模块级稳定引用（避免 EditorPage 每次渲染生成新函数导致
+ * 插槽子树整棵重挂——预览 Tab 会因此重建会话）。W6 的流程/行为图插槽后续并入此对象。
+ */
+const V4_EDITOR_SLOTS = {
+  renderShell: (props: import('./v4/shared').V4EditorSlotProps) => <ShellTabV4 {...props} />,
+  renderPreview: (props: import('./v4/shared').V4EditorSlotProps) => <PreviewTabV4 {...props} />,
+} as const
 
 /** 记录是否为 v4 关卡文档（路由分派用；不触发装载校验） */
 function isV4RecordDoc(record: LibraryRecord): boolean {
@@ -445,7 +457,7 @@ export function EditorPage({ id }: Props) {
   if (routeToV4) {
     return (
       <Suspense fallback={<p className="muted page">编辑器加载中…</p>}>
-        <EditorPageV4 id={activeId} />
+        <EditorPageV4 id={activeId} slots={V4_EDITOR_SLOTS} />
       </Suspense>
     )
   }

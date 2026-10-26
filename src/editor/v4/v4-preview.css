@@ -1,0 +1,348 @@
+/**
+ * v4 编辑器「舞台 / 预览」增量样式（docs/53 §13.3；docs/52 W7.2–W7.3）。
+ *
+ * 约束（与 v4-editor.css 同源纪律）：
+ * - 只写**新增** `.v4-shell-*` / `.v4-preview-*` 类，不重复定义既有外壳/画布/组件样式
+ *   （`.editor-canvas` / `.editor-box` / `.box-*` / `.palette` / `.inspector` / `.stage-*` 直接复用）；
+ * - 颜色一律设计令牌（`--panel` `--panel-2` `--soft` `--line` `--ink` `--muted` `--accent`
+ *   `--accent-soft` `--ok` `--bad` `--warn` `--warn-soft`），无裸色值；
+ * - 间距/字号/圆角/动效走 `--sp-*` / `--fs-*` / `--r-*` / `--tr`；不直接消费 `--ge-*`（G13）。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 舞台 Tab：组件面板 | 画布 + 视图条 | 属性检查器                     */
+/* ------------------------------------------------------------------ */
+
+.v4-shell-tab {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-3);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.v4-shell-palette {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: none;
+  align-self: stretch;
+}
+
+.v4-shell-palette select,
+.v4-shell-palette button {
+  width: 100%;
+  min-width: 0;
+}
+
+.v4-shell-hint {
+  font-size: var(--fs-0);
+  line-height: 1.5;
+}
+
+.v4-shell-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.v4-shell-toolbar {
+  margin-bottom: 0;
+  flex-wrap: wrap;
+}
+
+.v4-shell-views {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.v4-shell-view-name {
+  width: 104px;
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: var(--fs-0);
+}
+
+.v4-shell-viewport {
+  flex: 1 1 auto;
+  min-height: 240px;
+  overflow: auto;
+  position: relative;
+}
+
+/* 画布固定 800×470（几何靠内联 style，这里只钉交互与观感） */
+.v4-shell-canvas {
+  flex: none;
+  box-sizing: border-box;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.v4-shell-empty-hint {
+  padding: var(--sp-4);
+  font-size: var(--fs-0);
+}
+
+.v4-shell-inspector {
+  flex: 0 0 300px;
+  align-self: stretch;
+  max-height: none;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.v4-shell-inspector input:not([type='checkbox']),
+.v4-shell-inspector select {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.v4-shell-inspector code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-0);
+}
+
+/* ------------------------------------------------------------------ */
+/* 预览 Tab：控制条 + [游玩画面 | 调试面板]                            */
+/* ------------------------------------------------------------------ */
+
+.v4-preview-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.v4-preview-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font-size: var(--fs-0);
+}
+
+.v4-preview-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--muted);
+}
+
+.v4-preview-state {
+  padding: 1px 10px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.v4-preview-state[data-phase='live'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.v4-preview-progress {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.v4-preview-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-2);
+}
+
+.v4-preview-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 播放层视口（.stage-viewport 基础上给预览列一个可伸缩高度，去掉固有比例占位） */
+.v4-preview-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--paper);
+}
+
+.v4-preview-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.v4-preview-empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  background: var(--soft);
+  color: var(--muted);
+  font-size: var(--fs-0);
+}
+
+.v4-preview-error {
+  margin: 0 0 var(--sp-2);
+}
+
+.v4-preview-side {
+  flex: 0 0 328px;
+  width: 328px;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-sizing: border-box;
+}
+
+.v4-preview-sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: var(--fs-0);
+}
+
+.v4-preview-sec-title {
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 2px;
+}
+
+.v4-preview-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.v4-preview-kind {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-0);
+  color: var(--accent);
+}
+
+.v4-preview-index {
+  flex: none;
+  min-width: 20px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.v4-preview-badge {
+  align-self: flex-start;
+  padding: 1px 10px;
+  border-radius: var(--r-pill);
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--warn);
+  font-size: var(--fs-0);
+  white-space: nowrap;
+}
+
+.v4-preview-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.v4-preview-json {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-0);
+  line-height: 1.45;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.v4-preview-result {
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: var(--fs-1);
+  font-weight: 600;
+}
+
+.v4-preview-result.pass {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 8%, var(--panel));
+}
+
+.v4-preview-result.nopass {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+  background: color-mix(in srgb, var(--bad) 8%, var(--panel));
+}
+
+.v4-preview-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 168px;
+  overflow: auto;
+}
+
+.v4-preview-log {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.v4-preview-log.error .v4-preview-kind {
+  color: var(--bad);
+}
+
+.v4-preview-log.warning .v4-preview-kind {
+  color: var(--warn);
+}
+
+/* 窄窗口：预览调试列收窄，避免游玩画面被挤到不可用 */
+@media (max-width: 1180px) {
+  .v4-preview-side {
+    flex-basis: 280px;
+    width: 280px;
+  }
+}

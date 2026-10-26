@@ -58,5 +58,20 @@ describe('EditorPage v4 路由分派', () => {
     expect(container.querySelector('[data-testid="editor-tab-canvas"]')).toBeNull()
     expect(container.textContent).not.toContain('无法打开这个关卡')
     expect(container.querySelector('[data-testid="v4-tgrid-row-row_01"]')).not.toBeNull()
+
+    // 舞台/预览插槽接线（W7）：切 Tab 后懒加载组件挂载
+    const shellTab = container.querySelector('[data-testid="editor-tab-shell"]') as HTMLButtonElement | null
+    expect(shellTab).not.toBeNull()
+    await act(async () => {
+      shellTab!.click()
+    })
+    await waitFor(() => container!.querySelector('[data-testid="v4-shell-tab"]') !== null, '舞台插槽挂载')
+
+    const previewTab = container.querySelector('[data-testid="editor-tab-preview"]') as HTMLButtonElement | null
+    expect(previewTab).not.toBeNull()
+    await act(async () => {
+      previewTab!.click()
+    })
+    await waitFor(() => container!.querySelector('[data-testid="v4-preview-tab"]') !== null, '预览插槽挂载')
   })
 })

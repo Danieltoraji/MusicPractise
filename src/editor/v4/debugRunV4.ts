@@ -56,6 +56,8 @@ export class V4DebugController {
   private pausedAt: V4DebugPausePoint | null = null
   private gateResolve: (() => void) | null = null
   private stopped = false
+  /** V4Session 构造期可能触发 host.onRunEvent（如 shell 绑定求值失败）→ 此标记防止回调访问未赋值的 session */
+  private sessionReady = false
 
   constructor(doc: LevelDocV4, opts: V4DebugControllerOptions = {}) {
     this.opts = opts
@@ -76,6 +78,7 @@ export class V4DebugController {
       },
     }
     this.session = new V4Session(doc, host)
+    this.sessionReady = true
   }
 
   start(): void {
@@ -188,6 +191,8 @@ export class V4DebugController {
   }
 
   private notify(): void {
+    // 构造期（this.session 尚未赋值）V4Session 就可能通过 onRunEvent 回灌（如绑定求值失败）
+    if (!this.sessionReady) return
     const snapshot = this.getSnapshot()
     this.opts.onUpdate?.(snapshot)
     for (const listener of [...this.listeners]) listener()

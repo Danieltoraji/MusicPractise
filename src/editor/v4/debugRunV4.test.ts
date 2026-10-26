@@ -151,4 +151,14 @@ describe('v4 调试运行：behavior 断点 + 停止', () => {
     expect(controller.getSnapshot().running).toBe(false)
     expect(controller.getSnapshot().paused).toBe(false)
   })
+
+  it('构造期会话抛出运行事件（非法 shell 绑定）不崩', () => {
+    const doc = docWith(instantCorrect, simpleFlow)
+    doc.content.shell.components[0].bindings = { text: 'v.' }
+    const events: unknown[] = []
+    const controller = new V4DebugController(doc, { onRunEvent: (event) => events.push(event) })
+    expect(events.length).toBeGreaterThan(0) // 会话构造期确实产生了运行事件（绑定求值失败）
+    controller.stop()
+    expect(controller.getSnapshot().running).toBe(false)
+  })
 })
