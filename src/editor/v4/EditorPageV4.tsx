@@ -35,6 +35,7 @@ import {
   type EditorHistoryV4,
 } from './docStateV4'
 import { V4EditorShell, type V4EditorSlots, type V4EditorTab } from './V4EditorShell'
+import { stopAgentV4 } from '../../ai/v4/agent'
 
 export interface EditorPageV4Props {
   /** 路由 id；`new` = 从零建 v4 关 */
@@ -97,6 +98,22 @@ export function EditorPageV4({ id, slots }: EditorPageV4Props): React.ReactEleme
 
   const [doc, setDoc] = useState<LevelDocV4 | null>(null)
   const [tab, setTab] = useState<V4EditorTab>('content')
+  // AI 面板开关（W8 集成）：显式关闭面板视为宿主停止当前 AI run；
+  // 面板卸载本身不 abort（docs/40 §12.4），编辑器卸载由下方 cleanup 兜底 stopAgentV4。
+  const [aiOpen, setAiOpen] = useState(true)
+  const docIdRef = useRef('')
+  docIdRef.current = doc?.id ?? activeId
+  useEffect(() => {
+    return () => {
+      stopAgentV4(docIdRef.current)
+    }
+  }, [])
+  const toggleAi = useCallback(() => {
+    setAiOpen((open) => {
+      if (open) stopAgentV4(docIdRef.current)
+      return !open
+    })
+  }, [])
   const [saveErrors, setSaveErrors] = useState<string[]>([])
   const [lintWarnings, setLintWarnings] = useState<string[]>([])
   const [savedTip, setSavedTip] = useState('')
@@ -465,6 +482,8 @@ export function EditorPageV4({ id, slots }: EditorPageV4Props): React.ReactEleme
       activeTab={tab}
       onTabChange={setTab}
       onTryRun={() => void tryRun()}
+      aiOpen={aiOpen}
+      onToggleAi={toggleAi}
       renderFlow={slots?.renderFlow}
       renderBehavior={slots?.renderBehavior}
       renderShell={slots?.renderShell}

@@ -66,6 +66,8 @@ const FlowGraphSlotV4 = lazy(() =>
 const BehaviorGraphSlotV4 = lazy(() =>
   import('./v4/graph/GraphWorkbench').then((m) => ({ default: m.BehaviorGraphSlot })),
 )
+/** W8：v4 AI 面板（按层读写工具 + 冲突门；懒加载） */
+const AiPanelV4 = lazy(() => import('./v4/AiPanelV4').then((m) => ({ default: m.AiPanelV4 })))
 
 /** 槽位内层 Suspense：懒加载 chunk 只替换该 Tab 区域，不把整个编辑器踢回 loading */
 function slotWithFallback(node: React.ReactNode): React.ReactNode {
@@ -85,6 +87,8 @@ const V4_EDITOR_SLOTS = {
     slotWithFallback(<ShellTabV4 {...props} />),
   renderPreview: (props: import('./v4/shared').V4EditorSlotProps) =>
     slotWithFallback(<PreviewTabV4 {...props} />),
+  renderAiPanel: (props: import('./v4/shared').V4EditorSlotProps) =>
+    slotWithFallback(<AiPanelV4 {...props} />),
 } as const
 
 /** 记录是否为 v4 关卡文档（路由分派用；不触发装载校验） */

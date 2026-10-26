@@ -58,6 +58,8 @@ describe('EditorPage v4 路由分派', () => {
     expect(container.querySelector('[data-testid="editor-tab-canvas"]')).toBeNull()
     expect(container.textContent).not.toContain('无法打开这个关卡')
     expect(container.querySelector('[data-testid="v4-tgrid-row-row_01"]')).not.toBeNull()
+    // AI 面板插槽（W8b）：默认打开即懒加载真实 AiPanelV4
+    await waitFor(() => container!.querySelector('[data-testid="v4-ai"]') !== null, 'AI 面板插槽挂载')
 
     // 舞台/预览插槽接线（W7）：切 Tab 后懒加载组件挂载
     const shellTab = container.querySelector('[data-testid="editor-tab-shell"]') as HTMLButtonElement | null
