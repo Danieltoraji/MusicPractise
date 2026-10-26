@@ -1,0 +1,16 @@
+/*
+ * v4 播放层样式增量（docs/52 W3 / docs/53 §11）。
+ *
+ * 只新增双层舞台的定位容器：内容岛令牌、既有 .level-* / .result-bar / .comp-* 样式全部复用，
+ * 本文件不覆盖任何共享规则（浅色岛 pin 全套 token 仍由 .stage-canvas 承担）。
+ * 层叠不引入 z-index：DOM 顺序 shell 在前、surface 在后，同一 800×470 坐标系自然叠放；
+ * surface 整帧卸载后 shell 恢复可交互（题目执行期间 shell 事件由 session 忽略）。
+ */
+.v4-shell,
+.v4-surface {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 800px;
+  height: 470px;
+}
