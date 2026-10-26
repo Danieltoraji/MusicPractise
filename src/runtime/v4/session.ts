@@ -269,9 +269,9 @@ export class V4Session {
     this.timerApi = host.timer ?? DEFAULT_TIMER_API
     this.view = doc.content.shell.initialView ?? doc.content.shell.views[0]?.id ?? 'main'
     this.resetRunState()
+    this.shellStore.setEffectSink((componentId, effects) => this.handleEffects({ layer: 'shell' }, componentId, effects))
     this.shellLayer = this.mountLayer(this.shellStore, doc.content.shell.components, this.flowBindingEnv(), SHELL_BINDING_ROOTS)
     this.snapshot = this.buildSnapshot()
-    this.shellStore.setEffectSink((componentId, effects) => this.handleEffects({ layer: 'shell' }, componentId, effects))
   }
 
   private readonly doc: LevelDocV4
@@ -622,10 +622,10 @@ export class V4Session {
       watchdogTimer: undefined,
       timeoutFired: false,
     }
-    frame.layer = this.mountLayer(store, type.surface.components, this.surfaceBindingEnv(frame), SURFACE_BINDING_ROOTS)
     store.setEffectSink((componentId, effects) =>
       this.handleEffects({ layer: 'surface', callId }, componentId, effects),
     )
+    frame.layer = this.mountLayer(store, type.surface.components, this.surfaceBindingEnv(frame), SURFACE_BINDING_ROOTS)
     return frame
   }
 
@@ -856,7 +856,13 @@ export class V4Session {
     }
   }
 
-  /** 挂载层：先求值绑定合并进 props 再 store.init；记录初值避免挂载后再下发同一命令 */
+  /**
+   * 挂载层：先求值绑定合并进 props 再 store.init；记录初值避免挂载后再下发同一命令。
+   *
+   * 注意（Round 7 补丁）：并非所有组件 initialState 都消费 props（choice.options / staff.music
+   * 由命令 setOptions/setMusic 写入），所以 init 后必须把绑定初值按 DATA_APPLY_COMMANDS 补发一次
+   * 命令，否则这些槽位永远空白（applied 已记录初值，后续 syncBindings 不会补发）。
+   */
   private mountLayer(
     store: ComponentStore,
     specs: ComponentInstanceV4[],
@@ -886,6 +892,25 @@ export class V4Session {
       return { ...spec, props: props as Json }
     })
     store.init(merged as ComponentInstance[])
+    // 初值命令补发（见方法注释）：props 消费型组件重复设置无副作用，命令型组件依赖此步。
+    for (const spec of merged) {
+      if (!spec.bindings) continue
+      const props = isObjectJson(spec.props) ? spec.props : {}
+      for (const slot of Object.keys(spec.bindings)) {
+        const mapping = DATA_APPLY_COMMANDS[spec.type]?.[slot]
+        if (!mapping) continue
+        const value = props[mapping.argKey]
+        if (value === undefined) continue
+        try {
+          store.applyCommand(spec.id, mapping.method, { [mapping.argKey]: value })
+        } catch (err) {
+          this.log(
+            'warning',
+            `绑定初值应用失败 ${spec.id}.${slot}：${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
+      }
+    }
     return { store, specs: merged, applied, failed }
   }
 

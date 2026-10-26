@@ -137,6 +137,37 @@ describe('v4 session：启动 / ask / 结算', () => {
     expect((label.state as { text?: string }).text).toBe('得分: 20')
   })
 
+  it('surface 选择/谱面绑定初值经命令生效（choice.options / staff.music）', async () => {
+    const doc = docWith(waitThenReturnByEventFixture(), flowProgram(
+      [
+        { id: 'f_start', kind: 'start' },
+        { id: 'f_ask', kind: 'ask', target: 'run.questions[0]', resultVar: 'r' },
+        { id: 'f_finish', kind: 'finish', passed: 'true' },
+      ],
+      [out('f_start', 'f_ask'), out('f_ask', 'f_finish')],
+    ))
+    // 在 fixture 表上增加谱面数据列，并给 surface 加 staff 组件（绑定 music → q.staffMusic）
+    doc.content.tables.choice.columns.push({ key: 'staffMusic', label: '谱面', type: 'json' })
+    doc.content.tables.choice.rows[0].staffMusic = { notes: [{ midi: 64 }], clef: 'treble' }
+    doc.content.types[0].surface.components.push({
+      id: 'staff1',
+      type: 'staff',
+      layout: { x: 20, y: 340, w: 400, h: 110 },
+      bindings: { music: 'q.staffMusic' },
+    })
+    const h = makeHost()
+    const session = track(new V4Session(doc, h.host))
+    session.start()
+    await waitFor(() => session.getSnapshot().surface !== null, '挂载 surface')
+    const store = session.getSurfaceStore()!
+    const choice = store.snapshot('choice1').state as { options: string[] }
+    expect(choice.options).toEqual(['Do', 'Re', 'Mi'])
+    const staff = store.snapshot('staff1').state as { music: { notes: { midi: number }[] } | null }
+    expect(staff.music?.notes?.[0]?.midi).toBe(64)
+    session.dispatchSurfaceEvent('choice1', 'chosen', { score: 1 })
+    await waitFor(() => session.getSnapshot().result !== null, '结算')
+  })
+
   it('finish 后 flow 继续 waitShell；shell 事件唤醒后流程自然结束', async () => {
     const flow = flowProgram(
       [
