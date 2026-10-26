@@ -1,0 +1,591 @@
+{
+  "schemaVersion": 4,
+  "kind": "level",
+  "id": "res_01J9C100000000000000000000",
+  "version": "1.0.0",
+  "meta": {
+    "title": "音色实验室 · 合成器示例",
+    "description": "一张逻辑图 × 每型实例表（6 行）驱动全部内容：每种音色一行数据，「下一音色」推进题目；演示 synth 组件与「改数据不改图」。",
+    "author": {
+      "name": "POC 内置示例"
+    },
+    "tags": [
+      "示例",
+      "合成器",
+      "数据表"
+    ],
+    "locale": "zh-CN",
+    "license": "CC0-1.0",
+    "difficulty": 1,
+    "featured": true
+  },
+  "content": {
+    "shell": {
+      "views": [
+        {
+          "id": "lab",
+          "name": "音色实验室"
+        },
+        {
+          "id": "settled",
+          "name": "结算视图"
+        }
+      ],
+      "components": [
+        {
+          "id": "headLabel",
+          "type": "label",
+          "name": "标题",
+          "view": "lab",
+          "layout": {
+            "x": 24,
+            "y": 12,
+            "w": 536,
+            "h": 40
+          },
+          "props": {
+            "text": "🎹 音色实验室"
+          }
+        },
+        {
+          "id": "progressLabel",
+          "type": "label",
+          "name": "进度",
+          "view": "lab",
+          "layout": {
+            "x": 600,
+            "y": 16,
+            "w": 176,
+            "h": 28
+          },
+          "bindings": {
+            "text": "'进度 ' + v.row + ' / ' + run.total"
+          }
+        },
+        {
+          "id": "settledLabel",
+          "type": "label",
+          "name": "结算文本",
+          "view": "settled",
+          "layout": {
+            "x": 200,
+            "y": 120,
+            "w": 400,
+            "h": 48
+          },
+          "bindings": {
+            "text": "'已听 ' + run.total + ' 种音色'"
+          }
+        }
+      ]
+    },
+    "types": [
+      {
+        "id": "synth-demo",
+        "name": "合成器演示",
+        "surface": {
+          "components": [
+            {
+              "id": "waveLabel",
+              "type": "label",
+              "name": "音色",
+              "layout": {
+                "x": 24,
+                "y": 16,
+                "w": 260,
+                "h": 32
+              },
+              "bindings": {
+                "text": "q.wave"
+              }
+            },
+            {
+              "id": "titleLabel",
+              "type": "label",
+              "name": "音色名",
+              "layout": {
+                "x": 300,
+                "y": 16,
+                "w": 476,
+                "h": 32
+              },
+              "bindings": {
+                "text": "q.title"
+              }
+            },
+            {
+              "id": "descLabel",
+              "type": "label",
+              "name": "说明",
+              "layout": {
+                "x": 24,
+                "y": 60,
+                "w": 752,
+                "h": 56
+              },
+              "bindings": {
+                "text": "q.desc"
+              }
+            },
+            {
+              "id": "playBtn",
+              "type": "button",
+              "name": "播放",
+              "layout": {
+                "x": 24,
+                "y": 140,
+                "w": 240,
+                "h": 48
+              },
+              "props": {
+                "text": "▶ 播放示例"
+              }
+            },
+            {
+              "id": "nextBtn",
+              "type": "button",
+              "name": "下一音色",
+              "layout": {
+                "x": 536,
+                "y": 140,
+                "w": 240,
+                "h": 48
+              },
+              "props": {
+                "text": "下一音色 ▶"
+              }
+            },
+            {
+              "id": "synth1",
+              "type": "synth",
+              "name": "合成器",
+              "layout": {
+                "x": 24,
+                "y": 210,
+                "w": 360,
+                "h": 96
+              },
+              "props": {
+                "wave": "sawtooth",
+                "gain": 0.35
+              }
+            }
+          ]
+        },
+        "behavior": {
+          "logicVersion": 3,
+          "kind": "behavior",
+          "nodes": [
+            {
+              "id": "b_onStart",
+              "kind": "on",
+              "event": "start"
+            },
+            {
+              "id": "b_setWave",
+              "kind": "call",
+              "target": "synth1",
+              "method": "setWave",
+              "arg": "{ wave: q.wave }"
+            },
+            {
+              "id": "b_countHeard",
+              "kind": "assign",
+              "target": "t.heard",
+              "value": {
+                "expr": "t.heard + 1"
+              }
+            },
+            {
+              "id": "b_start_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_start_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onPlay",
+              "kind": "on",
+              "event": "playBtn.clicked"
+            },
+            {
+              "id": "b_playNotes",
+              "kind": "call",
+              "target": "synth1",
+              "method": "play",
+              "arg": "{ notes: q.notes, wave: q.wave }"
+            },
+            {
+              "id": "b_countPlay",
+              "kind": "assign",
+              "target": "q.state.played",
+              "value": {
+                "expr": "q.state.played + 1"
+              }
+            },
+            {
+              "id": "b_play_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_play_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onNext",
+              "kind": "on",
+              "event": "nextBtn.clicked"
+            },
+            {
+              "id": "b_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_comment",
+              "kind": "comment",
+              "text": "音色实验室：播放命令带 wave/notes；下一音色手动收题"
+            }
+          ],
+          "edges": [
+            {
+              "id": "e_b_onStart_b_setWave",
+              "from": "b_onStart",
+              "to": "b_setWave"
+            },
+            {
+              "id": "e_b_setWave_b_countHeard",
+              "from": "b_setWave",
+              "to": "b_countHeard"
+            },
+            {
+              "id": "e_b_countHeard_b_start_guard",
+              "from": "b_countHeard",
+              "to": "b_start_guard"
+            },
+            {
+              "id": "e_b_start_guard_b_start_guard_ret_true",
+              "from": "b_start_guard",
+              "to": "b_start_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onPlay_b_playNotes",
+              "from": "b_onPlay",
+              "to": "b_playNotes"
+            },
+            {
+              "id": "e_b_playNotes_b_countPlay",
+              "from": "b_playNotes",
+              "to": "b_countPlay"
+            },
+            {
+              "id": "e_b_countPlay_b_play_guard",
+              "from": "b_countPlay",
+              "to": "b_play_guard"
+            },
+            {
+              "id": "e_b_play_guard_b_play_guard_ret_true",
+              "from": "b_play_guard",
+              "to": "b_play_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onNext_b_ret",
+              "from": "b_onNext",
+              "to": "b_ret"
+            }
+          ]
+        },
+        "description": "一行数据 = 一种音色：点击播放试听，下一音色继续；演示 synth 组件的命令参数。",
+        "state": [
+          {
+            "key": "answered",
+            "type": "boolean",
+            "init": false
+          },
+          {
+            "key": "played",
+            "type": "number",
+            "init": 0
+          }
+        ],
+        "typeState": [
+          {
+            "key": "heard",
+            "type": "number",
+            "init": 0
+          }
+        ]
+      }
+    ],
+    "tables": {
+      "synth-demo": {
+        "columns": [
+          {
+            "key": "wave",
+            "label": "波形",
+            "type": "text"
+          },
+          {
+            "key": "title",
+            "label": "音色名",
+            "type": "text"
+          },
+          {
+            "key": "desc",
+            "label": "说明",
+            "type": "text"
+          },
+          {
+            "key": "notes",
+            "label": "示例旋律",
+            "type": "notes"
+          }
+        ],
+        "rows": [
+          {
+            "id": "row_sine",
+            "wave": "sine",
+            "title": "正弦 · 柔和",
+            "desc": "最纯净的波形，没有泛音——适合做提示音和温柔的背景",
+            "notes": [
+              {
+                "midi": 60,
+                "dur": "4n"
+              },
+              {
+                "midi": 64,
+                "dur": "4n"
+              },
+              {
+                "midi": 67,
+                "dur": "2n"
+              }
+            ]
+          },
+          {
+            "id": "row_triangle",
+            "wave": "triangle",
+            "title": "三角 · 木琴",
+            "desc": "略带空心感的圆润音色，接近木琴或八音盒",
+            "notes": [
+              {
+                "midi": 67,
+                "dur": "8n"
+              },
+              {
+                "midi": 64,
+                "dur": "8n"
+              },
+              {
+                "midi": 60,
+                "dur": "2n"
+              }
+            ]
+          },
+          {
+            "id": "row_square",
+            "wave": "square",
+            "title": "方波 · 芯片",
+            "desc": "只有通断两态的波形，是 8-bit 游戏机的经典音色",
+            "notes": [
+              {
+                "midi": 64,
+                "dur": "8n"
+              },
+              {
+                "midi": 64,
+                "dur": "8n"
+              },
+              {
+                "midi": 71,
+                "dur": "2n"
+              }
+            ]
+          },
+          {
+            "id": "row_sawtooth",
+            "wave": "sawtooth",
+            "title": "锯齿 · 明亮",
+            "desc": "包含全部泛音的明亮波形，经典合成器主音（配了低通滤波会温暖很多）",
+            "notes": [
+              {
+                "midi": 60,
+                "dur": "8n"
+              },
+              {
+                "midi": 62,
+                "dur": "8n"
+              },
+              {
+                "midi": 64,
+                "dur": "8n"
+              },
+              {
+                "midi": 67,
+                "dur": "2n"
+              }
+            ]
+          },
+          {
+            "id": "row_fm",
+            "wave": "fm",
+            "title": "FM · 电钢",
+            "desc": "频率调制合成：调制波让音色起音明亮、随后变纯，像电钢琴",
+            "notes": [
+              {
+                "midi": 65,
+                "dur": "4n"
+              },
+              {
+                "midi": 69,
+                "dur": "4n"
+              },
+              {
+                "midi": 72,
+                "dur": "2n"
+              }
+            ]
+          },
+          {
+            "id": "row_bell",
+            "wave": "bell",
+            "title": "钟琴 · 空灵",
+            "desc": "更高调制比的 FM，带自然衰减的长尾音，像风铃或编钟",
+            "notes": [
+              {
+                "midi": 72,
+                "dur": "4n"
+              },
+              {
+                "midi": 76,
+                "dur": "4n"
+              },
+              {
+                "midi": 79,
+                "dur": "2n"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "run": {
+      "order": "manifest",
+      "count": null,
+      "seed": null,
+      "shuffleWithinPhase": true
+    },
+    "flow": {
+      "logicVersion": 3,
+      "kind": "flow",
+      "nodes": [
+        {
+          "id": "f_start",
+          "kind": "start"
+        },
+        {
+          "id": "f_each",
+          "kind": "foreach",
+          "items": "run.questions",
+          "itemVar": "slot",
+          "indexVar": "index"
+        },
+        {
+          "id": "f_ask",
+          "kind": "ask",
+          "target": "local.slot",
+          "resultVar": "result"
+        },
+        {
+          "id": "f_addScore",
+          "kind": "assign",
+          "target": "v.score",
+          "value": {
+            "expr": "v.score + (local.result.scoreDelta || 0)"
+          }
+        },
+        {
+          "id": "f_setRow",
+          "kind": "assign",
+          "target": "v.row",
+          "value": {
+            "expr": "local.index + 1"
+          }
+        },
+        {
+          "id": "f_settled",
+          "kind": "setView",
+          "view": "settled"
+        },
+        {
+          "id": "f_finish",
+          "kind": "finish",
+          "passed": "true"
+        },
+        {
+          "id": "f_comment",
+          "kind": "comment",
+          "text": "预设：顺序遍历题单 → 每题一次 ask → 应用 scoreDelta → 切结算视图 → 结算（数据增删不需要改本图）"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_f_start_f_each",
+          "from": "f_start",
+          "to": "f_each"
+        },
+        {
+          "id": "e_f_each_f_ask_true",
+          "from": "f_each",
+          "to": "f_ask",
+          "port": "true"
+        },
+        {
+          "id": "e_f_ask_f_addScore",
+          "from": "f_ask",
+          "to": "f_addScore"
+        },
+        {
+          "id": "e_f_addScore_f_setRow",
+          "from": "f_addScore",
+          "to": "f_setRow"
+        },
+        {
+          "id": "e_f_setRow_f_each",
+          "from": "f_setRow",
+          "to": "f_each"
+        },
+        {
+          "id": "e_f_each_f_settled_false",
+          "from": "f_each",
+          "to": "f_settled",
+          "port": "false"
+        },
+        {
+          "id": "e_f_settled_f_finish",
+          "from": "f_settled",
+          "to": "f_finish"
+        }
+      ],
+      "vars": [
+        {
+          "key": "score",
+          "type": "number",
+          "init": 0
+        },
+        {
+          "key": "row",
+          "type": "number",
+          "init": 0
+        }
+      ]
+    }
+  }
+}

@@ -168,6 +168,37 @@ describe('v4 session：启动 / ask / 结算', () => {
     await waitFor(() => session.getSnapshot().result !== null, '结算')
   })
 
+  it('behavior.locals 声明在调用开始时按初值初始化（docs/53 §7）', async () => {
+    const behaviorWithLocals: BehaviorProgram = {
+      logicVersion: 3,
+      kind: 'behavior',
+      nodes: [
+        { id: 'b_start', kind: 'on', event: 'start' },
+        {
+          id: 'b_ret',
+          kind: 'return',
+          result: "{ status: 'answered', scoreDelta: len(local.acc) }",
+        },
+      ],
+      edges: [out('b_start', 'b_ret')],
+      locals: [{ key: 'acc', type: 'json', init: [1, 2, 3] }],
+    }
+    const flow = flowProgram(
+      [
+        { id: 'f_start', kind: 'start' },
+        { id: 'f_ask', kind: 'ask', target: 'run.questions[0]', resultVar: 'r' },
+        { id: 'f_apply', kind: 'assign', target: 'v.score', value: { expr: 'local.r.scoreDelta' } },
+        { id: 'f_finish', kind: 'finish', passed: 'true' },
+      ],
+      [out('f_start', 'f_ask'), out('f_ask', 'f_apply'), out('f_apply', 'f_finish')],
+    )
+    const h = makeHost()
+    const session = track(new V4Session(docWith(behaviorWithLocals, flow), h.host))
+    session.start()
+    await waitFor(() => session.getSnapshot().result !== null, '结算')
+    expect(h.finished).toEqual([{ score: 3, passed: true }])
+  })
+
   it('finish 后 flow 继续 waitShell；shell 事件唤醒后流程自然结束', async () => {
     const flow = flowProgram(
       [

@@ -614,7 +614,9 @@ export class V4Session {
       qState,
       t,
       args,
-      locals: {},
+      // docs/53 §7：behavior.locals 声明在每次调用开始时按初值初始化（Round 8 修复；
+      // 此前为空对象，读取未写过的 local.* 会「未知属性」，样例不得不在 on start 手写初始化）
+      locals: initStateObject(type.behavior.locals),
       qContent,
       cancel: new CancelToken(),
       timerKeys: new Set(),
