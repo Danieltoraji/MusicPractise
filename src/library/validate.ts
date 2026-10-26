@@ -15,24 +15,39 @@ import type { LevelDoc } from '../engine/level'
 import { lintGraphProgram } from '../engine/graphProgram'
 import { parseExpr } from '../engine/expr'
 import { migrateDocToV3 } from '../engine/migrateDoc'
+import { normalizeLevelDocV4, type LevelDocV4 } from '../engine/v4/model'
+import { validateLevelDocV4 } from '../engine/v4/validate'
 import type { ResourceKind } from './db'
 
 export const SCHEMA_BASE = 'https://music-practise.local/schemas/v1/'
+export const SCHEMA_BASE_V4 = 'https://music-practise.local/schemas/v4/'
+export const SCHEMA_V4_LEVEL_ID = `${SCHEMA_BASE_V4}level.json`
 
 // 显式静态导入（Vite JSON 模块）；新增 schema 时在此与 KNOWN_KINDS 同步
 import commonRaw from '../../schemas/v1/common.json'
 import logicRaw from '../../schemas/v1/logic.json'
 import graphLogicRaw from '../../schemas/v1/graph-logic.json'
 import levelRaw from '../../schemas/v1/level.json'
+import levelV4Raw from '../../schemas/v4/level.json'
 import seriesRaw from '../../schemas/v1/series.json'
 import topicRaw from '../../schemas/v1/topic.json'
 import instrumentRaw from '../../schemas/v1/instrument.json'
 
 /** 全部原始 schema（按 $id 注册共享）；schemas.test.ts 借此自建测试用 Ajv 实例 */
-export const SCHEMA_RAW = [commonRaw, logicRaw, graphLogicRaw, levelRaw, seriesRaw, topicRaw, instrumentRaw]
+export const SCHEMA_RAW = [
+  commonRaw,
+  logicRaw,
+  graphLogicRaw,
+  levelRaw,
+  levelV4Raw,
+  seriesRaw,
+  topicRaw,
+  instrumentRaw,
+]
 
 export const KNOWN_KINDS: ResourceKind[] = ['series', 'topic', 'level', 'instrument']
 
+/** 旧格式（v1/v3）level schema；v4 用 SCHEMA_RAW 中的 schemas/v4/level.json */
 const SCHEMA_BY_KIND: Record<ResourceKind, Schema> = {
   level: levelRaw as Schema,
   series: seriesRaw as Schema,
@@ -40,13 +55,16 @@ const SCHEMA_BY_KIND: Record<ResourceKind, Schema> = {
   instrument: instrumentRaw as Schema,
 }
 
-/** 各 kind 一个校验器（惰性建一次）；其余 schema 以 $id 注册供跨文件 $ref 解析 */
-const validators = new Map<ResourceKind, Validator>()
+const LEVEL_V4_SCHEMA = levelV4Raw as unknown as Schema
 
-function validatorFor(kind: ResourceKind): Validator {
-  const cached = validators.get(kind)
+/** 各 kind 一个校验器（惰性建一次）；v4 level 用独立键；其余 schema 以 $id 注册供跨文件 $ref 解析 */
+const validators = new Map<string, Validator>()
+
+function validatorFor(kind: ResourceKind, useV4Level = false): Validator {
+  const key = useV4Level ? `${kind}:v4` : kind
+  const cached = validators.get(key)
   if (cached) return cached
-  const root = SCHEMA_BY_KIND[kind]
+  const root = useV4Level ? LEVEL_V4_SCHEMA : SCHEMA_BY_KIND[kind]
   const rootId = (root as { $id?: string }).$id
   const validator = new Validator(root)
   for (const schema of SCHEMA_RAW) {
@@ -54,7 +72,7 @@ function validatorFor(kind: ResourceKind): Validator {
     // 根 schema 已随构造器注册，重复 addSchema 同一 $id 会被 cfworker 拒绝
     if (id && id !== rootId) validator.addSchema(schema as Schema, id)
   }
-  validators.set(kind, validator)
+  validators.set(key, validator)
   return validator
 }
 
@@ -65,12 +83,14 @@ export function validateEnvelope(
   if (!KNOWN_KINDS.includes(kind as ResourceKind)) {
     return { ok: false, errors: [`未知的文档 kind: ${String(kind)}`] }
   }
+  // 过渡期：level 同时存在 v1/v3 旧 schema 与 v4 新 schema，按文档声明分派
+  const version = (doc as { schemaVersion?: unknown } | null)?.schemaVersion
+  const useV4Level = kind === 'level' && version === 4
   try {
-    const result = validatorFor(kind as ResourceKind).validate(doc)
+    const result = validatorFor(kind as ResourceKind, useV4Level).validate(doc)
     if (result.valid) return { ok: true, errors: [] }
     // A5（docs/43 §7 / docs/44 R16）：按文档实际 schemaVersion 选 oneOf 分支——
     // 此前 v1 旧档校验失败也优先展示 v3 分支错误（字段名对不上，作者无法定位）
-    const version = (doc as { schemaVersion?: unknown } | null)?.schemaVersion
     const prefer = version === 1 ? 'v1' : version === 3 ? 'v3' : undefined
     return { ok: false, errors: formatSchemaErrors(result.errors, prefer) }
   } catch (err) {
@@ -105,7 +125,42 @@ export function capErrorLines(lines: string[]): string[] {
  *  cfworker 的 instanceLocation 带 URI fragment 前缀（#/content/...），先剥离。 */
 function formatInstanceLocation(loc: string): string {
   const p = loc.startsWith('#') ? loc.slice(1) : loc
-  let m = /^\/content\/table\/rows\/(\d+)(.*)$/.exec(p)
+  // v4 结构（docs/53）：/content/types/… /content/tables/… /content/shell/… /content/manifest/…
+  let m = /^\/content\/types\/(\d+)\/surface\/components\/(\d+)(.*)$/.exec(p)
+  if (m) return `题型第 ${Number(m[1]) + 1} 个的表现组件第 ${Number(m[2]) + 1} 项${formatRest(m[3])}`
+  m = /^\/content\/types\/(\d+)\/behavior\/(nodes|edges)\/(\d+)(.*)$/.exec(p)
+  if (m) {
+    const what = m[2] === 'nodes' ? '行为节点' : '行为连线'
+    return `题型第 ${Number(m[1]) + 1} 个的${what}第 ${Number(m[3]) + 1} 项${formatRest(m[4])}`
+  }
+  m = /^\/content\/types\/(\d+)\/(state|typeState|args)\/(\d+)(.*)$/.exec(p)
+  if (m) {
+    const what = m[2] === 'state' ? '实例态字段' : m[2] === 'typeState' ? '题型态字段' : '参数'
+    return `题型第 ${Number(m[1]) + 1} 个的${what}第 ${Number(m[3]) + 1} 项${formatRest(m[4])}`
+  }
+  m = /^\/content\/types\/(\d+)(.*)$/.exec(p)
+  if (m) return `题型第 ${Number(m[1]) + 1} 个${formatRest(m[2])}`
+  m = /^\/content\/tables\/([^/]+)\/rows\/(\d+)(.*)$/.exec(p)
+  if (m) return `题型「${m[1]}」第 ${Number(m[2]) + 1} 行${formatRest(m[3])}`
+  m = /^\/content\/tables\/([^/]+)\/columns\/(\d+)(.*)$/.exec(p)
+  if (m) return `题型「${m[1]}」第 ${Number(m[2]) + 1} 列${formatRest(m[3])}`
+  m = /^\/content\/tables\/([^/]+)(.*)$/.exec(p)
+  if (m) return `题型「${m[1]}」的实例表${formatRest(m[2])}`
+  m = /^\/content\/shell\/(components|views)\/(\d+)(.*)$/.exec(p)
+  if (m) {
+    const what = m[1] === 'components' ? 'shell 组件' : '视图'
+    return `${what}第 ${Number(m[2]) + 1} 项${formatRest(m[3])}`
+  }
+  m = /^\/content\/manifest\/entries\/(\d+)(.*)$/.exec(p)
+  if (m) return `题单第 ${Number(m[1]) + 1} 项${formatRest(m[2])}`
+  m = /^\/content\/flow\/(nodes|edges)\/(\d+)(.*)$/.exec(p)
+  if (m) {
+    const what = m[1] === 'nodes' ? '流程节点' : '流程连线'
+    return `${what}第 ${Number(m[2]) + 1} 项${formatRest(m[3])}`
+  }
+  m = /^\/content\/run(.*)$/.exec(p)
+  if (m) return `运行配置${formatRest(m[1])}`
+  m = /^\/content\/table\/rows\/(\d+)(.*)$/.exec(p)
   if (m) return `数据表第 ${Number(m[1]) + 1} 行${formatRest(m[2])}`
   m = /^\/content\/components\/(\d+)(.*)$/.exec(p)
   if (m) return `组件第 ${Number(m[1]) + 1} 项${formatRest(m[2])}`
@@ -256,7 +311,9 @@ export function loadLevelDoc(raw: unknown): LoadResult {
 
   const source = raw as { schemaVersion?: unknown }
   if (source.schemaVersion !== 1 && source.schemaVersion !== 3) {
-    errors.push(`schemaVersion ${String(source.schemaVersion)} 不受支持（支持 1 → 自动升级 3；3 为当前格式）`)
+    errors.push(
+      `schemaVersion ${String(source.schemaVersion)} 不受支持（loadLevelDoc 支持 1 → 自动升级 3；3 为旧格式；v4 文档请用 loadLevelDocV4）`,
+    )
   }
 
   let lintWarnings: string[] = []
@@ -278,6 +335,37 @@ export function loadLevelDoc(raw: unknown): LoadResult {
   }
 
   return { ok: false, errors }
+}
+
+export type LoadResultV4 =
+  | { ok: true; doc: LevelDocV4; lintWarnings: string[] }
+  | { ok: false; errors: string[] }
+
+/**
+ * v4 装载管线（过渡期与 loadLevelDoc 并存；W9 翻转后取代之）：
+ * JSON Schema（schemas/v4/level.json）→ normalizeLevelDocV4 → 结构/引用校验（validateLevelDocV4）。
+ * 表达式根/写权限/可达性等语义问题由 W1.6 lint 接入后作为 lintWarnings 返回。
+ */
+export function loadLevelDocV4(raw: unknown): LoadResultV4 {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, errors: ['文档不是 JSON 对象'] }
+  }
+  const source = raw as { kind?: unknown; schemaVersion?: unknown }
+  if (source.kind !== 'level') {
+    return { ok: false, errors: [`kind 不是 level（实际: ${String(source.kind)}）。请用资源库导入其他类型文档`] }
+  }
+  if (source.schemaVersion !== 4) {
+    return {
+      ok: false,
+      errors: [`loadLevelDocV4 只接受 schemaVersion 4（实际: ${String(source.schemaVersion)}）`],
+    }
+  }
+  const env = validateEnvelope('level', raw)
+  if (!env.ok) return { ok: false, errors: env.errors }
+  const doc = normalizeLevelDocV4(raw)
+  const result = validateLevelDocV4(doc)
+  if (!result.ok) return { ok: false, errors: result.errors.map((issue) => issue.message) }
+  return { ok: true, doc, lintWarnings: result.warnings.map((issue) => issue.message) }
 }
 
 /**

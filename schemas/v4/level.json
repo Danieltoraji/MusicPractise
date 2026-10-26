@@ -1,0 +1,625 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://music-practise.local/schemas/v4/level.json",
+  "title": "关卡文档 v4：流程 main + 题型异步函数 + 每型实例表（docs/53）",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 4
+    },
+    "kind": {
+      "const": "level"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^res_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "meta": {
+      "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Meta"
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://music-practise.local/schemas/v1/common.json#/$defs/Ref"
+      }
+    },
+    "content": {
+      "$ref": "#/$defs/Content"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "kind",
+    "id",
+    "version",
+    "meta",
+    "content"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "LocalId": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+    },
+    "Content": {
+      "type": "object",
+      "properties": {
+        "shell": {
+          "$ref": "#/$defs/Shell"
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuestionType"
+          },
+          "maxItems": 12
+        },
+        "tables": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/LocalId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/QuestionTable"
+          }
+        },
+        "manifest": {
+          "$ref": "#/$defs/ExplicitManifest"
+        },
+        "run": {
+          "$ref": "#/$defs/RunConfig"
+        },
+        "flow": {
+          "$ref": "#/$defs/FlowProgram"
+        }
+      },
+      "required": [
+        "shell",
+        "types",
+        "tables",
+        "flow"
+      ],
+      "additionalProperties": false
+    },
+    "Shell": {
+      "type": "object",
+      "properties": {
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/View"
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Component"
+          },
+          "maxItems": 64
+        },
+        "initialView": {
+          "$ref": "#/$defs/LocalId"
+        }
+      },
+      "required": [
+        "views",
+        "components"
+      ],
+      "additionalProperties": false
+    },
+    "View": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "Layout": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "w": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 800
+        },
+        "h": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 470
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "additionalProperties": false
+    },
+    "Component": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "view": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "layout": {
+          "$ref": "#/$defs/Layout"
+        },
+        "props": {},
+        "bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "QuestionType": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "surface": {
+          "$ref": "#/$defs/Surface"
+        },
+        "behavior": {
+          "$ref": "#/$defs/BehaviorProgram"
+        },
+        "state": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StateField"
+          },
+          "maxItems": 32
+        },
+        "typeState": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StateField"
+          },
+          "maxItems": 32
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParamField"
+          },
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "surface",
+        "behavior"
+      ],
+      "additionalProperties": false
+    },
+    "Surface": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Component"
+          },
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "components"
+      ],
+      "additionalProperties": false
+    },
+    "StateField": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "type": {
+          "enum": [
+            "number",
+            "boolean",
+            "string",
+            "json"
+          ]
+        },
+        "init": {}
+      },
+      "required": [
+        "key",
+        "type",
+        "init"
+      ],
+      "additionalProperties": false
+    },
+    "ParamField": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "type": {
+          "enum": [
+            "number",
+            "boolean",
+            "string",
+            "json"
+          ]
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "default": {}
+      },
+      "required": [
+        "key",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "QuestionTable": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Column"
+          },
+          "maxItems": 32
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuestionRow"
+          },
+          "maxItems": 512
+        }
+      },
+      "required": [
+        "columns",
+        "rows"
+      ],
+      "additionalProperties": false
+    },
+    "Column": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "type": {
+          "enum": [
+            "text",
+            "number",
+            "boolean",
+            "notes",
+            "list",
+            "json"
+          ]
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    "QuestionRow": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "phase": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "ExplicitManifest": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ManifestEntry"
+          },
+          "maxItems": 2048
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "ManifestEntry": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "row": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "args": {}
+      },
+      "required": [
+        "type",
+        "row"
+      ],
+      "additionalProperties": false
+    },
+    "RunConfig": {
+      "type": "object",
+      "properties": {
+        "order": {
+          "enum": [
+            "manifest",
+            "shuffle"
+          ]
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 2048
+        },
+        "seed": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "shuffleWithinPhase": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FlowProgram": {
+      "type": "object",
+      "properties": {
+        "logicVersion": {
+          "const": 3
+        },
+        "kind": {
+          "const": "flow"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FlowNode"
+          },
+          "maxItems": 512
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Edge"
+          },
+          "maxItems": 1024
+        },
+        "vars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StateField"
+          },
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "logicVersion",
+        "kind",
+        "nodes",
+        "edges"
+      ],
+      "additionalProperties": false
+    },
+    "BehaviorProgram": {
+      "type": "object",
+      "properties": {
+        "logicVersion": {
+          "const": 3
+        },
+        "kind": {
+          "const": "behavior"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BehaviorNode"
+          },
+          "maxItems": 512
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Edge"
+          },
+          "maxItems": 1024
+        },
+        "locals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StateField"
+          },
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "logicVersion",
+        "kind",
+        "nodes",
+        "edges"
+      ],
+      "additionalProperties": false
+    },
+    "FlowNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "kind": {
+          "enum": [
+            "start",
+            "assign",
+            "call",
+            "setView",
+            "ask",
+            "foreach",
+            "branch",
+            "loop",
+            "wait",
+            "waitShell",
+            "finish",
+            "restart",
+            "comment"
+          ]
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "additionalProperties": true
+    },
+    "BehaviorNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "kind": {
+          "enum": [
+            "on",
+            "return",
+            "assign",
+            "call",
+            "emit",
+            "branch",
+            "loop",
+            "wait",
+            "comment"
+          ]
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "additionalProperties": true
+    },
+    "Edge": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "from": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "to": {
+          "$ref": "#/$defs/LocalId"
+        },
+        "port": {
+          "enum": [
+            "true",
+            "false"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
