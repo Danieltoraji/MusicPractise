@@ -1,4 +1,7 @@
-/** 关卡文档运行时类型（schemaVersion 3；与 schemas/v1/level.json 的 V3 定义对应） */
+/**
+ * 关卡运行时共享类型（v4）：组件实例 / 音符 / 数据表列类型 / 数据应用命令白名单。
+ * 关卡文档结构（LevelDocV4）以 `engine/v4/model.ts` 为准，JSON Schema 为 `schemas/v4/level.json`。
+ */
 import type { Json } from './expr'
 
 export interface Note {

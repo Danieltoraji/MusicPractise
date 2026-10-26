@@ -1,5 +1,5 @@
 /**
- * schema 上限常量（docs/40 A5 门禁）：与 schemas/v1/level.json、common.json 的
+ * schema 上限常量（docs/40 A5 门禁）：与 `schemas/v4/level.json`、`schemas/v1/common.json` 的
  * maxItems/maxLength 对齐——编辑器在添加入口就地 disabled + 计数，而不是到保存才被拒。
  * 改 schema 上限时同步此处（D6 一致性测试 guard：schemaLimits.test.ts）。
  */

@@ -196,12 +196,13 @@ const METRICS_JS = `(() => {
     })(),
     tabs: [...document.querySelectorAll('[data-testid^="editor-tab-"]')].map((b) => b.textContent.trim()),
     layout: {
-      palette: rect('.editor-canvas-layout > .palette'),
-      canvas: rect('.editor-canvas-layout .editor-canvas'),
-      inspector: rect('.inspector'),
+      // v4 编辑器：内容 Tab = 题型侧栏 + 实例表；流程/行为 = 图工作台右停靠栏
+      palette: rect('[data-testid="v4-type-sidebar"]'),
+      canvas: rect('.v4-tgrid'),
+      inspector: rect('[data-testid="v4-graph-dock-right"]'),
       stage: rect('.stage-canvas'),
       stageViewport: rect('.stage-viewport'),
-      graphEditor: rect('.graph-editor'),
+      graphEditor: rect('.v4-graph-workbench'),
       modal: rect('[data-testid="modal"]'),
     },
     tokens: {
@@ -239,41 +240,93 @@ const STEPS = [
   { id: 'P1', label: '首页', route: '#/' },
   { id: 'P2', label: '资源库', route: '#/library' },
   { id: 'P3', label: '游玩舞台', route: `#/level/${TUTORIAL}`, wait: '.stage-canvas' },
-  { id: 'P4', label: '节点图页', route: `#/graph/${TUTORIAL}` },
-  { id: 'P5', label: '编辑器·画布', route: `#/edit/${SYNTH}`, wait: '[data-testid="editor-tab-canvas"]' },
+  { id: 'P4', label: '旧图谱链接（兼容→v4 编辑器）', route: `#/graph/${TUTORIAL}`, wait: '[data-testid="v4-editor"]' },
+  { id: 'P5', label: '编辑器·内容', route: `#/edit/${SYNTH}`, wait: '[data-testid="editor-tab-content"]' },
+  {
+    id: 'P5b',
+    label: '编辑器·舞台',
+    action: async (client) => {
+      await evaluate(client, `document.querySelector('[data-testid="editor-tab-shell"]')?.click()`)
+      await waitFor(client, `!!document.querySelector('[data-testid="v4-shell-tab"]')`, 'v4 shell tab')
+      await sleep(500)
+    },
+  },
+  {
+    id: 'P5c',
+    label: '编辑器·预览（可见游玩+调试）',
+    action: async (client) => {
+      await evaluate(client, `document.querySelector('[data-testid="editor-tab-preview"]')?.click()`)
+      await waitFor(client, `!!document.querySelector('[data-testid="v4-preview-tab"]')`, 'v4 preview tab')
+      await evaluate(client, `document.querySelector('[data-testid="v4-preview-start"]')?.click()`)
+      await waitFor(client, `!!document.querySelector('[data-testid="v4-preview-run-state"]')`, 'v4 preview running')
+      await sleep(600)
+    },
+    cleanup: async (client) => {
+      await evaluate(client, `document.querySelector('[data-testid="v4-preview-stop"]')?.click()`)
+      await sleep(200)
+    },
+  },
   {
     id: 'P6',
-    label: '编辑器·节点图',
+    label: '编辑器·流程（节点图）',
     action: async (client) => {
-      await evaluate(client, `document.querySelector('[data-testid="editor-tab-graph"]')?.click()`)
-      await waitFor(client, `!!document.querySelector('.graph-editor')`, 'graph editor')
+      await evaluate(client, `document.querySelector('[data-testid="editor-tab-flow"]')?.click()`)
+      await waitFor(client, `!!document.querySelector('[data-testid="v4-graph-workbench"]')`, 'v4 graph workbench')
       await waitFor(client, `!!document.querySelector('.react-flow__background')`, 'RF background')
       await sleep(700)
     },
   },
   {
     id: 'P7',
-    label: '编辑器·脚本',
+    label: '编辑器·伪代码（三视图同源）',
     action: async (client) => {
-      await evaluate(client, `document.querySelector('[data-testid="editor-tab-script"]')?.click()`)
-      await waitFor(client, `!!document.querySelector('.script-tab')`, 'script tab')
+      await evaluate(client, `document.querySelector('[data-testid="v4-graph-view-script"]')?.click()`)
+      await waitFor(client, `!!document.querySelector('[data-testid="v4-graph-script-text"]')`, 'v4 script view')
       await sleep(500)
     },
   },
   {
-    id: 'P8',
-    label: '编辑器·弹窗',
+    id: 'P7b',
+    label: '编辑器·预设画廊',
     action: async (client) => {
-      await evaluate(client, `document.querySelector('[data-testid="editor-tab-table"]')?.click()`)
-      await waitFor(client, `!!document.querySelector('[data-testid="tgrid-row-0"]')`, 'table row')
+      // 预设画廊只在节点图视图的左栏渲染；P7 停在伪代码视图 → 先切回图视图
+      await evaluate(client, `document.querySelector('[data-testid="v4-graph-view-graph"]')?.click()`)
+      await waitFor(client, `!!document.querySelector('[data-testid="v4-graph-canvas"]')`, 'v4 graph canvas')
+      await evaluate(client, `document.querySelector('[data-testid="v4-graph-toggle-presets"]')?.click()`)
+      await waitFor(client, `!!document.querySelector('[data-testid="v4-graph-presets-panel"]')`, 'preset gallery')
       await sleep(400)
-      await evaluate(client, `document.querySelector('[data-testid="tgrid-cell-0-notes"]')?.click()`)
+    },
+  },
+  {
+    id: 'P8',
+    label: '编辑器·实例表弹窗',
+    action: async (client) => {
+      await evaluate(client, `document.querySelector('[data-testid="editor-tab-content"]')?.click()`)
+      await waitFor(client, `!!document.querySelector('[data-testid^="v4-tgrid-row-"]')`, 'v4 table row')
+      await sleep(400)
+      // notes 列单元格打开五线谱弹窗（列头也以 -notes 结尾，必须限定 cell 锚点）
+      await evaluate(
+        client,
+        `document.querySelector('[data-testid^="v4-tgrid-cell-"][data-testid$="-notes"]')?.click()`,
+      )
       await waitFor(client, `!!document.querySelector('[data-testid="modal"]')`, 'modal')
       await sleep(350)
     },
     cleanup: async (client) => {
       await evaluate(client, `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
       await sleep(250)
+    },
+  },
+  {
+    id: 'P17',
+    label: '新建向导·零代码模板',
+    route: '#/edit/new',
+    wait: '[data-testid="v4-template-start"]',
+    action: async (client) => {
+      await evaluate(client, `document.querySelector('[data-testid="v4-template-listen-choice"]')?.click()`)
+      await waitFor(client, `!document.querySelector('[data-testid="v4-template-start"]')`, 'template picked')
+      await waitFor(client, `!!document.querySelector('[data-testid^="v4-tgrid-row-"]')`, 'template table rows')
+      await sleep(500)
     },
   },
   { id: 'P9', label: '皮肤中心', route: '#/skins', wait: '.skin-cards' },
@@ -286,7 +339,7 @@ const STEPS = [
   { id: 'P16', label: '管理后台', route: '#/admin' },
 ]
 
-const COMBOS = [
+const COMBOS_ALL = [
   { key: 'dream-light', skin: 'dream', theme: 'light', width: 1440, height: 900 },
   { key: 'dream-dark', skin: 'dream', theme: 'dark', width: 1440, height: 900 },
   { key: 'violet-light', skin: 'violet', theme: 'light', width: 1440, height: 900 },
@@ -296,6 +349,8 @@ const COMBOS = [
   { key: 'dream-mobile', skin: 'dream', theme: 'light', width: 390, height: 844, mobile: true },
   { key: 'liuhua-mobile', skin: 'liuhua', theme: 'dark', width: 390, height: 844, mobile: true },
 ]
+/** --quick：只跑前两个桌面组合，用于改脚本后的快速自检 */
+const COMBOS = QUICK ? COMBOS_ALL.slice(0, 2) : COMBOS_ALL
 
 async function main() {
   mkdirSync(OUT, { recursive: true })
@@ -420,7 +475,8 @@ async function main() {
     mkdirSync(comboDir, { recursive: true })
     const comboResult = { ...combo, steps: [] }
     for (const step of STEPS) {
-      if (combo.mobile && !['P1', 'P3', 'P5', 'P6', 'P8', 'P9'].includes(step.id)) continue
+      // 移动端只跑游玩/首页/皮肤中心：v4 编辑器移动端适配未纳入本期范围（docs/52 W10、docs/38 裁决）
+      if (combo.mobile && !['P1', 'P3', 'P9'].includes(step.id)) continue
       const before = consoleEvents.length
       const entry = { id: step.id, label: step.label, pass: true, error: null, screenshot: null }
       try {
@@ -437,6 +493,7 @@ async function main() {
         if (step.id === 'P5' && !metrics.editorTitle) throw new Error('编辑器标题未加载')
         if (step.id === 'P6' && !metrics.graph.className) throw new Error('节点图未加载')
         if (step.id === 'P8' && !metrics.layout.modal) throw new Error('弹窗未打开')
+        if (step.id === 'P17' && !metrics.editorTitle) throw new Error('模板建关后编辑器标题未加载')
         if (step.id === 'P9' && !(await evaluate(client, `!!document.querySelector('.skin-cards')`))) {
           throw new Error('皮肤中心未加载')
         }
@@ -497,7 +554,7 @@ async function main() {
   try {
     await client.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
     await navigate(client, `${BASE}/#/edit/${SYNTH}`)
-    await waitFor(client, `!!document.querySelector('[data-testid="editor-tab-canvas"]')`, 'editor for reduced motion')
+    await waitFor(client, `!!document.querySelector('[data-testid="editor-tab-content"]')`, 'editor for reduced motion')
     const probe = async () =>
       evaluate(
         client,
