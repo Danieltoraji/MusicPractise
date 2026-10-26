@@ -17,6 +17,8 @@ import { parseExpr } from '../engine/expr'
 import { migrateDocToV3 } from '../engine/migrateDoc'
 import { normalizeLevelDocV4, type LevelDocV4 } from '../engine/v4/model'
 import { validateLevelDocV4 } from '../engine/v4/validate'
+import { lintLevelDocV4 } from '../engine/v4/lint'
+import { allContracts } from '../runtime/store'
 import type { ResourceKind } from './db'
 
 export const SCHEMA_BASE = 'https://music-practise.local/schemas/v1/'
@@ -341,10 +343,13 @@ export type LoadResultV4 =
   | { ok: true; doc: LevelDocV4; lintWarnings: string[] }
   | { ok: false; errors: string[] }
 
+/** 组件类型 → 契约（v4 lint 用；模块级构建一次） */
+const CONTRACT_BY_TYPE = new Map(allContracts().map((contract) => [contract.type, contract]))
+
 /**
  * v4 装载管线（过渡期与 loadLevelDoc 并存；W9 翻转后取代之）：
- * JSON Schema（schemas/v4/level.json）→ normalizeLevelDocV4 → 结构/引用校验（validateLevelDocV4）。
- * 表达式根/写权限/可达性等语义问题由 W1.6 lint 接入后作为 lintWarnings 返回。
+ * JSON Schema（schemas/v4/level.json）→ normalizeLevelDocV4 → 结构/引用校验（validateLevelDocV4）
+ * → 语义 lint（lintLevelDocV4：表达式根/路径/写权限/契约/可达性等，作为 lintWarnings 返回）。
  */
 export function loadLevelDocV4(raw: unknown): LoadResultV4 {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
@@ -365,7 +370,12 @@ export function loadLevelDocV4(raw: unknown): LoadResultV4 {
   const doc = normalizeLevelDocV4(raw)
   const result = validateLevelDocV4(doc)
   if (!result.ok) return { ok: false, errors: result.errors.map((issue) => issue.message) }
-  return { ok: true, doc, lintWarnings: result.warnings.map((issue) => issue.message) }
+  // v4 语义 lint：组件契约通过 runtime 的 allContracts() 注入（引擎层不反向依赖运行时）
+  const lintIssues = lintLevelDocV4(doc, {
+    contractOf: (type) => CONTRACT_BY_TYPE.get(type),
+  })
+  const lintWarnings = [...result.warnings, ...lintIssues].map((issue) => issue.message)
+  return { ok: true, doc, lintWarnings }
 }
 
 /**

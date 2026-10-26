@@ -85,6 +85,58 @@ function visitAst(node: Ast, onPath: (root: string) => void, onCall: (name: stri
   }
 }
 
+/** AST 中出现的路径（根 + 段，去重、按出现顺序）；用于按 schema 做静态路径校验 */
+export function collectExprPaths(ast: Ast): string[][] {
+  const paths: string[][] = []
+  const seen = new Set<string>()
+  const onPath = (parts: string[]): void => {
+    const key = parts.join('.')
+    if (seen.has(key)) return
+    seen.add(key)
+    paths.push(parts)
+  }
+  const walk = (node: Ast): void => {
+    switch (node.k) {
+      case 'lit':
+        return
+      case 'path':
+        onPath(node.parts)
+        return
+      case 'array':
+        for (const item of node.items) walk(item)
+        return
+      case 'obj':
+        for (const entry of node.entries) walk(entry.value)
+        return
+      case 'index':
+        walk(node.obj)
+        walk(node.idx)
+        return
+      case 'call':
+        for (const arg of node.args) walk(arg)
+        return
+      case 'un':
+        walk(node.a)
+        return
+      case 'bin':
+        walk(node.a)
+        walk(node.b)
+        return
+      case 'tern':
+        walk(node.c)
+        walk(node.a)
+        walk(node.b)
+        return
+    }
+  }
+  walk(ast)
+  return paths
+}
+
+export function exprPaths(src: string): string[][] {
+  return collectExprPaths(parseExpr(src))
+}
+
 /** AST 中出现的根标识符（去重、按出现顺序） */
 export function collectExprRoots(ast: Ast): string[] {
   const roots: string[] = []
@@ -151,7 +203,9 @@ export function clearV4ExprCache(): void {
 // 静态校验（编辑器实时提示 + lint 共用）
 // ---------------------------------------------------------------------------
 
-export type V4ExprCheck = { ok: true } | { ok: false; message: string }
+export type V4ExprCheck =
+  | { ok: true }
+  | { ok: false; code: 'syntax' | 'root' | 'function'; message: string }
 
 export interface V4ExprCheckOptions {
   /** 本层允许的根（FLOW_ROOTS / BEHAVIOR_ROOTS / …） */
@@ -167,23 +221,24 @@ export function checkV4Expr(src: string, opts: V4ExprCheckOptions): V4ExprCheck 
   try {
     ast = parseExpr(src)
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : String(err) }
+    return { ok: false, code: 'syntax', message: err instanceof Error ? err.message : String(err) }
   }
   const allowed = new Set(opts.roots)
   for (const root of collectExprRoots(ast)) {
     if (!allowed.has(root)) {
       return {
         ok: false,
+        code: 'root',
         message: `未定义的标识符 "${root}"（本层允许：${opts.roots.join('/')}）`,
       }
     }
   }
   for (const name of collectExprCalls(ast)) {
     if (!isKnownExprFunction(name)) {
-      return { ok: false, message: `未知函数 "${name}"（只允许白名单函数）` }
+      return { ok: false, code: 'function', message: `未知函数 "${name}"（只允许白名单函数）` }
     }
     if (isV4OnlyExprFunction(name) && !opts.allowV4Functions) {
-      return { ok: false, message: `"${name}" 只能在流程层（flow）使用` }
+      return { ok: false, code: 'function', message: `"${name}" 只能在流程层（flow）使用` }
     }
   }
   return { ok: true }
