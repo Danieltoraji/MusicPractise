@@ -16,11 +16,21 @@ export interface ExprScope {
   v: Record<string, Json>
 }
 
+/**
+ * 多根求值环境（v4）：根名 → 值。根集合由调用层显式声明（docs/53 §8）。
+ * 与 ExprScope 的固定 event/q/v 三根互不影响；v3 路径继续走 legacy 编译入口。
+ */
+export type ExprEnv = Record<string, Json>
+
 export interface ExprContext {
   /** AudioContext 时钟秒（节奏相关函数用）；缺省用 performance.now */
   getNowSeconds?: () => number
   /** 单次求值步数预算 */
   stepBudget?: number
+  /** v4 flow 层跨题只读查询：stateOf(type,row,field) → 实例态字段值（缺失返回 null） */
+  questionState?: (typeId: string, rowId: string, field: string) => Json
+  /** v4 flow 层跨题只读查询：contentOf(type,row,field) → 行内容字段值（缺失返回 null） */
+  questionContent?: (typeId: string, rowId: string, field: string) => Json
 }
 
 export class ExprError extends Error {
@@ -324,6 +334,8 @@ export function parseExpr(src: string): Ast {
 interface FuncDef {
   minArgs: number
   maxArgs: number
+  /** v4 专用（flow 层跨题查询）：v3 的 exprFunctionNames 不暴露，behavior/绑定层不可用 */
+  v4Only?: boolean
   fn: (args: Json[], ctx: ExprContext) => Json
 }
 
@@ -466,10 +478,51 @@ const FUNCS: Record<string, FuncDef> = {
       return rhythmMatch(taps as number[], grid as number[], num(tol, 'rhythmScore')).score
     },
   },
+  stateOf: {
+    minArgs: 3,
+    maxArgs: 3,
+    v4Only: true,
+    fn: ([typeId, rowId, field], ctx) => {
+      if (typeof typeId !== 'string' || typeof rowId !== 'string' || typeof field !== 'string') {
+        throw new ExprError('stateOf 需要 (题型 id, 行 id, 字段名) 三个字符串')
+      }
+      if (!ctx.questionState) throw new ExprError('stateOf 只能在流程层（flow）使用')
+      return ctx.questionState(typeId, rowId, field)
+    },
+  },
+  contentOf: {
+    minArgs: 3,
+    maxArgs: 3,
+    v4Only: true,
+    fn: ([typeId, rowId, field], ctx) => {
+      if (typeof typeId !== 'string' || typeof rowId !== 'string' || typeof field !== 'string') {
+        throw new ExprError('contentOf 需要 (题型 id, 行 id, 字段名) 三个字符串')
+      }
+      if (!ctx.questionContent) throw new ExprError('contentOf 只能在流程层（flow）使用')
+      return ctx.questionContent(typeId, rowId, field)
+    },
+  },
 }
 
-/** 白名单函数名清单（编辑器 datalist 提示用） */
-export const exprFunctionNames = Object.keys(FUNCS)
+/** 白名单函数名清单（编辑器 datalist 提示用；不含 v4 专用跨题查询） */
+export const exprFunctionNames = Object.keys(FUNCS).filter((name) => !FUNCS[name].v4Only)
+
+/** v4 专用函数名（flow 层跨题查询 stateOf/contentOf；编辑器按层提示） */
+export const exprV4FunctionNames = Object.keys(FUNCS).filter((name) => FUNCS[name].v4Only)
+
+/** 全部函数名（v4 lint 静态校验用） */
+export const exprAllFunctionNames = Object.keys(FUNCS)
+
+const V4_ONLY_FUNCS = new Set(exprV4FunctionNames)
+
+export function isV4OnlyExprFunction(name: string): boolean {
+  return V4_ONLY_FUNCS.has(name)
+}
+
+export function isKnownExprFunction(name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(FUNCS, name)
+}
+
 
 // ---------------------------------------------------------------------------
 // 求值
@@ -489,6 +542,8 @@ class Evaluator {
   constructor(
     private scope: ExprScope,
     private ctx: ExprContext,
+    private env?: ExprEnv,
+    private allowedRoots?: Set<string>,
   ) {}
 
   evalAst(node: Ast): Json {
@@ -516,6 +571,7 @@ class Evaluator {
         throw new ExprError('只能对数组或字符串取下标')
       }
       case 'path': {
+        if (this.env) return this.pathFromEnv(node)
         const root = node.parts[0]
         let cur: Json
         if (root === 'event') cur = this.scope.event
@@ -546,6 +602,22 @@ class Evaluator {
       case 'bin':
         return this.bin(node)
     }
+  }
+
+  private pathFromEnv(node: Extract<Ast, { k: 'path' }>): Json {
+    const root = node.parts[0]
+    if (this.allowedRoots && !this.allowedRoots.has(root)) {
+      throw new ExprError(`未定义的标识符 "${root}"（本层允许：${[...this.allowedRoots].join('/')}）`)
+    }
+    const env = this.env as ExprEnv
+    if (!Object.prototype.hasOwnProperty.call(env, root)) {
+      throw new ExprError(`未定义的标识符 "${root}"（缺少该作用域根）`)
+    }
+    let cur: Json = env[root]
+    for (let i = 1; i < node.parts.length; i++) {
+      cur = getMember(cur, node.parts[i], node.parts.slice(0, i + 1).join('.'))
+    }
+    return cur
   }
 
   private bin(node: Extract<Ast, { k: 'bin' }>): Json {
@@ -601,6 +673,33 @@ export function compileExpr(src: string): (scope: ExprScope, ctx?: ExprContext) 
 
 export function evalExpr(src: string, scope: ExprScope, ctx?: ExprContext): Json {
   return compileExpr(src)(scope, ctx)
+}
+
+/** v4 多根环境求值：legacy 三根作用域仅作占位（求值器走 env 分支） */
+const ENV_SCOPE_STUB: ExprScope = { event: null, q: null, v: {} }
+
+/**
+ * v4 多根环境编译入口（docs/53 §8）：与 compileExpr 共用解析器/求值器/白名单函数，
+ * 只是路径根从固定 event/q/v 换成调用方声明的根集合。不改变 v3 的 compileExpr 行为。
+ * - allowedRoots 缺省 = 允许 env 的所有自有根（lint 场景请显式传入）；
+ * - 根未在 env 中出现/不在白名单 → ExprError（可读中文）。
+ */
+export function compileEnvExpr(
+  src: string,
+  allowedRoots?: readonly string[],
+): (env: ExprEnv, ctx?: ExprContext) => Json {
+  const ast = parseExpr(src)
+  const roots = allowedRoots ? new Set(allowedRoots) : undefined
+  return (env, ctx) => new Evaluator(ENV_SCOPE_STUB, ctx ?? {}, env, roots).evalAst(ast)
+}
+
+export function evalEnvExpr(
+  src: string,
+  env: ExprEnv,
+  allowedRoots?: readonly string[],
+  ctx?: ExprContext,
+): Json {
+  return compileEnvExpr(src, allowedRoots)(env, ctx)
 }
 
 /**
