@@ -1,0 +1,476 @@
+/**
+ * v4 编辑器增量样式（docs/53 §13；W5）。
+ *
+ * 约束：
+ * - 只写**增量**——编辑器外壳（`.editor-head` / `.editor-tabs` / `.editor-body` / `.editor-errors` /
+ *   `.editor-lint` / `.editor-saved` / `.editor-title` / `.editor-ai-toggle`）与数据表视觉（`.tgrid*` /
+ *   `.tstaff*` / `.tlist-*` / `.tjson*`）复用 v3 既有样式，v4 不重复定义；
+ * - 颜色/间距/字号/圆角/动效一律走设计令牌（`--panel` `--line` `--ink` `--muted` `--accent-soft`
+ *   `--sp-*` `--r-*` `--fs-*` `--tr` `--shadow-*`），**无裸色值**；
+ * - 不直接消费 `--ge-*`（浅色主题会静默失效，G13 契约）；深色适配由全局令牌/`.ge-dark` 作用域提供。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 内容 Tab：题型侧栏 + 主编辑区（实例表 / 题型详情共用）            */
+/* ------------------------------------------------------------------ */
+
+.v4-content-tab,
+.v4-json-tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  gap: var(--sp-2);
+}
+
+.v4-subtabs {
+  display: flex;
+  gap: 4px;
+  background: var(--soft);
+  border-radius: var(--r-md);
+  padding: 3px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.v4-subtabs button.active {
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+}
+
+.v4-split {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-3);
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+.v4-side {
+  flex: 0 0 232px;
+  width: 232px;
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-2);
+}
+
+.v4-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+.v4-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.v4-list-item {
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--r-sm);
+}
+
+.v4-list-item.active {
+  background: var(--accent-soft);
+}
+
+.v4-list-select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-0);
+}
+
+.v4-list-select .muted {
+  font-size: var(--fs-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.v4-side-empty {
+  font-size: var(--fs-0);
+  padding: var(--sp-2);
+}
+
+.v4-main {
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  overflow: auto;
+}
+
+.v4-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--panel);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  color: var(--ink);
+}
+
+.v4-table-toolbar {
+  flex-wrap: wrap;
+}
+
+.v4-rowmeta-input {
+  width: 64px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 卡片（题单 / 状态参数 / 表现 / 运行配置通用）                     */
+/* ------------------------------------------------------------------ */
+
+.v4-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.v4-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+.v4-card-head .muted {
+  font-size: var(--fs-0);
+}
+
+.v4-card-head-action {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.v4-card-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.v4-warn {
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+/* ------------------------------------------------------------------ */
+/* 题单列表 / 牌堆预览                                               */
+/* ------------------------------------------------------------------ */
+
+.v4-manifest-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  overflow: auto;
+  min-height: 0;
+}
+
+.v4-manifest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.v4-manifest-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-0);
+}
+
+.v4-manifest-list li:nth-child(odd) {
+  background: var(--soft);
+}
+
+.v4-slot-index {
+  flex: 0 0 32px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.v4-slot-type {
+  font-weight: 600;
+}
+
+.v4-slot-row {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.v4-entry-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+}
+
+.v4-run-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.v4-run-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-0);
+}
+
+.v4-run-check {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+/* ------------------------------------------------------------------ */
+/* 题型详情：元信息 / surface 组件 / 状态字段                        */
+/* ------------------------------------------------------------------ */
+
+.v4-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-0);
+}
+
+.v4-meta-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  font-size: var(--fs-0);
+}
+
+.v4-meta-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.v4-comp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2);
+  background: var(--panel-2);
+}
+
+.v4-comp-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+.v4-comp-name {
+  max-width: 160px;
+}
+
+.v4-comp-visible {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--fs-0);
+}
+
+.v4-comp-head .ginsp-argdel {
+  margin-left: auto;
+}
+
+.v4-comp-layout {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+.v4-comp-layout label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.v4-num {
+  width: 72px;
+}
+
+.v4-comp-props,
+.v4-comp-bindings {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+.v4-props-preview {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v4-binding-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+}
+
+.v4-binding-slot {
+  flex: 0 0 auto;
+}
+
+.v4-binding-expr {
+  flex: 1 1 0%;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+
+.v4-state-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.v4-field-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+.v4-key-input {
+  width: 148px;
+  font-family: var(--font-mono);
+}
+
+.v4-inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.v4-json-value {
+  width: 200px;
+  font-family: var(--font-mono);
+}
+
+/* ------------------------------------------------------------------ */
+/* JSON Tab                                                           */
+/* ------------------------------------------------------------------ */
+
+.v4-json-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.v4-json-layer {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.v4-json-error {
+  margin: 0;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.v4-json-textarea {
+  flex: 1 1 0%;
+  min-height: 320px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: var(--fs-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--ink);
+  padding: var(--sp-2);
+}
+
+/* ------------------------------------------------------------------ */
+/* 可插槽区域（W6/W7 接入前的占位）                                  */
+/* ------------------------------------------------------------------ */
+
+.v4-tab-fill {
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.v4-placeholder {
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  background: var(--soft);
+  color: var(--muted);
+  font-size: var(--fs-0);
+  padding: var(--sp-3);
+  margin: var(--sp-2);
+}
+
+.v4-ai-panel {
+  flex: 0 0 360px;
+  overflow: auto;
+}
+
+.v4-revision {
+  font-size: var(--fs-0);
+  font-variant-numeric: tabular-nums;
+}

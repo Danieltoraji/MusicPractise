@@ -51,6 +51,17 @@ const GraphEditor = lazy(() => import('./graph/GraphEditor'))
 const ScriptTab = lazy(() => import('./graph/ScriptTab'))
 /** AI 助手面板（批次1 ask 模式）：全 tab 共享的统一对话右栏，懒加载不进主包 */
 const AiPanel = lazy(() => import('./ai/AiPanel').then((m) => ({ default: m.AiPanel })))
+/**
+ * v4 编辑器（W5）：按库内记录 schemaVersion 分派；懒加载避免 v4 编辑器/表格代码进主包。
+ * W9 翻转后 EditorPage 的 v3 主体删除，入口只留它。
+ */
+const EditorPageV4 = lazy(() => import('./v4/EditorPageV4').then((m) => ({ default: m.EditorPageV4 })))
+
+/** 记录是否为 v4 关卡文档（路由分派用；不触发装载校验） */
+function isV4RecordDoc(record: LibraryRecord): boolean {
+  const doc = record.doc as { schemaVersion?: unknown } | null
+  return doc !== null && typeof doc === 'object' && doc.schemaVersion === 4
+}
 
 /** 脚本页选区上报（行号 1 起，随 AI 提问附带上下文） */
 interface ScriptRangeReport {
@@ -159,6 +170,8 @@ export function EditorPage({ id }: Props) {
     } else if ((record as LibraryRecord).id !== activeId) {
       return
     }
+    // v4 文档由 EditorPageV4 装载（W5/W9 过渡）：v3 迁移器不处理 v4，直接跳过避免误报装载错误
+    if (record !== 'new' && isV4RecordDoc(record as LibraryRecord)) return
     if (loadedIdRef.current === activeId) return
     loadedIdRef.current = activeId
     if (record === 'new') {
@@ -418,6 +431,23 @@ export function EditorPage({ id }: Props) {
   async function tryRun(): Promise<void> {
     const r = await save()
     if (r.ok && r.savedId) window.location.hash = `#/level/${r.savedId}`
+  }
+
+  // v4 分派（W5/W9 过渡）：schemaVersion===4 → EditorPageV4（懒加载）。
+  // 放在所有 hooks 之后、loadError 早退之前：v3 load effect 已对 v4 文档跳过，不会产生误导错误。
+  // `#/edit/new` 仍走 v3（W9 后统一 v4；v4 从零建关已由 EditorPageV4 自身测试覆盖）。
+  const routeToV4 =
+    activeId !== 'new' &&
+    record !== 'loading' &&
+    record !== undefined &&
+    record !== null &&
+    isV4RecordDoc(record as LibraryRecord)
+  if (routeToV4) {
+    return (
+      <Suspense fallback={<p className="muted page">编辑器加载中…</p>}>
+        <EditorPageV4 id={activeId} />
+      </Suspense>
+    )
   }
 
   // 装载失败独立分支（早于加载中判定）：可读错误 + 返回资源库/重试，不再是死胡同
