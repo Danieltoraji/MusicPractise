@@ -389,7 +389,8 @@ function checkRValue(
   const record = value as Record<string, unknown>
   const expr = record.expr
   if (typeof expr === 'string') {
-    checkExpr(lint, scope, expr, where)
+    // Round 9：assign 值表达式同样带上 nodeId 定位（此前缺失导致画布无法把问题钉到节点卡）
+    checkExpr(lint, scope, expr, where, extra)
     return
   }
   const query = record.query

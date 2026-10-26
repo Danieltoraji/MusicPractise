@@ -73,5 +73,13 @@ describe('EditorPage v4 路由分派', () => {
       previewTab!.click()
     })
     await waitFor(() => container!.querySelector('[data-testid="v4-preview-tab"]') !== null, '预览插槽挂载')
+
+    // 流程图工作台插槽（W6）：懒加载挂载
+    const flowTab = container.querySelector('[data-testid="editor-tab-flow"]') as HTMLButtonElement | null
+    expect(flowTab).not.toBeNull()
+    await act(async () => {
+      flowTab!.click()
+    })
+    await waitFor(() => container!.querySelector('[data-testid="v4-graph-workbench"]') !== null, '流程图插槽挂载')
   })
 })

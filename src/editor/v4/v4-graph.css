@@ -1,0 +1,210 @@
+/**
+ * v4 图工作台增量样式（docs/52 W6；docs/53 §13.4）。
+ *
+ * 约束：
+ * - **只写增量**：节点卡/端口/连线/停靠面板/调色板/检查器/伪代码编辑器全部复用 v3 既有
+ *   `.graph-editor` / `.gnode*` / `.gport-*` / `.gedge-*` / `.gdock*` / `.glib*` / `.ginsp*` /
+ *   `.script-*` 样式；这里只补「v4 工作台特有」的布局收缩、kind 色带与变量面板。
+ * - 颜色一律 `var(--ui-*)` 令牌（`.graph-editor` 浅色取值 / `.ge-dark` 深色映射，G2/G13 契约）；
+ * 无裸色，不直接消费 `--ge-*`。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 布局：嵌在编辑器 Tab 高度链里时收缩，不外溢                        */
+/* ------------------------------------------------------------------ */
+
+.v4-graph-workbench {
+  min-height: 0;
+}
+
+.v4-graph-workbench .graph-layout {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+.v4-graph-workbench .graph-canvas {
+  min-height: 0;
+}
+
+.v4-graph-workbench .v4-graph-dock-left,
+.v4-graph-workbench .v4-graph-dock-right {
+  flex: none;
+}
+
+.v4-graph-workbench .v4-graph-dock-left .gdock,
+.v4-graph-workbench .v4-graph-dock-right .gdock {
+  flex: none;
+  min-height: 120px;
+}
+
+.v4-graph-workbench .v4-graph-dock-left .gdock:last-child,
+.v4-graph-workbench .v4-graph-dock-right .gdock:last-child {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+/* 伪代码视图（工作台内切换）：填满剩余高度，编辑器自身滚动 */
+.v4-graph-workbench > .script-tab {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+.v4-graph-workbench > .script-tab > .script-editor {
+  flex: 1 1 auto;
+  min-height: 220px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 节点卡 kind 色带（深/浅取 --ui-* 语义层，切主题自动跟随）          */
+/* ------------------------------------------------------------------ */
+
+.v4-gnode .v4-gnode-band-start {
+  background: var(--ui-accent);
+}
+
+.v4-gnode .v4-gnode-band-assign {
+  background: var(--ui-ok);
+}
+
+.v4-gnode .v4-gnode-band-call {
+  background: var(--ui-cap);
+}
+
+.v4-gnode .v4-gnode-band-setView {
+  background: var(--ui-related);
+}
+
+.v4-gnode .v4-gnode-band-ask {
+  background: var(--ui-gold);
+}
+
+.v4-gnode .v4-gnode-band-foreach {
+  background: var(--ui-related);
+}
+
+.v4-gnode .v4-gnode-band-branch,
+.v4-gnode .v4-gnode-band-loop {
+  background: var(--ui-warn);
+}
+
+.v4-gnode .v4-gnode-band-wait,
+.v4-gnode .v4-gnode-band-waitShell {
+  background: var(--ui-muted);
+}
+
+.v4-gnode .v4-gnode-band-finish {
+  background: var(--ui-gold);
+}
+
+.v4-gnode .v4-gnode-band-restart,
+.v4-gnode .v4-gnode-band-return {
+  background: var(--ui-bad);
+}
+
+.v4-gnode .v4-gnode-band-comment {
+  background: var(--ui-line);
+}
+
+.v4-gnode .v4-gnode-band-on {
+  background: var(--ui-accent);
+}
+
+.v4-gnode .v4-gnode-band-emit {
+  background: var(--ui-gold);
+}
+
+/* 注释节点弱化：不参与执行 */
+.v4-gnode-comment .gnode-body {
+  color: var(--ui-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/* 变量面板                                                           */
+/* ------------------------------------------------------------------ */
+
+.v4-graph-vars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font-size: var(--fs-1);
+}
+
+.v4-graph-vars-hint,
+.v4-graph-vars-empty {
+  font-size: var(--fs-0);
+  margin: 0;
+}
+
+.v4-graph-var-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name remove'
+    'type type'
+    'init init';
+  gap: 4px;
+  align-items: center;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2);
+}
+
+.v4-graph-var-name {
+  grid-area: name;
+  color: var(--ui-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v4-graph-var-row > select {
+  grid-area: type;
+}
+
+.v4-graph-var-row > input {
+  grid-area: init;
+}
+
+.v4-graph-var-row > .ginsp-argdel {
+  grid-area: remove;
+}
+
+.v4-graph-vars-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px dashed var(--ui-line);
+  padding-top: var(--sp-2);
+}
+
+.v4-graph-scope-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  font-size: var(--fs-0);
+}
+
+.v4-graph-scope-row code,
+.v4-graph-var-name {
+  font-family: var(--font-mono);
+  font-size: var(--fs-0);
+}
+
+/* ------------------------------------------------------------------ */
+/* 检查器补充：字段标签/提示/错误、负载行                              */
+/* ------------------------------------------------------------------ */
+
+.v4-graph-field-label {
+  color: var(--ui-ink-faint);
+}
+
+.v4-graph-field-hint {
+  font-size: var(--fs-0);
+  line-height: 1.5;
+}
+
+.v4-graph-field-error {
+  font-size: var(--fs-0);
+  line-height: 1.5;
+}

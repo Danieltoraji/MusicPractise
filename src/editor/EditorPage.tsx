@@ -59,14 +59,32 @@ const EditorPageV4 = lazy(() => import('./v4/EditorPageV4').then((m) => ({ defau
 /** W7：v4 舞台/预览插槽（懒加载，仅进入对应 Tab 时才加载其 chunk） */
 const ShellTabV4 = lazy(() => import('./v4/ShellTab').then((m) => ({ default: m.ShellTab })))
 const PreviewTabV4 = lazy(() => import('./v4/PreviewTab').then((m) => ({ default: m.PreviewTab })))
+/** W6：v4 流程/行为图工作台插槽（React Flow + 伪代码，懒加载） */
+const FlowGraphSlotV4 = lazy(() =>
+  import('./v4/graph/GraphWorkbench').then((m) => ({ default: m.FlowGraphSlot })),
+)
+const BehaviorGraphSlotV4 = lazy(() =>
+  import('./v4/graph/GraphWorkbench').then((m) => ({ default: m.BehaviorGraphSlot })),
+)
+
+/** 槽位内层 Suspense：懒加载 chunk 只替换该 Tab 区域，不把整个编辑器踢回 loading */
+function slotWithFallback(node: React.ReactNode): React.ReactNode {
+  return <Suspense fallback={<p className="muted page">加载编辑器视图…</p>}>{node}</Suspense>
+}
 
 /**
  * v4 编辑器插槽常量：模块级稳定引用（避免 EditorPage 每次渲染生成新函数导致
- * 插槽子树整棵重挂——预览 Tab 会因此重建会话）。W6 的流程/行为图插槽后续并入此对象。
+ * 插槽子树整棵重挂——预览 Tab 会因此重建会话）。
  */
 const V4_EDITOR_SLOTS = {
-  renderShell: (props: import('./v4/shared').V4EditorSlotProps) => <ShellTabV4 {...props} />,
-  renderPreview: (props: import('./v4/shared').V4EditorSlotProps) => <PreviewTabV4 {...props} />,
+  renderFlow: (props: import('./v4/shared').V4EditorSlotProps) =>
+    slotWithFallback(<FlowGraphSlotV4 {...props} />),
+  renderBehavior: (props: import('./v4/shared').V4EditorBehaviorSlotProps) =>
+    slotWithFallback(<BehaviorGraphSlotV4 {...props} />),
+  renderShell: (props: import('./v4/shared').V4EditorSlotProps) =>
+    slotWithFallback(<ShellTabV4 {...props} />),
+  renderPreview: (props: import('./v4/shared').V4EditorSlotProps) =>
+    slotWithFallback(<PreviewTabV4 {...props} />),
 } as const
 
 /** 记录是否为 v4 关卡文档（路由分派用；不触发装载校验） */
