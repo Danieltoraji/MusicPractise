@@ -36,6 +36,7 @@ import {
 } from './docStateV4'
 import { V4EditorShell, type V4EditorSlots, type V4EditorTab } from './V4EditorShell'
 import { stopAgentV4 } from '../../ai/v4/agent'
+import { LEVEL_TEMPLATES, createLevelFromTemplate } from '../../engine/v4/templates'
 
 export interface EditorPageV4Props {
   /** 路由 id；`new` = 从零建 v4 关 */
@@ -232,6 +233,23 @@ export function EditorPageV4({ id, slots }: EditorPageV4Props): React.ReactEleme
       histBump((value) => value + 1)
     },
     [bumpRevision],
+  )
+
+  // 零代码模板入口（W8.2）：仅 `#/edit/new` 首帧展示；选定模板后写入文档（一次撤销步）。
+  // 模板产物是普通 LevelDocV4（无隐藏元数据），后续可直接在内容/流程/题型页编辑。
+  const [templatePicked, setTemplatePicked] = useState(activeId !== 'new')
+  useEffect(() => {
+    setTemplatePicked(activeId !== 'new')
+  }, [activeId])
+  const applyTemplate = useCallback(
+    (templateId: string): void => {
+      const current = docRef.current
+      if (!current) return
+      update(createLevelFromTemplate(templateId, { id: current.id }), 'template')
+      setTemplatePicked(true)
+      setTab('content')
+    },
+    [update],
   )
 
   const undo = useCallback((): void => {
@@ -463,8 +481,43 @@ export function EditorPageV4({ id, slots }: EditorPageV4Props): React.ReactEleme
     </div>
   ) : undefined
 
+  const templateBar =
+    activeId === 'new' && doc !== null && !templatePicked ? (
+      <div
+        className="page"
+        data-testid="v4-template-start"
+        style={{
+          display: 'flex',
+          gap: 'var(--sp-3)',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          padding: 'var(--sp-3) var(--sp-4)',
+          borderBottom: '1px solid var(--shell-line)',
+        }}
+      >
+        <b>从模板开始（零代码）</b>
+        <span className="muted">选一个模板生成题型/实例表/流程骨架；之后可随时改节点与数据。</span>
+        {LEVEL_TEMPLATES.map((template) => (
+          <button
+            key={template.id}
+            type="button"
+            data-testid={`v4-template-${template.id}`}
+            title={template.description}
+            onClick={() => applyTemplate(template.id)}
+          >
+            {template.name}
+          </button>
+        ))}
+        <button type="button" className="link" data-testid="v4-template-skip" onClick={() => setTemplatePicked(true)}>
+          直接空白开始
+        </button>
+      </div>
+    ) : null
+
   return (
-    <V4EditorShell
+    <>
+      {templateBar}
+      <V4EditorShell
       doc={doc}
       onChange={update}
       onSave={save}
@@ -489,6 +542,7 @@ export function EditorPageV4({ id, slots }: EditorPageV4Props): React.ReactEleme
       renderShell={slots?.renderShell}
       renderPreview={slots?.renderPreview}
       renderAiPanel={slots?.renderAiPanel}
-    />
+      />
+    </>
   )
 }

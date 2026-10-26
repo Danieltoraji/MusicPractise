@@ -1,0 +1,194 @@
+/**
+ * v4 预设画廊增量样式（docs/52 §4 W8.1；docs/53 §14）。
+ *
+ * 约束（与 v4-graph/v4-preview 同源纪律）：
+ * - 只写 `.v4-preset-*` 新增类；按钮/输入框等基础外观复用既有全局样式，不重复定义；
+ * - 颜色一律语义令牌：画廊默认渲染在图工作台停靠面板内，优先消费 `--ui-*`
+ *   （`.graph-editor` 浅色取值 / `.graph-editor.ge-dark` 深色映射）；
+ *   独立挂载（无 `.graph-editor` 祖先）时回落到内容层令牌 `var(--* , var(--*))`；
+ * - 无裸色；间距/字号/圆角/动效走 `--sp-*` / `--fs-*` / `--r-*` / `--tr`；不直接消费 `--ge-*`。
+ */
+
+.v4-preset-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  min-height: 0;
+  font-size: var(--fs-0);
+  color: var(--ui-ink, var(--ink));
+}
+
+.v4-preset-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.v4-preset-head-hint {
+  color: var(--ui-muted, var(--muted));
+}
+
+.v4-preset-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  min-height: 0;
+}
+
+.v4-preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.v4-preset-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: 100%;
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--ui-line, var(--line));
+  border-radius: var(--r-sm);
+  background: var(--ui-panel, var(--panel));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--tr),
+    border-color var(--tr);
+}
+
+.v4-preset-item:hover {
+  background: var(--ui-panel-2, var(--panel-2));
+}
+
+.v4-preset-item.active {
+  border-color: var(--ui-accent, var(--accent));
+  background: color-mix(in srgb, var(--ui-accent, var(--accent)) 12%, var(--ui-panel, var(--panel)));
+}
+
+.v4-preset-item-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v4-preset-item-layer {
+  flex: none;
+  color: var(--ui-muted, var(--muted));
+}
+
+.v4-preset-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-2);
+  border: 1px solid var(--ui-line, var(--line));
+  border-radius: var(--r-md);
+  background: var(--ui-panel, var(--panel));
+}
+
+.v4-preset-title {
+  margin: 0;
+  font-size: var(--fs-2);
+}
+
+.v4-preset-desc {
+  margin: 0;
+  color: var(--ui-muted, var(--muted));
+  line-height: 1.55;
+}
+
+.v4-preset-params {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.v4-preset-param {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.v4-preset-param-label {
+  color: var(--ui-muted, var(--muted));
+}
+
+.v4-preset-param-input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--ui-line, var(--line));
+  border-radius: var(--r-sm);
+  background: var(--ui-input-bg, var(--panel));
+  color: var(--ui-ink, var(--ink));
+  font: inherit;
+}
+
+.v4-preset-param-input:focus {
+  border-color: var(--ui-accent, var(--accent));
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.v4-preset-param-error {
+  color: var(--ui-bad, var(--bad));
+}
+
+.v4-preset-warning {
+  padding-left: var(--sp-2);
+  border-left: 2px solid var(--ui-warn, var(--warn));
+  color: var(--ui-warn, var(--warn));
+}
+
+.v4-preset-hint {
+  color: var(--ui-muted, var(--muted));
+  line-height: 1.5;
+}
+
+.v4-preset-preview {
+  line-height: 1.5;
+}
+
+.v4-preset-preview-error {
+  color: var(--ui-bad, var(--bad));
+}
+
+.v4-preset-preview-warn {
+  color: var(--ui-warn, var(--warn));
+}
+
+.v4-preset-preview-ok {
+  color: var(--ui-ok, var(--ok));
+}
+
+.v4-preset-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.v4-preset-status {
+  color: var(--ui-muted, var(--muted));
+}
+
+.v4-preset-empty {
+  padding: var(--sp-2);
+  color: var(--ui-muted, var(--muted));
+}

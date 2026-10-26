@@ -83,5 +83,16 @@ describe('EditorPage v4 路由分派', () => {
       flowTab!.click()
     })
     await waitFor(() => container!.querySelector('[data-testid="v4-graph-workbench"]') !== null, '流程图插槽挂载')
+
+    // 预设画廊（W8a）：工具栏开关 → 左栏画廊挂载
+    const presetsToggle = container.querySelector('[data-testid="v4-graph-toggle-presets"]') as HTMLButtonElement | null
+    expect(presetsToggle).not.toBeNull()
+    await act(async () => {
+      presetsToggle!.click()
+    })
+    await waitFor(
+      () => container!.querySelector('[data-testid="v4-graph-presets-panel"]') !== null,
+      '预设画廊挂载',
+    )
   })
 })

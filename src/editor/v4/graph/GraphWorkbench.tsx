@@ -62,6 +62,7 @@ import {
   type GraphLayer,
 } from './ops'
 import { VariablesPanel } from './VariablesPanel'
+import { PresetGallery, type PresetInsertResult } from '../presets/PresetGallery'
 import '../v4-graph.css'
 
 type GraphTheme = 'dark' | 'light'
@@ -147,6 +148,7 @@ function GraphWorkbenchInner(props: GraphWorkbenchProps): React.ReactElement {
   const [view, setView] = useState<GraphView>('graph')
   const [showPalette, setShowPalette] = useState(true)
   const [showVars, setShowVars] = useState(true)
+  const [showPresets, setShowPresets] = useState(false)
   const [showInspector, setShowInspector] = useState(true)
   const [leftW, setLeftW] = useState(220)
   const [rightW, setRightW] = useState(320)
@@ -488,6 +490,29 @@ function GraphWorkbenchInner(props: GraphWorkbenchProps): React.ReactElement {
   const selectedNode = program?.nodes.find((node) => node.id === selectedId)
   const selectedIssues = selectedId !== null ? layerIssues.filter((issue) => issue.nodeId === selectedId) : []
 
+  /**
+   * 预设插入（W8a 画廊 → 当前层程序）：预设产物是普通节点 + 边 + 可选声明；
+   * - 节点/边在一个 applyProgram 里写入（一次撤销步）；
+   * - flow 预设可携带缺失的 run 变量声明（v.score/v.row），在同一 update 补齐；
+   * - entryId 仅作作者接线参考，不自动连上游（画廊语义）。
+   */
+  const insertPreset = useCallback(
+    (result: PresetInsertResult): void => {
+      applyProgram((current) => {
+        let next = current
+        for (const node of result.nodes) next = addNode(next, node as AnyGraphNode)
+        if (next.kind === 'flow' && result.declarations !== undefined && result.declarations.length > 0) {
+          const declared = new Set((next.vars ?? []).map((field) => field.key))
+          const missing = result.declarations.filter((field) => !declared.has(field.key))
+          if (missing.length > 0) next = { ...next, vars: [...(next.vars ?? []), ...missing] }
+        }
+        if (result.edges.length > 0) next = { ...next, edges: [...next.edges, ...result.edges] }
+        return next
+      })
+    },
+    [applyProgram],
+  )
+
   // 钩子全部就位后再做「层不存在」早退（React Hooks 纪律：不得在条件早退后调 Hook）
   if (program === undefined) {
     return (
@@ -547,6 +572,15 @@ function GraphWorkbenchInner(props: GraphWorkbenchProps): React.ReactElement {
           title={layer === 'flow' ? 'run 变量声明（v.*）' : '调用局部变量（local.*）'}
         >
           🧮 变量
+        </button>
+        <button
+          type="button"
+          data-testid="v4-graph-toggle-presets"
+          className={`${EDITOR_HOOKS.graphToggle}${showPresets ? ' active' : ''}`}
+          onClick={() => setShowPresets((value) => !value)}
+          title="预设画廊（可展开的节点组：计分/重试/返回/结算等模式）"
+        >
+          📚 预设
         </button>
         <button
           type="button"
@@ -618,7 +652,7 @@ function GraphWorkbenchInner(props: GraphWorkbenchProps): React.ReactElement {
             </div>
           )}
           <div className="graph-layout v4-graph-layout">
-            {(showPalette || showVars) && (
+            {(showPalette || showVars || showPresets) && (
               <div className="graph-dock-col v4-graph-dock-left" style={{ width: leftW }} data-testid="v4-graph-dock-left">
                 {showPalette && (
                   <section className="gdock" data-testid="v4-graph-palette">
@@ -652,9 +686,22 @@ function GraphWorkbenchInner(props: GraphWorkbenchProps): React.ReactElement {
                     </div>
                   </section>
                 )}
+                {showPresets && (
+                  <section className="gdock" data-testid="v4-graph-presets-panel">
+                    <header className="gdock-head">
+                      <span className="gdock-title">📚 预设画廊</span>
+                      <button type="button" className="gdock-close" title="收起到工具栏" onClick={() => setShowPresets(false)}>
+                        ✕
+                      </button>
+                    </header>
+                    <div className="gdock-body">
+                      <PresetGallery doc={doc} layer={layer} typeId={typeId} onInsert={insertPreset} />
+                    </div>
+                  </section>
+                )}
               </div>
             )}
-            {(showPalette || showVars) && (
+            {(showPalette || showVars || showPresets) && (
               <div
                 className="gsplit"
                 title="拖拽调整左栏宽度"
