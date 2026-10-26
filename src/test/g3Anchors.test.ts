@@ -1,5 +1,5 @@
 /**
- * G3（docs/40 / docs/44 R21）：编辑器关键交互锚点静态契约。
+ * G3（docs/40 / docs/44 R21；W9 翻转后 v4）：编辑器关键交互锚点静态契约。
  *
  * 目的：把「新增/修改交互必须带 data-testid」从口头约定变成可执行回归——
  * - 关键组件必须保留约定锚点（防止重构时静默删除）；
@@ -12,12 +12,14 @@ import { describe, expect, it } from 'vitest'
 
 const source = (rel: string): string => readFileSync(new URL(rel, import.meta.url), 'utf8')
 
-const AI_PANEL = source('../editor/ai/AiPanel.tsx')
-const GRAPH_EDITOR = source('../editor/graph/GraphEditor.tsx')
-const NODE_LIBRARY = source('../editor/graph/NodeLibrary.tsx')
-const NODE_TYPES = source('../editor/graph/nodeTypes.tsx')
-const EDITOR_PAGE = source('../editor/EditorPage.tsx')
-const TABLE_GRID = source('../editor/TableGrid.tsx')
+const V4_SHELL = source('../editor/v4/V4EditorShell.tsx')
+const GRAPH_WORKBENCH = source('../editor/v4/graph/GraphWorkbench.tsx')
+const GRAPH_CARD = source('../editor/v4/graph/GraphCard.tsx')
+const INSPECTOR = source('../editor/v4/graph/NodeInspector.tsx')
+const CONTENT_TAB = source('../editor/v4/ContentTab.tsx')
+const AI_PANEL = source('../editor/v4/AiPanelV4.tsx')
+const SHELL_TAB = source('../editor/v4/ShellTab.tsx')
+const PREVIEW_TAB = source('../editor/v4/PreviewTab.tsx')
 const MODAL = source('../editor/Modal.tsx')
 
 function staticAnchors(file: string, name: string): void {
@@ -29,83 +31,74 @@ function dynamicAnchor(file: string, prefix: string): void {
   expect(file, `缺少动态锚点前缀 ${prefix}`).toContain(`data-testid={\`${prefix}`)
 }
 
-describe('G3 关键交互锚点契约（docs/44 R21）', () => {
-  it('EditorPage：工具栏/标题/五 Tab 锚点保留', () => {
-    for (const id of ['editor-title', 'editor-undo', 'editor-redo', 'editor-save', 'editor-try-run', 'editor-ai-toggle']) {
-      staticAnchors(EDITOR_PAGE, id)
+describe('G3 关键交互锚点契约（v4）', () => {
+  it('V4EditorShell：标题/撤销/保存/试玩/AI 开关/六 Tab 锚点保留', () => {
+    for (const id of ['v4-editor', 'editor-title', 'editor-undo', 'editor-redo', 'editor-save', 'editor-try-run', 'editor-ai-toggle']) {
+      staticAnchors(V4_SHELL, id)
     }
-    dynamicAnchor(EDITOR_PAGE, 'editor-tab-')
+    dynamicAnchor(V4_SHELL, 'editor-tab-')
   })
 
-  it('AiPanel：输入/发送/停止/模式/错误/计划/轮数上限/附件/用量锚点保留', () => {
+  it('GraphWorkbench：视图切换/面板开关/布局/lint/画布/停靠栏锚点保留', () => {
     for (const id of [
-      'ai-panel',
-      'ai-input',
-      'ai-send',
-      'ai-stop',
-      'ai-form',
-      'ai-attach',
-      'ai-usage',
-      'ai-rollback',
-      'ai-error',
-      'ai-error-retry',
-      'ai-error-close',
-      'ai-plan-card',
-      'ai-plan-run',
-      'ai-plan-abandon',
-      'ai-plan-items',
-      'ai-capbar',
-      'ai-cap-run',
-      'ai-cap-close',
+      'v4-graph-workbench',
+      'v4-graph-view-graph',
+      'v4-graph-view-script',
+      'v4-graph-toggle-palette',
+      'v4-graph-toggle-vars',
+      'v4-graph-toggle-presets',
+      'v4-graph-toggle-inspector',
+      'v4-graph-arrange',
+      'v4-graph-theme',
+      'v4-graph-lint-toggle',
+      'v4-graph-canvas',
+      'v4-graph-dock-left',
+      'v4-graph-dock-right',
+      'v4-graph-palette',
+      'v4-graph-vars-panel',
+      'v4-graph-presets-panel',
+      'v4-graph-issues',
     ]) {
+      staticAnchors(GRAPH_WORKBENCH, id)
+    }
+    for (const prefix of ['palette-item-', 'palette-menu-item-', 'palette-group-']) {
+      dynamicAnchor(GRAPH_WORKBENCH, prefix)
+    }
+    staticAnchors(INSPECTOR, 'v4-graph-field-error')
+    dynamicAnchor(GRAPH_CARD, 'graph-card-')
+    expect(GRAPH_CARD).toContain('data-node-kind')
+  })
+
+  it('ContentTab / ShellTab / PreviewTab / AiPanel 锚点保留', () => {
+    for (const prefix of ['v4-tgrid-row-', 'v4-type-select-']) dynamicAnchor(CONTENT_TAB, prefix)
+    expect(CONTENT_TAB).toContain(`v4-tgrid-cell-`)
+    staticAnchors(CONTENT_TAB, 'v4-tgrid-add-row')
+    staticAnchors(SHELL_TAB, 'v4-shell-tab')
+    dynamicAnchor(SHELL_TAB, 'v4-shell-component-')
+    staticAnchors(PREVIEW_TAB, 'v4-preview-tab')
+    staticAnchors(PREVIEW_TAB, 'v4-preview-debug')
+    for (const id of ['v4-ai', 'v4-ai-input', 'v4-ai-send', 'v4-ai-stop', 'v4-ai-error', 'v4-ai-capbar']) {
       staticAnchors(AI_PANEL, id)
     }
-    dynamicAnchor(AI_PANEL, 'ai-mode-tab-')
-  })
-
-  it('GraphEditor：面板开关/布局/视图切换/主题/全屏/lint 锚点保留', () => {
-    for (const id of [
-      'graph-editor',
-      'graph-panel-toggle-library',
-      'graph-panel-toggle-events',
-      'graph-panel-toggle-vars',
-      'graph-panel-toggle-inspector',
-      'graph-panel-toggle-ai',
-      'graph-panel-toggle-debug',
-      'graph-arrange-all',
-      'graph-arrange-missing',
-      'graph-toggle-script',
-      'graph-toggle-log',
-      'graph-toggle-map',
-      'graph-toggle-summary',
-      'graph-toggle-theme',
-      'graph-toggle-fullscreen',
-      'graph-lint-toggle',
-    ]) {
-      staticAnchors(GRAPH_EDITOR, id)
-    }
-  })
-
-  it('节点库/节点卡/数据表/弹窗锚点保留', () => {
-    for (const prefix of ['palette-template-', 'palette-item-', 'palette-menu-item-']) dynamicAnchor(NODE_LIBRARY, prefix)
-    dynamicAnchor(NODE_TYPES, 'graph-card-')
-    staticAnchors(TABLE_GRID, 'tgrid-add-row')
-    dynamicAnchor(TABLE_GRID, 'tgrid-row-')
-    dynamicAnchor(TABLE_GRID, 'tgrid-cell-')
+    dynamicAnchor(AI_PANEL, 'v4-ai-mode-')
     staticAnchors(MODAL, 'modal')
   })
 
   it('高频测试已迁到锚点查询：不再回退 class/文案硬锁（G3 渐进口径）', () => {
-    const aiPanelTest = source('../editor/ai/aiPanel.test.tsx')
-    for (const fragile of ['.ai-panel-form textarea', '.ai-panel-error', '.ai-plan-card', '.ai-panel-capbar']) {
-      expect(aiPanelTest, `aiPanel.test 仍在锁 ${fragile}`).not.toContain(fragile)
-    }
-    expect(aiPanelTest).toContain('[data-testid="ai-input"]')
-    expect(aiPanelTest).toContain('[data-testid="ai-error-close"]')
+    const routeTest = source('../editor/editorRouteV4.test.tsx')
+    expect(routeTest).toContain('[data-testid="editor-tab-')
+    expect(routeTest).toContain('[data-testid="v4-graph-workbench"]')
 
-    const graphTest = source('../editor/graph/graphEditorUi.test.tsx')
-    expect(graphTest, 'graphEditorUi.test 仍在锁 React Flow 内部节点类').not.toContain('.react-flow__node[data-id=')
-    expect(graphTest).toContain('[data-testid="graph-card-on1"]')
-    expect(graphTest).toContain('[data-testid^="graph-panel-toggle-"]')
+    const graphTest = source('../editor/v4/graph/graphWorkbench.test.tsx')
+    expect(graphTest, 'graphWorkbench.test 仍在锁 React Flow 内部节点类').not.toContain('.react-flow__node[data-id=')
+    expect(graphTest).toContain("'graph-card-f_start'")
+    expect(graphTest).toContain("'v4-graph-")
+
+    const aiTest = source('../editor/v4/aiPanelV4.test.tsx')
+    expect(aiTest).toContain('[data-testid="v4-ai-input"]')
+    expect(aiTest).toContain('[data-testid="v4-ai-send"]')
+    for (const fragile of ['.ai-panel-form textarea', '.ai-panel-error', '.ai-panel-capbar']) {
+      expect(aiTest, `aiPanelV4.test 仍在锁 ${fragile}`).not.toContain(fragile)
+    }
   })
 })

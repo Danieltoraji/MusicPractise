@@ -22,7 +22,7 @@ import {
   type ComponentInstanceV4,
   type LevelDocV4,
 } from '../../engine/v4/model'
-import { STAGE_H, STAGE_W } from '../../runtime/LevelStage'
+import { STAGE_H, STAGE_W } from '../../runtime/stageGeometry'
 import { ComponentStore, allContracts } from '../../runtime/store'
 import { EDITOR_HOOKS } from '../editorHooks'
 import {

@@ -43,25 +43,25 @@ afterEach(async () => {
   container = null
 })
 
-describe('HomePage（旧格式库记录回归）', () => {
-  it('库中混有 v1 旧格式关卡：首页照常渲染，旧卡经迁移显示题目数', async () => {
-    // v1 形态（questions 体系，无 table/views）——与老用户库中记录同构
+describe('HomePage（v4 库记录回归）', () => {
+  it('内置 v4 关卡正常渲染：标题与统计来自题型实例表', async () => {
+    const c = await renderHome()
+    expect(c.textContent).toContain('新手引导 · 交互教程')
+    expect(c.textContent).toMatch(/\d+ 个组件 · \d+ 道题/)
+  })
+
+  it('旧格式玩具记录：卡片降级展示「文档格式无法解析」，不拖垮整页', async () => {
     await putResource({
-      schemaVersion: 1,
+      schemaVersion: 3,
       id: 'res_01J9D000000000000000000000',
       kind: 'level',
-      version: '1.0.0',
-      meta: { title: '旧版关卡', description: 'v1 时代的记录' },
-      content: {
-        components: [{ id: 'btn1', type: 'button' }],
-        logic: { variables: { score: 0 }, rules: [{ id: 'r1', on: 'btn1.clicked', do: [{ cmd: 'level.next' }] }] },
-        questions: [{ id: 'q1', data: { a: 1 }, scoring: { max: 10 } }],
-      },
+      version: '3.0.0',
+      meta: { title: '旧版关卡', description: 'v3 时代的记录' },
+      content: {},
     } as never)
     const c = await renderHome()
     expect(c.textContent).toContain('旧版关卡')
-    expect(c.textContent).toContain('1 个组件 · 1 道题')
-    // 内置 v3 关卡（教程）同屏正常
+    expect(c.textContent).toContain('文档格式无法解析')
     expect(c.textContent).toContain('新手引导 · 交互教程')
   })
 

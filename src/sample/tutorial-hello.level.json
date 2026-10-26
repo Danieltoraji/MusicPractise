@@ -1,11 +1,11 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "kind": "level",
   "id": "res_01J9C000000000000000000000",
   "version": "1.0.0",
   "meta": {
     "title": "新手引导 · 交互教程",
-    "description": "3 步学会按钮、滑块与听音选答。对创作者而言，这也是 views.goto 视图切换的活示例。",
+    "description": "3 步学会按钮、滑块与听音选答。对创作者而言，这也是 v4「题型函数 + 固定步骤流程 + 结算后 waitShell/restart」的活示例。",
     "author": {
       "name": "POC 内置示例"
     },
@@ -19,848 +19,955 @@
     "difficulty": 1,
     "featured": true
   },
-  "refs": [],
   "content": {
-    "views": [
-      {
-        "id": "welcome",
-        "name": "欢迎"
-      },
-      {
-        "id": "step1",
-        "name": "第1步 · 按钮"
-      },
-      {
-        "id": "step2",
-        "name": "第2步 · 滑块"
-      },
-      {
-        "id": "step3",
-        "name": "第3步 · 听音"
-      },
-      {
-        "id": "done",
-        "name": "完成"
-      }
-    ],
-    "components": [
-      {
-        "id": "t_label",
-        "type": "label",
-        "name": "欢迎标题",
-        "visible": true,
-        "view": "welcome",
-        "layout": {
-          "x": 40,
-          "y": 30,
-          "w": 560,
-          "h": 46
-        },
-        "props": {
-          "text": "🎵 欢迎来到音乐练习！",
-          "tone": "info"
-        }
-      },
-      {
-        "id": "w_label",
-        "type": "label",
-        "name": "欢迎说明",
-        "visible": true,
-        "view": "welcome",
-        "layout": {
-          "x": 40,
-          "y": 84,
-          "w": 620,
-          "h": 90
-        },
-        "props": {
-          "text": "接下来 3 步，你会认识本平台关卡的全部交互：按钮、滑块、听音选答。\n随时可以点页面底部的「重开本关」从头来过。",
-          "tone": "info"
-        }
-      },
-      {
-        "id": "start_btn",
-        "type": "button",
-        "name": "开始按钮",
-        "visible": true,
-        "view": "welcome",
-        "layout": {
-          "x": 40,
-          "y": 190,
-          "w": 160,
-          "h": 44
-        },
-        "props": {
-          "text": "开始 ▶",
-          "enabled": true
-        }
-      },
-      {
-        "id": "s1_label",
-        "type": "label",
-        "name": "第1步说明",
-        "visible": true,
-        "view": "step1",
-        "layout": {
-          "x": 40,
-          "y": 30,
-          "w": 620,
-          "h": 46
-        },
-        "props": {
-          "text": "第 1 步 · 按钮：点击下面的按钮试试",
-          "tone": "info"
-        }
-      },
-      {
-        "id": "try_btn",
-        "type": "button",
-        "name": "试练按钮",
-        "visible": true,
-        "view": "step1",
-        "layout": {
-          "x": 40,
-          "y": 90,
-          "w": 140,
-          "h": 44
-        },
-        "props": {
-          "text": "点我！",
-          "enabled": true
-        }
-      },
-      {
-        "id": "s1_fb",
-        "type": "label",
-        "name": "第1步反馈",
-        "visible": true,
-        "view": "step1",
-        "layout": {
-          "x": 200,
-          "y": 98,
-          "w": 440,
-          "h": 36
-        },
-        "props": {
-          "text": "",
-          "tone": "info"
-        }
-      },
-      {
-        "id": "s1_next",
-        "type": "button",
-        "name": "第1步下一步",
-        "visible": true,
-        "view": "step1",
-        "layout": {
-          "x": 40,
-          "y": 150,
-          "w": 160,
-          "h": 44
-        },
-        "props": {
-          "text": "下一步 ▶",
-          "enabled": false
-        }
-      },
-      {
-        "id": "s2_label",
-        "type": "label",
-        "name": "第2步说明",
-        "visible": true,
-        "view": "step2",
-        "layout": {
-          "x": 40,
-          "y": 30,
-          "w": 640,
-          "h": 46
-        },
-        "props": {
-          "text": "第 2 步 · 滑块：拖动滑块，让数值正好变成 42",
-          "tone": "info"
-        }
-      },
-      {
-        "id": "slider1",
-        "type": "slider",
-        "name": "练习滑块",
-        "visible": true,
-        "view": "step2",
-        "layout": {
-          "x": 40,
-          "y": 96,
-          "w": 420,
-          "h": 40
-        },
-        "props": {
-          "min": 0,
-          "max": 100,
-          "step": 1
-        }
-      },
-      {
-        "id": "s2_fb",
-        "type": "label",
-        "name": "第2步反馈",
-        "visible": true,
-        "view": "step2",
-        "layout": {
-          "x": 40,
-          "y": 146,
-          "w": 560,
-          "h": 36
-        },
-        "props": {
-          "text": "",
-          "tone": "info"
-        }
-      },
-      {
-        "id": "s2_next",
-        "type": "button",
-        "name": "第2步下一步",
-        "visible": true,
-        "view": "step2",
-        "layout": {
-          "x": 40,
-          "y": 196,
-          "w": 160,
-          "h": 44
-        },
-        "props": {
-          "text": "下一步 ▶",
-          "enabled": false
-        }
-      },
-      {
-        "id": "s3_label",
-        "type": "label",
-        "name": "第3步说明",
-        "visible": true,
-        "view": "step3",
-        "layout": {
-          "x": 40,
-          "y": 30,
-          "w": 640,
-          "h": 46
-        },
-        "props": {
-          "text": "第 3 步 · 听音：先播一段 Do-Re 音阶，最后的音就是题目，选出它的唱名",
-          "tone": "info"
-        }
-      },
-      {
-        "id": "play_btn",
-        "type": "button",
-        "name": "播放按钮",
-        "visible": true,
-        "view": "step3",
-        "layout": {
-          "x": 40,
-          "y": 92,
-          "w": 140,
-          "h": 44
-        },
-        "props": {
-          "text": "🔊 播放",
-          "enabled": true
-        }
-      },
-      {
-        "id": "choice1",
-        "type": "choice",
-        "name": "唱名选择",
-        "visible": true,
-        "view": "step3",
-        "layout": {
-          "x": 40,
-          "y": 150,
-          "w": 420,
-          "h": 120
-        },
-        "props": {}
-      },
-      {
-        "id": "s3_fb",
-        "type": "label",
-        "name": "第3步反馈",
-        "visible": true,
-        "view": "step3",
-        "layout": {
-          "x": 480,
-          "y": 158,
-          "w": 220,
-          "h": 36
-        },
-        "props": {
-          "text": "",
-          "tone": "info"
-        }
-      },
-      {
-        "id": "s3_next",
-        "type": "button",
-        "name": "完成按钮",
-        "visible": true,
-        "view": "step3",
-        "layout": {
-          "x": 40,
-          "y": 286,
-          "w": 160,
-          "h": 44
-        },
-        "props": {
-          "text": "完成 ▶",
-          "enabled": false
-        }
-      },
-      {
-        "id": "done_label",
-        "type": "label",
-        "name": "完成标题",
-        "visible": true,
-        "view": "done",
-        "layout": {
-          "x": 40,
-          "y": 40,
-          "w": 560,
-          "h": 46
-        },
-        "props": {
-          "text": "🎉 教程完成！",
-          "tone": "success"
-        }
-      },
-      {
-        "id": "score_label",
-        "type": "label",
-        "name": "得分展示",
-        "visible": true,
-        "view": "done",
-        "layout": {
-          "x": 40,
-          "y": 96,
-          "w": 400,
-          "h": 36
-        },
-        "props": {
-          "text": "得分: 0",
-          "tone": "info"
-        }
-      },
-      {
-        "id": "again_btn",
-        "type": "button",
-        "name": "重学按钮",
-        "visible": true,
-        "view": "done",
-        "layout": {
-          "x": 40,
-          "y": 150,
-          "w": 160,
-          "h": 44
-        },
-        "props": {
-          "text": "再学一遍",
-          "enabled": true
-        }
-      },
-      {
-        "id": "synth1",
-        "type": "synth",
-        "name": "音效合成器",
-        "visible": false,
-        "view": "step3",
-        "layout": {
-          "x": 480,
-          "y": 200,
-          "w": 180,
-          "h": 90
-        },
-        "props": {
-          "wave": "triangle",
-          "gain": 0.4
-        }
-      }
-    ],
-    "logic": {
-      "logicVersion": 2,
-      "variables": {
-        "score": 0,
-        "answered": 0
-      },
-      "nodes": [
+    "shell": {
+      "views": [
         {
-          "id": "reveal",
-          "kind": "call",
-          "target": "choice1",
-          "method": "reveal",
-          "args": [
-            "{correctIndex: 2}"
-          ],
-          "x": 400,
-          "y": 560
+          "id": "welcome",
+          "name": "欢迎"
         },
         {
-          "id": "markans",
-          "kind": "assign",
-          "target": "answered",
-          "value": {
-            "expr": "true"
-          },
-          "x": 640,
-          "y": 560
+          "id": "step1",
+          "name": "第 1 步"
         },
         {
-          "id": "on_start",
-          "kind": "on",
-          "event": "start_btn.clicked",
-          "x": 0,
-          "y": 0
+          "id": "step2",
+          "name": "第 2 步"
         },
         {
-          "id": "goto_step1",
-          "kind": "call",
-          "target": "views",
-          "method": "goto",
-          "args": [
-            "{id: 'step1'}"
-          ],
-          "x": 260,
-          "y": 0
+          "id": "step3",
+          "name": "第 3 步"
         },
         {
-          "id": "on_try",
-          "kind": "on",
-          "event": "try_btn.clicked",
-          "x": 0,
-          "y": 120
-        },
-        {
-          "id": "fb1",
-          "kind": "call",
-          "target": "s1_fb",
-          "method": "show",
-          "args": [
-            "{text: '✅ 很好！刚才的事件就是「按钮事件」——点击会触发一条逻辑链', tone: 'success'}"
-          ],
-          "x": 260,
-          "y": 120
-        },
-        {
-          "id": "en1",
-          "kind": "call",
-          "target": "s1_next",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: true}"
-          ],
-          "x": 520,
-          "y": 120
-        },
-        {
-          "id": "on_s1next",
-          "kind": "on",
-          "event": "s1_next.clicked",
-          "x": 0,
-          "y": 240
-        },
-        {
-          "id": "goto_step2",
-          "kind": "call",
-          "target": "views",
-          "method": "goto",
-          "args": [
-            "{id: 'step2'}"
-          ],
-          "x": 260,
-          "y": 240
-        },
-        {
-          "id": "on_slider",
-          "kind": "on",
-          "event": "slider1.changed",
-          "x": 0,
-          "y": 360
-        },
-        {
-          "id": "fb2a",
-          "kind": "call",
-          "target": "s2_fb",
-          "method": "show",
-          "args": [
-            "{text: '滑块当前值: ' + event.value}"
-          ],
-          "x": 260,
-          "y": 360
-        },
-        {
-          "id": "br42",
-          "kind": "branch",
-          "cond": "event.value == 42",
-          "x": 520,
-          "y": 360
-        },
-        {
-          "id": "fb2b",
-          "kind": "call",
-          "target": "s2_fb",
-          "method": "show",
-          "args": [
-            "{text: '✅ 就是 42！可以进入下一步了', tone: 'success'}"
-          ],
-          "x": 780,
-          "y": 300
-        },
-        {
-          "id": "en2",
-          "kind": "call",
-          "target": "s2_next",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: true}"
-          ],
-          "x": 1040,
-          "y": 300
-        },
-        {
-          "id": "on_s2next",
-          "kind": "on",
-          "event": "s2_next.clicked",
-          "x": 0,
-          "y": 480
-        },
-        {
-          "id": "goto_step3",
-          "kind": "call",
-          "target": "views",
-          "method": "goto",
-          "args": [
-            "{id: 'step3'}"
-          ],
-          "x": 260,
-          "y": 480
-        },
-        {
-          "id": "on_play",
-          "kind": "on",
-          "event": "play_btn.clicked",
-          "x": 0,
-          "y": 600
-        },
-        {
-          "id": "synthplay",
-          "kind": "call",
-          "target": "synth1",
-          "method": "play",
-          "args": [
-            "{ notes: q.data.notes, wave: 'triangle', tempo: 100, mode: 'chord' }"
-          ],
-          "x": 260,
-          "y": 600
-        },
-        {
-          "id": "on_choose",
-          "kind": "on",
-          "event": "choice1.chosen",
-          "x": 0,
-          "y": 720
-        },
-        {
-          "id": "brans",
-          "kind": "branch",
-          "cond": "event.value == q.data.answer && v.answered == 0",
-          "x": 260,
-          "y": 720
-        },
-        {
-          "id": "fb3ok",
-          "kind": "call",
-          "target": "s3_fb",
-          "method": "show",
-          "args": [
-            "{text: '✅ 答对了！这是 ' + q.data.answer, tone: 'success'}"
-          ],
-          "x": 820,
-          "y": 640
-        },
-        {
-          "id": "addscore",
-          "kind": "assign",
-          "target": "score",
-          "value": {
-            "expr": "v.score + q.scoring"
-          },
-          "x": 1080,
-          "y": 640
-        },
-        {
-          "id": "en3",
-          "kind": "call",
-          "target": "s3_next",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: true}"
-          ],
-          "x": 1340,
-          "y": 640
-        },
-        {
-          "id": "fb3no",
-          "kind": "call",
-          "target": "s3_fb",
-          "method": "show",
-          "args": [
-            "{text: '❌ 不是这个——再听一次试试', tone: 'error'}"
-          ],
-          "x": 520,
-          "y": 780
-        },
-        {
-          "id": "on_s3next",
-          "kind": "on",
-          "event": "s3_next.clicked",
-          "x": 0,
-          "y": 840
-        },
-        {
-          "id": "finish",
-          "kind": "call",
-          "target": "level",
-          "method": "finish",
-          "args": [],
-          "x": 260,
-          "y": 840
-        },
-        {
-          "id": "on_finished",
-          "kind": "on",
-          "event": "level.finished",
-          "x": 0,
-          "y": 960
-        },
-        {
-          "id": "score_show",
-          "kind": "call",
-          "target": "score_label",
-          "method": "show",
-          "args": [
-            "{text: '最终得分: ' + v.score}"
-          ],
-          "x": 260,
-          "y": 960
-        },
-        {
-          "id": "goto_done",
-          "kind": "call",
-          "target": "views",
-          "method": "goto",
-          "args": [
-            "{id: 'done'}"
-          ],
-          "x": 520,
-          "y": 960
-        },
-        {
-          "id": "on_again",
-          "kind": "on",
-          "event": "again_btn.clicked",
-          "x": 0,
-          "y": 1080
-        },
-        {
-          "id": "restart",
-          "kind": "call",
-          "target": "level",
-          "method": "restart",
-          "args": [],
-          "x": 260,
-          "y": 1080
-        },
-        {
-          "id": "bnd_qload",
-          "kind": "on",
-          "event": "question.loaded"
-        },
-        {
-          "id": "bnd_q_choice1_setOptions_1",
-          "kind": "call",
-          "target": "choice1",
-          "method": "setOptions",
-          "args": [
-            "{ options: q.data.options }"
-          ]
-        },
-        {
-          "id": "bnd_venter",
-          "kind": "on",
-          "event": "view.entered"
-        },
-        {
-          "id": "bnd_v_choice1_setOptions_1",
-          "kind": "call",
-          "target": "choice1",
-          "method": "setOptions",
-          "args": [
-            "{ options: q.data.options }"
-          ]
-        },
-        {
-          "id": "bnd_v_vguard",
-          "kind": "branch",
-          "cond": "q != null"
+          "id": "done",
+          "name": "完成"
         }
       ],
-      "edges": [
+      "components": [
         {
-          "id": "e1",
-          "from": "on_start",
-          "to": "goto_step1"
+          "id": "t_label",
+          "type": "label",
+          "name": "欢迎标题",
+          "view": "welcome",
+          "layout": {
+            "x": 24,
+            "y": 24,
+            "w": 752,
+            "h": 44
+          },
+          "props": {
+            "text": "🎵 欢迎来到音乐练习！"
+          }
         },
         {
-          "id": "e2",
-          "from": "on_try",
-          "to": "fb1"
+          "id": "w_label",
+          "type": "label",
+          "name": "欢迎说明",
+          "view": "welcome",
+          "layout": {
+            "x": 24,
+            "y": 80,
+            "w": 752,
+            "h": 96
+          },
+          "props": {
+            "text": "接下来 3 步，你会认识本平台关卡的全部交互：按钮、滑块、听音选答。\n随时可以点页面底部的「重开本关」从头来过。"
+          }
         },
         {
-          "id": "e3",
-          "from": "fb1",
-          "to": "en1"
+          "id": "start_btn",
+          "type": "button",
+          "name": "开始按钮",
+          "view": "welcome",
+          "layout": {
+            "x": 24,
+            "y": 200,
+            "w": 200,
+            "h": 48
+          },
+          "props": {
+            "text": "开始 ▶"
+          }
         },
         {
-          "id": "e4",
-          "from": "on_s1next",
-          "to": "goto_step2"
+          "id": "s1_label",
+          "type": "label",
+          "name": "第 1 步说明",
+          "view": "step1",
+          "layout": {
+            "x": 24,
+            "y": 352,
+            "w": 752,
+            "h": 32
+          },
+          "props": {
+            "text": "第 1 步 · 按钮：点击下面的按钮试试"
+          }
         },
         {
-          "id": "e5",
-          "from": "on_slider",
-          "to": "fb2a"
+          "id": "s2_label",
+          "type": "label",
+          "name": "第 2 步说明",
+          "view": "step2",
+          "layout": {
+            "x": 24,
+            "y": 352,
+            "w": 752,
+            "h": 32
+          },
+          "props": {
+            "text": "第 2 步 · 滑块：拖动滑块，感受数值变化"
+          }
         },
         {
-          "id": "e6",
-          "from": "fb2a",
-          "to": "br42"
+          "id": "s3_label",
+          "type": "label",
+          "name": "第 3 步说明",
+          "view": "step3",
+          "layout": {
+            "x": 24,
+            "y": 352,
+            "w": 752,
+            "h": 32
+          },
+          "props": {
+            "text": "第 3 步 · 听音：先播一段 Do-Re-Mi，最后一个音是题目，选出它的唱名"
+          }
         },
         {
-          "id": "e7",
-          "from": "br42",
-          "to": "fb2b",
-          "port": "true"
+          "id": "done_label",
+          "type": "label",
+          "name": "完成标题",
+          "view": "done",
+          "layout": {
+            "x": 24,
+            "y": 32,
+            "w": 752,
+            "h": 44
+          },
+          "props": {
+            "text": "🎉 教程完成！"
+          }
         },
         {
-          "id": "e8",
-          "from": "fb2b",
-          "to": "en2"
+          "id": "score_label",
+          "type": "label",
+          "name": "本关得分",
+          "view": "done",
+          "layout": {
+            "x": 24,
+            "y": 92,
+            "w": 752,
+            "h": 36
+          },
+          "bindings": {
+            "text": "'本关得分 ' + v.score"
+          }
         },
         {
-          "id": "e9",
-          "from": "on_s2next",
-          "to": "goto_step3"
-        },
-        {
-          "id": "e10",
-          "from": "on_play",
-          "to": "synthplay"
-        },
-        {
-          "id": "e11",
-          "from": "on_choose",
-          "to": "brans"
-        },
-        {
-          "id": "e12",
-          "from": "brans",
-          "to": "markans",
-          "port": "true"
-        },
-        {
-          "id": "e14",
-          "from": "addscore",
-          "to": "en3"
-        },
-        {
-          "id": "e15",
-          "from": "brans",
-          "to": "fb3no",
-          "port": "false"
-        },
-        {
-          "id": "e16",
-          "from": "on_s3next",
-          "to": "finish"
-        },
-        {
-          "id": "e17",
-          "from": "on_finished",
-          "to": "score_show"
-        },
-        {
-          "id": "e18",
-          "from": "score_show",
-          "to": "goto_done"
-        },
-        {
-          "id": "e19",
-          "from": "on_again",
-          "to": "restart"
-        },
-        {
-          "id": "e12a",
-          "from": "markans",
-          "to": "reveal"
-        },
-        {
-          "id": "e12b",
-          "from": "reveal",
-          "to": "fb3ok"
-        },
-        {
-          "id": "e13",
-          "from": "fb3ok",
-          "to": "addscore"
-        },
-        {
-          "id": "bnd_q_eq",
-          "from": "bnd_qload",
-          "to": "bnd_q_choice1_setOptions_1"
-        },
-        {
-          "id": "bnd_v_ev",
-          "from": "bnd_venter",
-          "to": "bnd_v_vguard"
-        },
-        {
-          "id": "bnd_v_evg",
-          "from": "bnd_v_vguard",
-          "to": "bnd_v_choice1_setOptions_1",
-          "port": "true"
+          "id": "again_btn",
+          "type": "button",
+          "name": "再学一遍",
+          "view": "done",
+          "layout": {
+            "x": 24,
+            "y": 160,
+            "w": 200,
+            "h": 48
+          },
+          "props": {
+            "text": "再学一遍"
+          }
         }
       ]
     },
-    "table": {
-      "columns": [
-        {
-          "key": "data",
-          "label": "数据",
-          "type": "json"
+    "types": [
+      {
+        "id": "button-step",
+        "name": "按钮步骤",
+        "surface": {
+          "components": [
+            {
+              "id": "prompt",
+              "type": "label",
+              "name": "题面",
+              "layout": {
+                "x": 24,
+                "y": 16,
+                "w": 752,
+                "h": 32
+              },
+              "bindings": {
+                "text": "q.prompt"
+              }
+            },
+            {
+              "id": "tryBtn",
+              "type": "button",
+              "name": "试试点我",
+              "layout": {
+                "x": 280,
+                "y": 140,
+                "w": 240,
+                "h": 64
+              },
+              "props": {
+                "text": "点我！"
+              }
+            },
+            {
+              "id": "feedback",
+              "type": "label",
+              "name": "反馈",
+              "layout": {
+                "x": 24,
+                "y": 240,
+                "w": 752,
+                "h": 36
+              },
+              "props": {
+                "text": ""
+              }
+            }
+          ]
         },
-        {
-          "key": "scoring",
-          "label": "分值",
-          "type": "number"
-        }
-      ],
-      "rows": [
-        {
-          "data": {
+        "behavior": {
+          "logicVersion": 3,
+          "kind": "behavior",
+          "nodes": [
+            {
+              "id": "b_onStart",
+              "kind": "on",
+              "event": "start"
+            },
+            {
+              "id": "b_start_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_start_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onTry",
+              "kind": "on",
+              "event": "tryBtn.clicked"
+            },
+            {
+              "id": "b_feedback",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '很棒！按钮被点亮了 —— 这就是最小交互单元。', tone: 'success' }"
+            },
+            {
+              "id": "b_count",
+              "kind": "assign",
+              "target": "t.clicks",
+              "value": {
+                "expr": "t.clicks + 1"
+              }
+            },
+            {
+              "id": "b_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: q.scoring }"
+            },
+            {
+              "id": "b_comment",
+              "kind": "comment",
+              "text": "预设「点击即完成」：副作用后直接 return；on start 守卫保证重复调用不重复计分"
+            }
+          ],
+          "edges": [
+            {
+              "id": "e_b_onStart_b_start_guard",
+              "from": "b_onStart",
+              "to": "b_start_guard"
+            },
+            {
+              "id": "e_b_start_guard_b_start_guard_ret_true",
+              "from": "b_start_guard",
+              "to": "b_start_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onTry_b_feedback",
+              "from": "b_onTry",
+              "to": "b_feedback"
+            },
+            {
+              "id": "e_b_feedback_b_count",
+              "from": "b_feedback",
+              "to": "b_count"
+            },
+            {
+              "id": "e_b_count_b_ret",
+              "from": "b_count",
+              "to": "b_ret"
+            }
+          ]
+        },
+        "description": "点一下按钮完成这一步：演示 surface 组件 + on start 守卫 + 点击即返回。",
+        "state": [
+          {
+            "key": "answered",
+            "type": "boolean",
+            "init": false
+          }
+        ],
+        "typeState": [
+          {
+            "key": "clicks",
+            "type": "number",
+            "init": 0
+          }
+        ]
+      },
+      {
+        "id": "slider-step",
+        "name": "滑块步骤",
+        "surface": {
+          "components": [
+            {
+              "id": "prompt",
+              "type": "label",
+              "name": "题面",
+              "layout": {
+                "x": 24,
+                "y": 16,
+                "w": 752,
+                "h": 32
+              },
+              "bindings": {
+                "text": "q.prompt"
+              }
+            },
+            {
+              "id": "slider1",
+              "type": "slider",
+              "name": "滑块",
+              "layout": {
+                "x": 140,
+                "y": 130,
+                "w": 520,
+                "h": 44
+              },
+              "props": {
+                "min": 0,
+                "max": 100,
+                "step": 1,
+                "initial": 0
+              }
+            },
+            {
+              "id": "feedback",
+              "type": "label",
+              "name": "反馈",
+              "layout": {
+                "x": 24,
+                "y": 210,
+                "w": 752,
+                "h": 36
+              },
+              "props": {
+                "text": ""
+              }
+            },
+            {
+              "id": "nextBtn",
+              "type": "button",
+              "name": "下一步",
+              "layout": {
+                "x": 300,
+                "y": 280,
+                "w": 200,
+                "h": 48
+              },
+              "props": {
+                "text": "下一步 ▶"
+              }
+            }
+          ]
+        },
+        "behavior": {
+          "logicVersion": 3,
+          "kind": "behavior",
+          "nodes": [
+            {
+              "id": "b_onStart",
+              "kind": "on",
+              "event": "start"
+            },
+            {
+              "id": "b_start_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_start_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onChange",
+              "kind": "on",
+              "event": "slider1.changed"
+            },
+            {
+              "id": "b_store",
+              "kind": "assign",
+              "target": "q.state.value",
+              "value": {
+                "expr": "event.payload.value"
+              }
+            },
+            {
+              "id": "b_count",
+              "kind": "assign",
+              "target": "t.changes",
+              "value": {
+                "expr": "t.changes + 1"
+              }
+            },
+            {
+              "id": "b_feedback",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '当前值：' + event.payload.value, tone: 'info' }"
+            },
+            {
+              "id": "b_change_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_change_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onNext",
+              "kind": "on",
+              "event": "nextBtn.clicked"
+            },
+            {
+              "id": "b_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0, payload: { value: q.state.value } }"
+            },
+            {
+              "id": "b_comment",
+              "kind": "comment",
+              "text": "手动推进：滑块只记录 q.state.value，由「下一步」返回 payload"
+            }
+          ],
+          "edges": [
+            {
+              "id": "e_b_onStart_b_start_guard",
+              "from": "b_onStart",
+              "to": "b_start_guard"
+            },
+            {
+              "id": "e_b_start_guard_b_start_guard_ret_true",
+              "from": "b_start_guard",
+              "to": "b_start_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onChange_b_store",
+              "from": "b_onChange",
+              "to": "b_store"
+            },
+            {
+              "id": "e_b_store_b_count",
+              "from": "b_store",
+              "to": "b_count"
+            },
+            {
+              "id": "e_b_count_b_feedback",
+              "from": "b_count",
+              "to": "b_feedback"
+            },
+            {
+              "id": "e_b_feedback_b_change_guard",
+              "from": "b_feedback",
+              "to": "b_change_guard"
+            },
+            {
+              "id": "e_b_change_guard_b_change_guard_ret_true",
+              "from": "b_change_guard",
+              "to": "b_change_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onNext_b_ret",
+              "from": "b_onNext",
+              "to": "b_ret"
+            }
+          ]
+        },
+        "description": "拖动滑块记录数值，点下一题继续：演示 slider.changed 事件与手动推进。",
+        "state": [
+          {
+            "key": "answered",
+            "type": "boolean",
+            "init": false
+          },
+          {
+            "key": "value",
+            "type": "number",
+            "init": 0
+          }
+        ],
+        "typeState": [
+          {
+            "key": "changes",
+            "type": "number",
+            "init": 0
+          }
+        ]
+      },
+      {
+        "id": "choice-listen",
+        "name": "听音选择",
+        "surface": {
+          "components": [
+            {
+              "id": "prompt",
+              "type": "label",
+              "name": "题面",
+              "layout": {
+                "x": 24,
+                "y": 16,
+                "w": 552,
+                "h": 32
+              },
+              "bindings": {
+                "text": "q.prompt"
+              }
+            },
+            {
+              "id": "listenBtn",
+              "type": "button",
+              "name": "重听",
+              "layout": {
+                "x": 600,
+                "y": 16,
+                "w": 176,
+                "h": 36
+              },
+              "props": {
+                "text": "🔊 重听"
+              }
+            },
+            {
+              "id": "choice1",
+              "type": "choice",
+              "name": "选项",
+              "layout": {
+                "x": 24,
+                "y": 72,
+                "w": 752,
+                "h": 240
+              }
+            },
+            {
+              "id": "feedback",
+              "type": "label",
+              "name": "反馈",
+              "layout": {
+                "x": 24,
+                "y": 336,
+                "w": 752,
+                "h": 40
+              },
+              "props": {
+                "text": ""
+              }
+            },
+            {
+              "id": "nextBtn",
+              "type": "button",
+              "name": "下一题",
+              "layout": {
+                "x": 600,
+                "y": 388,
+                "w": 176,
+                "h": 44
+              },
+              "props": {
+                "text": "下一题 →"
+              }
+            },
+            {
+              "id": "sound1",
+              "type": "sound",
+              "name": "发声器"
+            }
+          ]
+        },
+        "behavior": {
+          "logicVersion": 3,
+          "kind": "behavior",
+          "nodes": [
+            {
+              "id": "b_onStart",
+              "kind": "on",
+              "event": "start"
+            },
+            {
+              "id": "b_setOptions",
+              "kind": "call",
+              "target": "choice1",
+              "method": "setOptions",
+              "arg": "{ options: q.options }"
+            },
+            {
+              "id": "b_countAsk",
+              "kind": "assign",
+              "target": "t.asked",
+              "value": {
+                "expr": "t.asked + 1"
+              }
+            },
+            {
+              "id": "b_playListen",
+              "kind": "call",
+              "target": "sound1",
+              "method": "play",
+              "arg": "{ notes: q.listenNotes }"
+            },
+            {
+              "id": "b_start_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_start_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: q.scoring + args.bonus }"
+            },
+            {
+              "id": "b_onReplay",
+              "kind": "on",
+              "event": "listenBtn.clicked"
+            },
+            {
+              "id": "b_playReplay",
+              "kind": "call",
+              "target": "sound1",
+              "method": "play",
+              "arg": "{ notes: q.listenNotes }"
+            },
+            {
+              "id": "b_replay_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_replay_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: q.scoring + args.bonus }"
+            },
+            {
+              "id": "b_onChosen",
+              "kind": "on",
+              "event": "choice1.chosen"
+            },
+            {
+              "id": "b_chosen_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_chosen_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: q.scoring + args.bonus }"
+            },
+            {
+              "id": "b_isCorrect",
+              "kind": "branch",
+              "cond": "event.payload.index == q.answerIndex"
+            },
+            {
+              "id": "b_markAnswered",
+              "kind": "assign",
+              "target": "q.state.answered",
+              "value": {
+                "expr": "true"
+              }
+            },
+            {
+              "id": "b_reveal",
+              "kind": "call",
+              "target": "choice1",
+              "method": "reveal",
+              "arg": "{ correctIndex: q.answerIndex }"
+            },
+            {
+              "id": "b_feedbackOk",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '答对了！点「下一题」继续。', tone: 'success' }"
+            },
+            {
+              "id": "b_feedbackBad",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '不是这个，再听一遍。', tone: 'error' }"
+            },
+            {
+              "id": "b_onNext",
+              "kind": "on",
+              "event": "nextBtn.clicked"
+            },
+            {
+              "id": "b_next_next",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_next_next_scored",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: q.scoring + args.bonus }"
+            },
+            {
+              "id": "b_next_next_skipped",
+              "kind": "return",
+              "result": "{ status: 'skipped', correct: false, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_comment",
+              "kind": "comment",
+              "text": "首次答对计分（answered 守卫）；答错只给反馈，可重听重选；下一题收题"
+            }
+          ],
+          "edges": [
+            {
+              "id": "e_b_onStart_b_setOptions",
+              "from": "b_onStart",
+              "to": "b_setOptions"
+            },
+            {
+              "id": "e_b_setOptions_b_countAsk",
+              "from": "b_setOptions",
+              "to": "b_countAsk"
+            },
+            {
+              "id": "e_b_countAsk_b_playListen",
+              "from": "b_countAsk",
+              "to": "b_playListen"
+            },
+            {
+              "id": "e_b_playListen_b_start_guard",
+              "from": "b_playListen",
+              "to": "b_start_guard"
+            },
+            {
+              "id": "e_b_start_guard_b_start_guard_ret_true",
+              "from": "b_start_guard",
+              "to": "b_start_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onReplay_b_playReplay",
+              "from": "b_onReplay",
+              "to": "b_playReplay"
+            },
+            {
+              "id": "e_b_playReplay_b_replay_guard",
+              "from": "b_playReplay",
+              "to": "b_replay_guard"
+            },
+            {
+              "id": "e_b_replay_guard_b_replay_guard_ret_true",
+              "from": "b_replay_guard",
+              "to": "b_replay_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onChosen_b_chosen_guard",
+              "from": "b_onChosen",
+              "to": "b_chosen_guard"
+            },
+            {
+              "id": "e_b_chosen_guard_b_isCorrect_false",
+              "from": "b_chosen_guard",
+              "to": "b_isCorrect",
+              "port": "false"
+            },
+            {
+              "id": "e_b_chosen_guard_b_chosen_guard_ret_true",
+              "from": "b_chosen_guard",
+              "to": "b_chosen_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_isCorrect_b_markAnswered_true",
+              "from": "b_isCorrect",
+              "to": "b_markAnswered",
+              "port": "true"
+            },
+            {
+              "id": "e_b_markAnswered_b_reveal",
+              "from": "b_markAnswered",
+              "to": "b_reveal"
+            },
+            {
+              "id": "e_b_reveal_b_feedbackOk",
+              "from": "b_reveal",
+              "to": "b_feedbackOk"
+            },
+            {
+              "id": "e_b_isCorrect_b_feedbackBad_false",
+              "from": "b_isCorrect",
+              "to": "b_feedbackBad",
+              "port": "false"
+            },
+            {
+              "id": "e_b_onNext_b_next_next",
+              "from": "b_onNext",
+              "to": "b_next_next"
+            },
+            {
+              "id": "e_b_next_next_b_next_next_scored_true",
+              "from": "b_next_next",
+              "to": "b_next_next_scored",
+              "port": "true"
+            },
+            {
+              "id": "e_b_next_next_b_next_next_skipped_false",
+              "from": "b_next_next",
+              "to": "b_next_next_skipped",
+              "port": "false"
+            }
+          ]
+        },
+        "description": "听音频选择正确选项：演示 choice.options 绑定之外的显式 setOptions 命令、reveal 判定与手动下一题。",
+        "state": [
+          {
+            "key": "answered",
+            "type": "boolean",
+            "init": false
+          }
+        ],
+        "typeState": [
+          {
+            "key": "asked",
+            "type": "number",
+            "init": 0
+          }
+        ],
+        "args": [
+          {
+            "key": "bonus",
+            "type": "number",
+            "optional": true,
+            "default": 0
+          }
+        ]
+      }
+    ],
+    "tables": {
+      "button-step": {
+        "columns": [
+          {
+            "key": "prompt",
+            "label": "题面",
+            "type": "text"
+          },
+          {
+            "key": "scoring",
+            "label": "分值",
+            "type": "number"
+          }
+        ],
+        "rows": [
+          {
+            "id": "row_button",
+            "prompt": "点一下按钮，看看会发生什么。",
+            "scoring": 0
+          }
+        ]
+      },
+      "slider-step": {
+        "columns": [
+          {
+            "key": "prompt",
+            "label": "题面",
+            "type": "text"
+          },
+          {
+            "key": "target",
+            "label": "参考值",
+            "type": "number"
+          },
+          {
+            "key": "scoring",
+            "label": "分值",
+            "type": "number"
+          }
+        ],
+        "rows": [
+          {
+            "id": "row_slider",
+            "prompt": "拖动滑块，把数值拖到任意位置，然后点下一步。",
+            "target": 42,
+            "scoring": 0
+          }
+        ]
+      },
+      "choice-listen": {
+        "columns": [
+          {
+            "key": "prompt",
+            "label": "题面",
+            "type": "text"
+          },
+          {
+            "key": "options",
+            "label": "选项",
+            "type": "list"
+          },
+          {
+            "key": "answer",
+            "label": "答案",
+            "type": "text"
+          },
+          {
+            "key": "answerIndex",
+            "label": "答案下标",
+            "type": "number"
+          },
+          {
+            "key": "listenNotes",
+            "label": "听音",
+            "type": "notes"
+          },
+          {
+            "key": "scoring",
+            "label": "分值",
+            "type": "number"
+          }
+        ],
+        "rows": [
+          {
+            "id": "row_choice",
+            "prompt": "听三音：Do-Re-Mi，最后一个音是？",
             "options": [
               "Do",
               "Re",
               "Mi"
             ],
             "answer": "Mi",
-            "notes": [
+            "answerIndex": 2,
+            "listenNotes": [
               {
                 "midi": 60,
                 "dur": "8n"
@@ -873,17 +980,246 @@
                 "midi": 64,
                 "dur": "2n"
               }
-            ]
-          },
-          "scoring": 10
-        }
-      ]
+            ],
+            "scoring": 10
+          }
+        ]
+      }
+    },
+    "run": {
+      "order": "manifest",
+      "count": null,
+      "seed": null,
+      "shuffleWithinPhase": true
     },
     "flow": {
-      "order": "sequential",
-      "pass": {
-        "expr": "v.score >= 10"
-      }
+      "logicVersion": 3,
+      "kind": "flow",
+      "nodes": [
+        {
+          "id": "f_start",
+          "kind": "start"
+        },
+        {
+          "id": "f_welcome",
+          "kind": "setView",
+          "view": "welcome"
+        },
+        {
+          "id": "f_waitStart",
+          "kind": "waitShell",
+          "event": "start_btn.clicked"
+        },
+        {
+          "id": "f_step1",
+          "kind": "setView",
+          "view": "step1"
+        },
+        {
+          "id": "f_askButton",
+          "kind": "ask",
+          "target": "{ type: 'button-step', row: 'row_button' }",
+          "resultVar": "r1"
+        },
+        {
+          "id": "f_add1",
+          "kind": "assign",
+          "target": "v.score",
+          "value": {
+            "expr": "v.score + (local.r1.scoreDelta || 0)"
+          }
+        },
+        {
+          "id": "f_row1",
+          "kind": "assign",
+          "target": "v.row",
+          "value": {
+            "expr": "v.row + 1"
+          }
+        },
+        {
+          "id": "f_step2",
+          "kind": "setView",
+          "view": "step2"
+        },
+        {
+          "id": "f_askSlider",
+          "kind": "ask",
+          "target": "{ type: 'slider-step', row: 'row_slider' }",
+          "resultVar": "r2"
+        },
+        {
+          "id": "f_add2",
+          "kind": "assign",
+          "target": "v.score",
+          "value": {
+            "expr": "v.score + (local.r2.scoreDelta || 0)"
+          }
+        },
+        {
+          "id": "f_row2",
+          "kind": "assign",
+          "target": "v.row",
+          "value": {
+            "expr": "v.row + 1"
+          }
+        },
+        {
+          "id": "f_step3",
+          "kind": "setView",
+          "view": "step3"
+        },
+        {
+          "id": "f_askChoice",
+          "kind": "ask",
+          "target": "{ type: 'choice-listen', row: 'row_choice' }",
+          "resultVar": "r3"
+        },
+        {
+          "id": "f_add3",
+          "kind": "assign",
+          "target": "v.score",
+          "value": {
+            "expr": "v.score + (local.r3.scoreDelta || 0)"
+          }
+        },
+        {
+          "id": "f_row3",
+          "kind": "assign",
+          "target": "v.row",
+          "value": {
+            "expr": "v.row + 1"
+          }
+        },
+        {
+          "id": "f_done",
+          "kind": "setView",
+          "view": "done"
+        },
+        {
+          "id": "f_finish",
+          "kind": "finish",
+          "passed": "v.score >= 10"
+        },
+        {
+          "id": "f_waitAgain",
+          "kind": "waitShell",
+          "event": "again_btn.clicked"
+        },
+        {
+          "id": "f_restart",
+          "kind": "restart"
+        },
+        {
+          "id": "f_comment",
+          "kind": "comment",
+          "text": "docs/51 §6 教程特殊流程：固定 3 步 + 结算后 waitShell → restart（重玩走流程图，而非只靠 runner 按钮）"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_f_start_f_welcome",
+          "from": "f_start",
+          "to": "f_welcome"
+        },
+        {
+          "id": "e_f_welcome_f_waitStart",
+          "from": "f_welcome",
+          "to": "f_waitStart"
+        },
+        {
+          "id": "e_f_waitStart_f_step1",
+          "from": "f_waitStart",
+          "to": "f_step1"
+        },
+        {
+          "id": "e_f_step1_f_askButton",
+          "from": "f_step1",
+          "to": "f_askButton"
+        },
+        {
+          "id": "e_f_askButton_f_add1",
+          "from": "f_askButton",
+          "to": "f_add1"
+        },
+        {
+          "id": "e_f_add1_f_row1",
+          "from": "f_add1",
+          "to": "f_row1"
+        },
+        {
+          "id": "e_f_row1_f_step2",
+          "from": "f_row1",
+          "to": "f_step2"
+        },
+        {
+          "id": "e_f_step2_f_askSlider",
+          "from": "f_step2",
+          "to": "f_askSlider"
+        },
+        {
+          "id": "e_f_askSlider_f_add2",
+          "from": "f_askSlider",
+          "to": "f_add2"
+        },
+        {
+          "id": "e_f_add2_f_row2",
+          "from": "f_add2",
+          "to": "f_row2"
+        },
+        {
+          "id": "e_f_row2_f_step3",
+          "from": "f_row2",
+          "to": "f_step3"
+        },
+        {
+          "id": "e_f_step3_f_askChoice",
+          "from": "f_step3",
+          "to": "f_askChoice"
+        },
+        {
+          "id": "e_f_askChoice_f_add3",
+          "from": "f_askChoice",
+          "to": "f_add3"
+        },
+        {
+          "id": "e_f_add3_f_row3",
+          "from": "f_add3",
+          "to": "f_row3"
+        },
+        {
+          "id": "e_f_row3_f_done",
+          "from": "f_row3",
+          "to": "f_done"
+        },
+        {
+          "id": "e_f_done_f_finish",
+          "from": "f_done",
+          "to": "f_finish"
+        },
+        {
+          "id": "e_f_finish_f_waitAgain",
+          "from": "f_finish",
+          "to": "f_waitAgain"
+        },
+        {
+          "id": "e_f_waitAgain_f_restart",
+          "from": "f_waitAgain",
+          "to": "f_restart"
+        }
+      ],
+      "vars": [
+        {
+          "key": "score",
+          "type": "number",
+          "init": 0
+        },
+        {
+          "key": "row",
+          "type": "number",
+          "init": 0
+        }
+      ]
     }
   }
 }

@@ -113,7 +113,7 @@ describe('loadLevelDocV4 装载管线', () => {
     const v3 = { ...minimalLevelDoc(), schemaVersion: 3 }
     const r1 = loadLevelDocV4(v3)
     expect(r1.ok).toBe(false)
-    if (!r1.ok) expect(r1.errors.join('\n')).toMatch(/schemaVersion 4/)
+    if (!r1.ok) expect(r1.errors.join('\n')).toMatch(/schemaVersion 3 不受支持|格式为 4/)
 
     const notLevel = { ...minimalLevelDoc(), kind: 'series' }
     const r2 = loadLevelDocV4(notLevel)

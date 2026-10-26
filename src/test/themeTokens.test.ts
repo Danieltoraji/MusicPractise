@@ -22,12 +22,14 @@ const UI_TOKENS = [
   'map-box-bg',
 ]
 
-/** 主题区范围：从节点图主题注释到调试布局章节（之前） */
+/** 主题区范围：从节点图主题注释到调试模式章节（之前） */
 function themeSection(): { text: string; start: number; end: number } {
   const start = css.indexOf('节点图 · 千星深色工作台主题')
-  const end = css.indexOf('调试布局与画面')
+  // W9：v3 调试工作台已删除，原结束标记「调试布局与画面」随之移除；改用其后仍存在的
+  // 「调试模式（docs/30）」章节注释作边界（主题 token 区 = 节点图主题 → AI 入坞深色）。
+  const end = css.indexOf('调试模式（docs/30）')
   expect(start, '缺少节点图主题章节').toBeGreaterThanOrEqual(0)
-  expect(end, '缺少调试布局章节').toBeGreaterThan(start)
+  expect(end, '缺少调试模式章节').toBeGreaterThan(start)
   return { text: css.slice(start, end), start, end }
 }
 
@@ -143,13 +145,15 @@ describe('G2 语义 token 层（R17a）', () => {
       '.ai-tool-calls',
     ]
     const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // W9：v3 调试工作台删除后，部分提升规则位于「调试模式」区之后（主题 token 区边界随之收紧），
+    // 因此共享规则存在性在全量 CSS 中检查；单色覆盖不允许出现在任何位置。
     for (const sel of hoisted) {
       expect(
-        new RegExp(`\\.ge-dark\\s+${esc(sel)}(?=\\s*[{,])`).test(section),
+        new RegExp(`\\.ge-dark\\s+${esc(sel)}(?=\\s*[{,])`).test(css),
         `仍存在 .ge-dark 单色覆盖：${sel}`,
       ).toBe(false)
       expect(
-        new RegExp(`\\.graph-editor\\s+${esc(sel)}(?=\\s*[{,])`).test(section),
+        new RegExp(`\\.graph-editor\\s+${esc(sel)}(?=\\s*[{,])`).test(css),
         `缺少共享 token 规则：${sel}`,
       ).toBe(true)
     }
@@ -212,8 +216,8 @@ describe('G2 语义 token 层（R17a）', () => {
     const refs = [...css.matchAll(/var\(--ge-[a-z0-9-]+/g)]
     // 32 个语义 token 的深色映射（UI_TOKENS.length）
     expect(mapping.length, '深色映射行数漂移（新增 --ui-* 时同步 UI_TOKENS）').toBe(UI_TOKENS.length)
-    // gdb-stage 的明暗双主题取值机制：5 处（改数量需同步 docs/40 G13 与 AGENTS）
-    expect(fallback.length, 'gdb 双写 fallback 数量漂移').toBe(5)
+    // gdb-stage 的明暗双主题取值机制：W9 删除 v3 调试工作台后保留 2 处（改数量需同步 docs/44 G13 与 AGENTS）
+    expect(fallback.length, 'gdb 双写 fallback 数量漂移').toBe(2)
     // 其它任何 var(--ge-*) 直用都会破坏「浅色回落」契约
     expect(refs.length, '出现未登记的 var(--ge-*) 直用（应改用 --ui-* 或双写 fallback）').toBe(
       mapping.length + fallback.length,
@@ -225,7 +229,7 @@ describe('G2 语义 token 层（R17a）', () => {
   // ---------------------------------------------------------------------------
   it('G10：z-index 全部走 --z-* 语义令牌；引用必须有定义', () => {
     const decls = [...css.matchAll(/z-index:\s*([^;]+);/g)].map((m) => m[1].trim())
-    expect(decls.length, 'z-index 声明数量变化：新增/删除浮层需同步本守卫与 docs/44').toBe(15)
+    expect(decls.length, 'z-index 声明数量变化：新增/删除浮层需同步本守卫与 docs/44').toBe(13)
     for (const value of decls) {
       expect(value, `裸 z-index 数值未走令牌：${value}`).toMatch(/^var\(--z-[a-z0-9-]+\)$/)
     }

@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
-const levelStage = readFileSync(new URL('../runtime/LevelStage.tsx', import.meta.url), 'utf8')
+const levelStageV4 = readFileSync(new URL('../runtime/v4/LevelStageV4.tsx', import.meta.url), 'utf8')
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -79,7 +79,8 @@ function topLevelRules(source: string): Rule[] {
 describe('G15 CSS 重复/死声明守卫（docs/44 R29–R30）', () => {
   it('不存在「同选择器 + 完全相同声明」的顶层重复规则', () => {
     const rules = topLevelRules(css)
-    expect(rules.length, '顶层规则数异常（CSS 结构被破坏？）').toBeGreaterThan(900)
+    // W9 删除 v3 死类规则后顶层规则数下降（原本 ≥900）；阈值随之下调，仍防止「结构被破坏/大段误删」
+    expect(rules.length, '顶层规则数异常（CSS 结构被破坏？）').toBeGreaterThan(700)
     const seen = new Map<string, number>()
     for (const r of rules) {
       const key = `${r.sel}\u0000${r.body}`
@@ -108,13 +109,13 @@ describe('G15 CSS 重复/死声明守卫（docs/44 R29–R30）', () => {
     expect(dead, `存在被后置规则完全覆盖的死声明：\n${dead.join('\n')}`).toEqual([])
   })
 
-  it('.level-canvas 死规则不再存在（被内联 style + .stage-canvas 完全覆盖）', () => {
-    // class 仍由 LevelRunner 传入，但几何完全由 LevelStage 内联 style 决定；
-    // 若内联几何被移除，本测试先失败，提醒重新评估是否需要恢复 .level-canvas 规则。
+  it('.level-canvas 死规则不再存在（v4 舞台几何由内联 style 决定）', () => {
+    // v4 舞台（LevelStageV4）几何完全由内联 style 决定；若内联几何被移除，本测试先失败，
+    // 提醒重新评估是否需要恢复 .level-canvas 规则。
     expect(css, '出现 .level-canvas 规则：请确认不是重新引入死样式').not.toMatch(/^\.level-canvas\s*\{/m)
-    expect(levelStage).toContain('width: STAGE_W')
-    expect(levelStage).toContain('height: STAGE_H')
-    expect(levelStage).toContain('left: fit.left')
+    expect(levelStageV4).toContain('width: STAGE_W')
+    expect(levelStageV4).toContain('height: STAGE_H')
+    expect(levelStageV4).toContain('left: fit.left')
   })
 
   it('不存在 src/ 中完全未引用的静态类样式（死类名防回涨）', () => {

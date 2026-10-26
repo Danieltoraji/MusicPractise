@@ -5,7 +5,7 @@
  */
 import { useState } from 'react'
 import { Note } from 'tonal'
-import type { Json } from '../../engine/expr'
+import type { Json } from '../engine/expr'
 
 /** 音符串元素：休止符（rest: true）无 midi；t = 起始拍（缺省接排，docs/27） */
 export interface PlayNote {

@@ -1,10 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type ProgressRecord } from '../library/db'
-import { partitionLevels, readLevelDoc } from '../library/browse'
-import type { LevelDoc } from '../engine/level'
+import { partitionLevels, levelDocStats, readLevelDoc } from '../library/browse'
+import type { LevelDocV4 } from '../engine/v4/model'
 import { ErrorBoundary } from '../library/ErrorBoundary'
 
-function diffStars(doc: LevelDoc | null): string {
+function diffStars(doc: LevelDocV4 | null): string {
   const diff = Math.min(5, Math.max(1, Number(doc?.meta.difficulty) || 1))
   return '★'.repeat(diff)
 }
@@ -114,7 +114,7 @@ export function HomePage() {
                   <div className="card-meta">
                     <span>
                       {doc
-                        ? `${doc.content.components.length} 个组件 · ${doc.content.table.rows.length} 道题`
+                        ? `${levelDocStats(doc).components} 个组件 · ${levelDocStats(doc).questions} 道题`
                         : '文档格式无法解析——可在资源库导出排查'}
                     </span>
                     <ProgressBadge levelId={rec.id} progress={progress} />

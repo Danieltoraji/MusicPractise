@@ -47,11 +47,10 @@ afterEach(async () => {
   await db.resources.clear()
 })
 
-describe('LibraryPage AI 新建关卡（批次4）', () => {
-  it('表单展开 → 填描述 → 创建空白关卡 + 写入 kickoff + 跳编辑器', async () => {
+describe('LibraryPage AI 新建关卡（W9 后：进入 v4 模板向导）', () => {
+  it('表单展开 → 填描述 → 跳转 #/edit/new（不再预建空白关卡/写 kickoff）', async () => {
     const c = renderEl(<LibraryPage />)
     await flushUntil(() => c.querySelector('.page-actions') !== null)
-    // 空库：先等 ensureSeeded 把内置关卡入库（App 层逻辑；这里直接验证表单流转，不强依赖种子）
     const aiBtn = [...c.querySelectorAll('button')].find((b) => b.textContent?.includes('AI 新建关卡'))!
     act(() => aiBtn.click())
     const form = c.querySelector('.ai-new-form') as HTMLElement
@@ -65,14 +64,10 @@ describe('LibraryPage AI 新建关卡（批次4）', () => {
     await act(async () => {
       ;[...form.querySelectorAll('button')].find((b) => b.textContent?.includes('创建并让 AI 开工'))!.click()
     })
-    await flushUntil(() => window.location.hash.startsWith('#/edit/'))
-    const newId = window.location.hash.slice('#/edit/'.length)
-    expect(newId).toMatch(/^res_/)
-    const kickoff = JSON.parse(sessionStorage.getItem(`ai-kickoff:${newId}`)!)
-    expect(kickoff).toMatchObject({ docId: newId, prompt: '大三和弦听辨练习，10 题' })
-    // 空关卡已入库
-    const rec = await db.resources.get(newId)
-    expect(rec?.kind).toBe('level')
+    await flushUntil(() => window.location.hash === '#/edit/new')
+    // v4 编辑器在 #/edit/new 首帧展示零代码模板向导，由编辑器首存落库
+    expect(await db.resources.where('kind').equals('level').count()).toBe(0)
+    expect(sessionStorage.getItem('ai-kickoff:new')).toBeNull()
   })
 
   it('空描述：报错不跳转', async () => {

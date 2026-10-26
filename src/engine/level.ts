@@ -93,28 +93,3 @@ export interface ComponentInstance {
   // 历史说明：v3 早期存在 bindings（$q.列 → 组件状态的静态绑定），已被移除（docs/26）；
   // 旧文档由迁移器编译为 set 命令节点后剥离（schema 保留该字段声明以保证装载通畅）
 }
-
-export interface FlowConfig {
-  order?: 'sequential' | 'shuffle'
-  count?: number | null
-  pass?: { expr: string }
-}
-
-export interface LevelDoc {
-  schemaVersion: 3
-  kind: 'level'
-  id: string
-  version: string
-  meta: { title: string; [k: string]: Json }
-  refs?: unknown[]
-  content: {
-    /** 视图清单（≥1；缺省视图 = 首个） */
-    views: ViewDef[]
-    components: ComponentInstance[]
-    /** 关卡逻辑：GraphProgram v2 图 IR（v1 ECA 在装载管线透明迁移） */
-    logic: import('./graphProgram').GraphProgram
-    /** 题目数据表格（v3 取代 questions；q.* = 当前行） */
-    table: DataTable
-    flow?: FlowConfig
-  }
-}

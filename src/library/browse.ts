@@ -2,7 +2,8 @@
  * 浏览组织：把库中的关卡按「被专题引用」与「独立」分区，以及资源库文件夹树。
  */
 import type { LibraryRecord } from './db'
-import { migrateDocToV3 } from '../engine/migrateDoc'
+import type { LevelDocV4 } from '../engine/v4/model'
+import { loadLevelDoc } from './validate'
 
 /** 被任何专题引用过的关卡 id 集合 */
 export function organizedLevelIds(topics: LibraryRecord[]): Set<string> {
@@ -125,13 +126,21 @@ export function filterTree(rows: LibraryTreeRow[], query: string): LibraryTreeRo
 }
 
 /**
- * 读取库记录的关卡文档并迁移到 v3（页面列表直接读原始库记录，可能还是 v1/v2 旧格式）。
- * 迁移失败的毒数据返回 null，调用方降级渲染——绝不让列表页白屏（docs/23 评审 P1-1 同源教训）。
+ * 读取库记录的关卡文档（v4 装载管线）。毒数据返回 null，调用方降级渲染——绝不让列表页白屏。
  */
-export function readLevelDoc(rec: LibraryRecord): import('../engine/level').LevelDoc | null {
-  try {
-    return migrateDocToV3(rec.doc)
-  } catch {
-    return null
+export function readLevelDoc(rec: LibraryRecord): LevelDocV4 | null {
+  const result = loadLevelDoc(rec.doc)
+  return result.ok ? result.doc : null
+}
+
+/** 列表卡片统计（v4）：组件数 = shell 组件 + 各题型表现组件；题数 = 各实例表行数之和 */
+export function levelDocStats(doc: LevelDocV4 | null): { components: number; questions: number } {
+  if (!doc) return { components: 0, questions: 0 }
+  let components = doc.content.shell.components.length
+  let questions = 0
+  for (const type of doc.content.types) {
+    components += type.surface.components.length
+    questions += doc.content.tables[type.id]?.rows.length ?? 0
   }
+  return { components, questions }
 }

@@ -3,7 +3,6 @@
 // 首击」时序错乱的执行器侧根因。修复后：挂起期间不排程，解锁后在 running 时钟上
 // 按音符串时序重排（docs/27 语义不变）。smplr 用 mock 挡住真实采样下载。
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { LevelDoc } from '../engine/level'
 
 interface StartRecord {
   kind: string
@@ -216,7 +215,7 @@ describe('音色透传与预热（首击延迟回归）', () => {
           { id: 'k1', type: 'fingering' },
         ],
       },
-    } as unknown as LevelDoc
+    } as never
     preloadLevelAudio(doc)
     await tick()
     expect(created).toEqual(['piano'])
@@ -229,12 +228,12 @@ describe('音色透传与预热（首击延迟回归）', () => {
     // （vitest 怪癖；浏览器共享同一模块记录无此问题），故不制造并发链
     preloadLevelAudio({
       content: { components: [{ id: 'sound1', type: 'sound', props: { instrument: 'electric-piano' } }] },
-    } as unknown as LevelDoc)
+    } as never)
     await tick()
     expect(created).toEqual(['electric-piano'])
     preloadLevelAudio({
       content: { components: [{ id: 'sound2', type: 'sound', props: { instrument: 'honky-tonk' } }] },
-    } as unknown as LevelDoc)
+    } as never)
     await tick()
     expect(created).toEqual(['electric-piano', 'piano']) // honky-tonk 非法 → piano 兜底
   })

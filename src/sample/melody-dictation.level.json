@@ -1,11 +1,11 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "kind": "level",
   "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A3",
   "version": "1.0.0",
   "meta": {
     "title": "旋律听写 · 键盘输入",
-    "description": "听一段短旋律，在键盘上按顺序弹出它。演示序列播放（seq）、fingering 键盘输入与数组累加判定。",
+    "description": "听一段短旋律，在键盘上按顺序弹出它。演示序列播放、fingering 键盘输入与数组累加判定（v4：题型行为 + 数据行）。",
     "author": {
       "name": "POC 内置示例"
     },
@@ -18,762 +18,550 @@
     "license": "CC0-1.0",
     "difficulty": 3
   },
-  "refs": [],
   "content": {
-    "components": [
-      {
-        "id": "scoreLabel",
-        "type": "label",
-        "name": "得分",
-        "visible": true,
-        "layout": {
-          "x": 40,
-          "y": 20,
-          "w": 300,
-          "h": 40
-        },
-        "props": {
-          "text": "得分: 0"
-        },
-        "view": "main"
-      },
-      {
-        "id": "feedback",
-        "type": "label",
-        "name": "反馈文本",
-        "visible": true,
-        "layout": {
-          "x": 40,
-          "y": 90,
-          "w": 720,
-          "h": 48
-        },
-        "props": {
-          "text": ""
-        },
-        "view": "main"
-      },
-      {
-        "id": "keys1",
-        "type": "fingering",
-        "name": "答题键盘",
-        "visible": true,
-        "layout": {
-          "x": 40,
-          "y": 160,
-          "w": 720,
-          "h": 180
-        },
-        "props": {
-          "lowMidi": 60,
-          "highMidi": 76
-        },
-        "view": "main"
-      },
-      {
-        "id": "listenBtn",
-        "type": "button",
-        "name": "重听",
-        "visible": true,
-        "layout": {
-          "x": 40,
-          "y": 370,
-          "w": 140,
-          "h": 48
-        },
-        "props": {
-          "text": "🔊 重听",
-          "enabled": true
-        },
-        "view": "main"
-      },
-      {
-        "id": "resetBtn",
-        "type": "button",
-        "name": "清空重输",
-        "visible": true,
-        "layout": {
-          "x": 200,
-          "y": 370,
-          "w": 140,
-          "h": 48
-        },
-        "props": {
-          "text": "↺ 清空",
-          "enabled": true
-        },
-        "view": "main"
-      },
-      {
-        "id": "nextBtn",
-        "type": "button",
-        "name": "下一题",
-        "visible": true,
-        "layout": {
-          "x": 620,
-          "y": 370,
-          "w": 140,
-          "h": 48
-        },
-        "props": {
-          "text": "下一题 →",
-          "enabled": false
-        },
-        "view": "main"
-      },
-      {
-        "id": "sound1",
-        "type": "sound",
-        "name": "发声器",
-        "visible": false,
-        "view": "main"
-      }
-    ],
-    "logic": {
-      "logicVersion": 2,
-      "variables": {
-        "score": 0,
-        "typed": [],
-        "done": false,
-        "__row": null,
-        "answered": null
-      },
-      "nodes": [
+    "shell": {
+      "views": [
         {
-          "id": "q0_load",
-          "kind": "on",
-          "event": "question.loaded"
+          "id": "main",
+          "name": "主视图"
         },
         {
-          "id": "q0_gate",
-          "kind": "branch",
-          "cond": "v.__row == 0"
-        },
-        {
-          "id": "q0_var_answered",
-          "kind": "assign",
-          "target": "answered",
-          "value": {
-            "expr": "false"
-          }
-        },
-        {
-          "id": "q1_load",
-          "kind": "on",
-          "event": "question.loaded"
-        },
-        {
-          "id": "q1_gate",
-          "kind": "branch",
-          "cond": "v.__row == 1"
-        },
-        {
-          "id": "q1_var_answered",
-          "kind": "assign",
-          "target": "answered",
-          "value": {
-            "expr": "false"
-          }
-        },
-        {
-          "id": "q2_load",
-          "kind": "on",
-          "event": "question.loaded"
-        },
-        {
-          "id": "q2_gate",
-          "kind": "branch",
-          "cond": "v.__row == 2"
-        },
-        {
-          "id": "q2_var_answered",
-          "kind": "assign",
-          "target": "answered",
-          "value": {
-            "expr": "false"
-          }
-        },
-        {
-          "id": "load-question_on",
-          "kind": "on",
-          "event": "question.loaded"
-        },
-        {
-          "id": "load-question_d0",
-          "kind": "call",
-          "target": "sound1",
-          "method": "play",
-          "args": [
-            "{ notes: q.data.listenNotes, mode: 'seq', tempo: 90 }"
-          ]
-        },
-        {
-          "id": "load-question_d1",
-          "kind": "call",
-          "target": "keys1",
-          "method": "clear",
-          "args": []
-        },
-        {
-          "id": "load-question_d2",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: false}"
-          ]
-        },
-        {
-          "id": "load-question_d3",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '听旋律，在键盘上按顺序弹出它', tone: 'info'}"
-          ]
-        },
-        {
-          "id": "replay_on",
-          "kind": "on",
-          "event": "listenBtn.clicked"
-        },
-        {
-          "id": "replay_d0",
-          "kind": "call",
-          "target": "sound1",
-          "method": "play",
-          "args": [
-            "{ notes: q.data.listenNotes, mode: 'seq', tempo: 90 }"
-          ]
-        },
-        {
-          "id": "reset-input_on",
-          "kind": "on",
-          "event": "resetBtn.clicked"
-        },
-        {
-          "id": "reset-input_d0",
-          "kind": "assign",
-          "target": "typed",
-          "value": {
-            "expr": "[]"
-          }
-        },
-        {
-          "id": "reset-input_d1",
-          "kind": "call",
-          "target": "keys1",
-          "method": "clear",
-          "args": []
-        },
-        {
-          "id": "reset-input_d2",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '已清空，重新输入', tone: 'info'}"
-          ]
-        },
-        {
-          "id": "collect-key_on",
-          "kind": "on",
-          "event": "keys1.keyClicked"
-        },
-        {
-          "id": "collect-key_cond",
-          "kind": "branch",
-          "cond": "(!v.answered)"
-        },
-        {
-          "id": "collect-key_d0",
-          "kind": "assign",
-          "target": "typed",
-          "value": {
-            "expr": "append(v.typed, event.midi)"
-          }
-        },
-        {
-          "id": "judge-when-full_on",
-          "kind": "on",
-          "event": "keys1.keyClicked"
-        },
-        {
-          "id": "judge-when-full_cond",
-          "kind": "branch",
-          "cond": "(!v.answered) && (len(v.typed) == len(q.data.answerSeq))"
-        },
-        {
-          "id": "judge-when-full_d0",
-          "kind": "emit",
-          "event": "dict:judge"
-        },
-        {
-          "id": "judged_on",
-          "kind": "on",
-          "event": "dict:judge"
-        },
-        {
-          "id": "judged_cond",
-          "kind": "branch",
-          "cond": "(!v.answered) && (join(v.typed, ',') == join(q.data.answerSeq, ','))"
-        },
-        {
-          "id": "judged_d0",
-          "kind": "assign",
-          "target": "answered",
-          "value": {
-            "expr": "true"
-          }
-        },
-        {
-          "id": "judged_d1",
-          "kind": "call",
-          "target": "sound1",
-          "method": "play",
-          "args": [
-            "{ notes: q.data.rewardChord, mode: 'seq', tempo: 120 }"
-          ]
-        },
-        {
-          "id": "judged_d2",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '完全正确！', tone: 'success'}"
-          ]
-        },
-        {
-          "id": "judged_d3",
-          "kind": "assign",
-          "target": "score",
-          "value": {
-            "expr": "v.score + q.scoring"
-          }
-        },
-        {
-          "id": "judged_d4",
-          "kind": "call",
-          "target": "scoreLabel",
-          "method": "show",
-          "args": [
-            "{text: '得分: ' + v.score, tone: 'success'}"
-          ]
-        },
-        {
-          "id": "judged_d5",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: true}"
-          ]
-        },
-        {
-          "id": "judged_e0",
-          "kind": "call",
-          "target": "sound1",
-          "method": "play",
-          "args": [
-            "{ notes: q.data.wrongBuzz, mode: 'chord' }"
-          ]
-        },
-        {
-          "id": "judged_e1",
-          "kind": "call",
-          "target": "keys1",
-          "method": "clear",
-          "args": []
-        },
-        {
-          "id": "judged_e2",
-          "kind": "assign",
-          "target": "typed",
-          "value": {
-            "expr": "[]"
-          }
-        },
-        {
-          "id": "judged_e3",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '顺序不对，点「🔊 重听」再试', tone: 'error'}"
-          ]
-        },
-        {
-          "id": "next-or-restart_on",
-          "kind": "on",
-          "event": "nextBtn.clicked"
-        },
-        {
-          "id": "next-or-restart_cond",
-          "kind": "branch",
-          "cond": "(!v.done)"
-        },
-        {
-          "id": "next-or-restart_d0",
-          "kind": "call",
-          "target": "question",
-          "method": "next",
-          "args": []
-        },
-        {
-          "id": "next-or-restart_e0",
-          "kind": "call",
-          "target": "level",
-          "method": "restart",
-          "args": []
-        },
-        {
-          "id": "on-finish_on",
-          "kind": "on",
-          "event": "level.finished"
-        },
-        {
-          "id": "on-finish_cond",
-          "kind": "branch",
-          "cond": "(event.passed)"
-        },
-        {
-          "id": "on-finish_d0",
-          "kind": "assign",
-          "target": "done",
-          "value": {
-            "expr": "true"
-          }
-        },
-        {
-          "id": "on-finish_d1",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '完成！得分 ' + v.score + ' 🎉 耳朵不错', tone: 'success'}"
-          ]
-        },
-        {
-          "id": "on-finish_d2",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setText",
-          "args": [
-            "{text: '重新开始'}"
-          ]
-        },
-        {
-          "id": "on-finish_d3",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: true}"
-          ]
-        },
-        {
-          "id": "on-finish_e0",
-          "kind": "assign",
-          "target": "done",
-          "value": {
-            "expr": "true"
-          }
-        },
-        {
-          "id": "on-finish_e1",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '完成！得分 ' + v.score + '，再练一次', tone: 'info'}"
-          ]
-        },
-        {
-          "id": "on-finish_e2",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setText",
-          "args": [
-            "{text: '重新开始'}"
-          ]
-        },
-        {
-          "id": "on-finish_e3",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: true}"
-          ]
+          "id": "settled",
+          "name": "结算视图"
         }
       ],
-      "edges": [
+      "components": [
         {
-          "id": "m1",
-          "from": "load-question_d0",
-          "to": "load-question_d1"
+          "id": "titleLabel",
+          "type": "label",
+          "name": "关卡标题",
+          "view": "main",
+          "layout": {
+            "x": 24,
+            "y": 12,
+            "w": 536,
+            "h": 28
+          },
+          "props": {
+            "text": "旋律听写 · 键盘输入"
+          }
         },
         {
-          "id": "m2",
-          "from": "load-question_d1",
-          "to": "load-question_d2"
+          "id": "scoreLabel",
+          "type": "label",
+          "name": "得分",
+          "view": "main",
+          "layout": {
+            "x": 600,
+            "y": 12,
+            "w": 176,
+            "h": 28
+          },
+          "bindings": {
+            "text": "'得分 ' + v.score"
+          }
         },
         {
-          "id": "m3",
-          "from": "load-question_d2",
-          "to": "load-question_d3"
+          "id": "progressLabel",
+          "type": "label",
+          "name": "进度",
+          "view": "main",
+          "layout": {
+            "x": 24,
+            "y": 42,
+            "w": 536,
+            "h": 24
+          },
+          "bindings": {
+            "text": "'进度 ' + v.row + ' / ' + run.total"
+          }
         },
         {
-          "id": "m4",
-          "from": "load-question_on",
-          "to": "load-question_d0"
-        },
-        {
-          "id": "m5",
-          "from": "replay_on",
-          "to": "replay_d0"
-        },
-        {
-          "id": "m6",
-          "from": "reset-input_d0",
-          "to": "reset-input_d1"
-        },
-        {
-          "id": "m7",
-          "from": "reset-input_d1",
-          "to": "reset-input_d2"
-        },
-        {
-          "id": "m8",
-          "from": "reset-input_on",
-          "to": "reset-input_d0"
-        },
-        {
-          "id": "m9",
-          "from": "collect-key_on",
-          "to": "collect-key_cond"
-        },
-        {
-          "id": "m10",
-          "from": "collect-key_cond",
-          "to": "collect-key_d0",
-          "port": "true"
-        },
-        {
-          "id": "m11",
-          "from": "judge-when-full_on",
-          "to": "judge-when-full_cond"
-        },
-        {
-          "id": "m12",
-          "from": "judge-when-full_cond",
-          "to": "judge-when-full_d0",
-          "port": "true"
-        },
-        {
-          "id": "m13",
-          "from": "judged_on",
-          "to": "judged_cond"
-        },
-        {
-          "id": "m14",
-          "from": "judged_d0",
-          "to": "judged_d1"
-        },
-        {
-          "id": "m15",
-          "from": "judged_d1",
-          "to": "judged_d2"
-        },
-        {
-          "id": "m16",
-          "from": "judged_d2",
-          "to": "judged_d3"
-        },
-        {
-          "id": "m17",
-          "from": "judged_d3",
-          "to": "judged_d4"
-        },
-        {
-          "id": "m18",
-          "from": "judged_d4",
-          "to": "judged_d5"
-        },
-        {
-          "id": "m19",
-          "from": "judged_cond",
-          "to": "judged_d0",
-          "port": "true"
-        },
-        {
-          "id": "m20",
-          "from": "judged_e0",
-          "to": "judged_e1"
-        },
-        {
-          "id": "m21",
-          "from": "judged_e1",
-          "to": "judged_e2"
-        },
-        {
-          "id": "m22",
-          "from": "judged_e2",
-          "to": "judged_e3"
-        },
-        {
-          "id": "m23",
-          "from": "judged_cond",
-          "to": "judged_e0",
-          "port": "false"
-        },
-        {
-          "id": "m24",
-          "from": "next-or-restart_on",
-          "to": "next-or-restart_cond"
-        },
-        {
-          "id": "m25",
-          "from": "next-or-restart_cond",
-          "to": "next-or-restart_d0",
-          "port": "true"
-        },
-        {
-          "id": "m26",
-          "from": "next-or-restart_cond",
-          "to": "next-or-restart_e0",
-          "port": "false"
-        },
-        {
-          "id": "m27",
-          "from": "on-finish_on",
-          "to": "on-finish_cond"
-        },
-        {
-          "id": "m28",
-          "from": "on-finish_d0",
-          "to": "on-finish_d1"
-        },
-        {
-          "id": "m29",
-          "from": "on-finish_d1",
-          "to": "on-finish_d2"
-        },
-        {
-          "id": "m30",
-          "from": "on-finish_d2",
-          "to": "on-finish_d3"
-        },
-        {
-          "id": "m31",
-          "from": "on-finish_cond",
-          "to": "on-finish_d0",
-          "port": "true"
-        },
-        {
-          "id": "m32",
-          "from": "on-finish_e0",
-          "to": "on-finish_e1"
-        },
-        {
-          "id": "m33",
-          "from": "on-finish_e1",
-          "to": "on-finish_e2"
-        },
-        {
-          "id": "m34",
-          "from": "on-finish_e2",
-          "to": "on-finish_e3"
-        },
-        {
-          "id": "m35",
-          "from": "on-finish_cond",
-          "to": "on-finish_e0",
-          "port": "false"
-        },
-        {
-          "id": "e_p1",
-          "from": "q0_load",
-          "to": "q0_gate"
-        },
-        {
-          "id": "e_p2",
-          "from": "q0_gate",
-          "to": "q0_var_answered",
-          "port": "true"
-        },
-        {
-          "id": "e_p3",
-          "from": "q1_load",
-          "to": "q1_gate"
-        },
-        {
-          "id": "e_p4",
-          "from": "q1_gate",
-          "to": "q1_var_answered",
-          "port": "true"
-        },
-        {
-          "id": "e_p5",
-          "from": "q2_load",
-          "to": "q2_gate"
-        },
-        {
-          "id": "e_p6",
-          "from": "q2_gate",
-          "to": "q2_var_answered",
-          "port": "true"
+          "id": "settledLabel",
+          "type": "label",
+          "name": "结算文本",
+          "view": "settled",
+          "layout": {
+            "x": 200,
+            "y": 110,
+            "w": 400,
+            "h": 48
+          },
+          "bindings": {
+            "text": "'本关得分 ' + v.score"
+          }
         }
       ]
     },
-    "flow": {
-      "order": "sequential",
-      "count": null,
-      "pass": {
-        "expr": "v.score >= 20"
-      }
-    },
-    "views": [
+    "types": [
       {
-        "id": "main",
-        "name": "主视图"
+        "id": "keyboard-melody",
+        "name": "键盘旋律听写",
+        "surface": {
+          "components": [
+            {
+              "id": "prompt",
+              "type": "label",
+              "name": "题面",
+              "layout": {
+                "x": 24,
+                "y": 16,
+                "w": 552,
+                "h": 32
+              },
+              "bindings": {
+                "text": "q.prompt"
+              }
+            },
+            {
+              "id": "listenBtn",
+              "type": "button",
+              "name": "重听",
+              "layout": {
+                "x": 600,
+                "y": 16,
+                "w": 176,
+                "h": 36
+              },
+              "props": {
+                "text": "🔊 重听"
+              }
+            },
+            {
+              "id": "feedback",
+              "type": "label",
+              "name": "反馈",
+              "layout": {
+                "x": 24,
+                "y": 60,
+                "w": 752,
+                "h": 36
+              },
+              "props": {
+                "text": ""
+              }
+            },
+            {
+              "id": "keys1",
+              "type": "fingering",
+              "name": "键盘",
+              "layout": {
+                "x": 24,
+                "y": 110,
+                "w": 752,
+                "h": 190
+              },
+              "props": {
+                "lowMidi": 60,
+                "highMidi": 76
+              }
+            },
+            {
+              "id": "resetBtn",
+              "type": "button",
+              "name": "清空",
+              "layout": {
+                "x": 24,
+                "y": 320,
+                "w": 176,
+                "h": 44
+              },
+              "props": {
+                "text": "↺ 清空"
+              }
+            },
+            {
+              "id": "sound1",
+              "type": "sound",
+              "name": "发声器"
+            }
+          ]
+        },
+        "behavior": {
+          "logicVersion": 3,
+          "kind": "behavior",
+          "nodes": [
+            {
+              "id": "b_onStart",
+              "kind": "on",
+              "event": "start"
+            },
+            {
+              "id": "b_initNotes",
+              "kind": "assign",
+              "target": "local.notes",
+              "value": {
+                "expr": "[]"
+              }
+            },
+            {
+              "id": "b_playListen",
+              "kind": "call",
+              "target": "sound1",
+              "method": "play",
+              "arg": "{ notes: q.listenNotes }"
+            },
+            {
+              "id": "b_start_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_start_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onReplay",
+              "kind": "on",
+              "event": "listenBtn.clicked"
+            },
+            {
+              "id": "b_playReplay",
+              "kind": "call",
+              "target": "sound1",
+              "method": "play",
+              "arg": "{ notes: q.listenNotes }"
+            },
+            {
+              "id": "b_replay_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_replay_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onReset",
+              "kind": "on",
+              "event": "resetBtn.clicked"
+            },
+            {
+              "id": "b_clearNotes",
+              "kind": "assign",
+              "target": "local.notes",
+              "value": {
+                "expr": "[]"
+              }
+            },
+            {
+              "id": "b_clearKeys",
+              "kind": "call",
+              "target": "keys1",
+              "method": "clear"
+            },
+            {
+              "id": "b_feedbackReset",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '已清空，重新弹一遍。', tone: 'info' }"
+            },
+            {
+              "id": "b_reset_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_reset_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onKey",
+              "kind": "on",
+              "event": "keys1.keyClicked"
+            },
+            {
+              "id": "b_key_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_key_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: q.scoring }"
+            },
+            {
+              "id": "b_pushNote",
+              "kind": "assign",
+              "target": "local.notes",
+              "value": {
+                "expr": "append(local.notes, event.payload.midi)"
+              }
+            },
+            {
+              "id": "b_isDone",
+              "kind": "branch",
+              "cond": "join(local.notes, ',') == join(q.targetNotes, ',')"
+            },
+            {
+              "id": "b_markAnswered",
+              "kind": "assign",
+              "target": "q.state.answered",
+              "value": {
+                "expr": "true"
+              }
+            },
+            {
+              "id": "b_reward",
+              "kind": "call",
+              "target": "sound1",
+              "method": "play",
+              "arg": "{ notes: q.rewardChord }"
+            },
+            {
+              "id": "b_feedbackOk",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '旋律完全正确！', tone: 'success' }"
+            },
+            {
+              "id": "b_retOk",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: q.scoring }"
+            },
+            {
+              "id": "b_isFull",
+              "kind": "branch",
+              "cond": "len(local.notes) >= len(q.targetNotes)"
+            },
+            {
+              "id": "b_resetNotes",
+              "kind": "assign",
+              "target": "local.notes",
+              "value": {
+                "expr": "[]"
+              }
+            },
+            {
+              "id": "b_countAttempts",
+              "kind": "assign",
+              "target": "t.attempts",
+              "value": {
+                "expr": "t.attempts + 1"
+              }
+            },
+            {
+              "id": "b_resetKeys",
+              "kind": "call",
+              "target": "keys1",
+              "method": "clear"
+            },
+            {
+              "id": "b_feedbackBad",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '旋律不对，重听一遍再弹。', tone: 'error' }"
+            },
+            {
+              "id": "b_comment",
+              "kind": "comment",
+              "text": "逐音累积 + 弹满自动判定；答错清空重来（预设「答错可重试」）"
+            }
+          ],
+          "edges": [
+            {
+              "id": "e_b_onStart_b_initNotes",
+              "from": "b_onStart",
+              "to": "b_initNotes"
+            },
+            {
+              "id": "e_b_initNotes_b_playListen",
+              "from": "b_initNotes",
+              "to": "b_playListen"
+            },
+            {
+              "id": "e_b_playListen_b_start_guard",
+              "from": "b_playListen",
+              "to": "b_start_guard"
+            },
+            {
+              "id": "e_b_start_guard_b_start_guard_ret_true",
+              "from": "b_start_guard",
+              "to": "b_start_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onReplay_b_playReplay",
+              "from": "b_onReplay",
+              "to": "b_playReplay"
+            },
+            {
+              "id": "e_b_playReplay_b_replay_guard",
+              "from": "b_playReplay",
+              "to": "b_replay_guard"
+            },
+            {
+              "id": "e_b_replay_guard_b_replay_guard_ret_true",
+              "from": "b_replay_guard",
+              "to": "b_replay_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onReset_b_clearNotes",
+              "from": "b_onReset",
+              "to": "b_clearNotes"
+            },
+            {
+              "id": "e_b_clearNotes_b_clearKeys",
+              "from": "b_clearNotes",
+              "to": "b_clearKeys"
+            },
+            {
+              "id": "e_b_clearKeys_b_feedbackReset",
+              "from": "b_clearKeys",
+              "to": "b_feedbackReset"
+            },
+            {
+              "id": "e_b_feedbackReset_b_reset_guard",
+              "from": "b_feedbackReset",
+              "to": "b_reset_guard"
+            },
+            {
+              "id": "e_b_reset_guard_b_reset_guard_ret_true",
+              "from": "b_reset_guard",
+              "to": "b_reset_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onKey_b_key_guard",
+              "from": "b_onKey",
+              "to": "b_key_guard"
+            },
+            {
+              "id": "e_b_key_guard_b_pushNote_false",
+              "from": "b_key_guard",
+              "to": "b_pushNote",
+              "port": "false"
+            },
+            {
+              "id": "e_b_key_guard_b_key_guard_ret_true",
+              "from": "b_key_guard",
+              "to": "b_key_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_pushNote_b_isDone",
+              "from": "b_pushNote",
+              "to": "b_isDone"
+            },
+            {
+              "id": "e_b_isDone_b_markAnswered_true",
+              "from": "b_isDone",
+              "to": "b_markAnswered",
+              "port": "true"
+            },
+            {
+              "id": "e_b_markAnswered_b_reward",
+              "from": "b_markAnswered",
+              "to": "b_reward"
+            },
+            {
+              "id": "e_b_reward_b_feedbackOk",
+              "from": "b_reward",
+              "to": "b_feedbackOk"
+            },
+            {
+              "id": "e_b_feedbackOk_b_retOk",
+              "from": "b_feedbackOk",
+              "to": "b_retOk"
+            },
+            {
+              "id": "e_b_isDone_b_isFull_false",
+              "from": "b_isDone",
+              "to": "b_isFull",
+              "port": "false"
+            },
+            {
+              "id": "e_b_isFull_b_resetNotes_true",
+              "from": "b_isFull",
+              "to": "b_resetNotes",
+              "port": "true"
+            },
+            {
+              "id": "e_b_resetNotes_b_countAttempts",
+              "from": "b_resetNotes",
+              "to": "b_countAttempts"
+            },
+            {
+              "id": "e_b_countAttempts_b_resetKeys",
+              "from": "b_countAttempts",
+              "to": "b_resetKeys"
+            },
+            {
+              "id": "e_b_resetKeys_b_feedbackBad",
+              "from": "b_resetKeys",
+              "to": "b_feedbackBad"
+            }
+          ],
+          "locals": [
+            {
+              "key": "notes",
+              "type": "json",
+              "init": []
+            }
+          ]
+        },
+        "description": "听旋律并在键盘上按序弹出：演示 fingering.keyClicked 事件、append 累积与数组判定。",
+        "state": [
+          {
+            "key": "answered",
+            "type": "boolean",
+            "init": false
+          }
+        ],
+        "typeState": [
+          {
+            "key": "attempts",
+            "type": "number",
+            "init": 0
+          }
+        ]
       }
     ],
-    "table": {
-      "columns": [
-        {
-          "key": "prompt",
-          "label": "题面",
-          "type": "json"
-        },
-        {
-          "key": "data",
-          "label": "数据",
-          "type": "json"
-        },
-        {
-          "key": "scoring",
-          "label": "分值",
-          "type": "number"
-        },
-        {
-          "key": "hints",
-          "label": "提示",
-          "type": "json"
-        },
-        {
-          "key": "explanation",
-          "label": "解析",
-          "type": "text"
-        }
-      ],
-      "rows": [
-        {
-          "prompt": {
-            "text": "听旋律，在键盘上弹出它（C-D-E）"
+    "tables": {
+      "keyboard-melody": {
+        "columns": [
+          {
+            "key": "prompt",
+            "label": "题面",
+            "type": "text"
           },
-          "data": {
+          {
+            "key": "listenNotes",
+            "label": "听音",
+            "type": "notes"
+          },
+          {
+            "key": "targetNotes",
+            "label": "目标音高序列",
+            "type": "json"
+          },
+          {
+            "key": "rewardChord",
+            "label": "答对音效",
+            "type": "notes"
+          },
+          {
+            "key": "wrongBuzz",
+            "label": "答错音效",
+            "type": "notes"
+          },
+          {
+            "key": "scoring",
+            "label": "分值",
+            "type": "number"
+          }
+        ],
+        "rows": [
+          {
+            "id": "row_cde",
+            "prompt": "听旋律，在键盘上弹出它（C-D-E）",
             "listenNotes": [
               {
                 "midi": 60,
@@ -788,7 +576,7 @@
                 "dur": "2n"
               }
             ],
-            "answerSeq": [
+            "targetNotes": [
               60,
               62,
               64
@@ -812,21 +600,12 @@
                 "midi": 43,
                 "dur": "8n"
               }
-            ]
+            ],
+            "scoring": 10
           },
-          "scoring": 10,
-          "hints": [
-            {
-              "text": "do re mi，三个音都在白键上"
-            }
-          ],
-          "explanation": "C4-D4-E4，级进上行。"
-        },
-        {
-          "prompt": {
-            "text": "听旋律，在键盘上弹出它（有一个跳进）"
-          },
-          "data": {
+          {
+            "id": "row_ceg",
+            "prompt": "听旋律，在键盘上弹出它（有一个跳进）",
             "listenNotes": [
               {
                 "midi": 60,
@@ -841,7 +620,7 @@
                 "dur": "2n"
               }
             ],
-            "answerSeq": [
+            "targetNotes": [
               60,
               64,
               67
@@ -865,21 +644,12 @@
                 "midi": 43,
                 "dur": "8n"
               }
-            ]
+            ],
+            "scoring": 10
           },
-          "scoring": 10,
-          "hints": [
-            {
-              "text": "do mi sol，三度跳进"
-            }
-          ],
-          "explanation": "C4-E4-G4，主和弦分解上行。"
-        },
-        {
-          "prompt": {
-            "text": "听旋律，在键盘上弹出它"
-          },
-          "data": {
+          {
+            "id": "row_ega",
+            "prompt": "听旋律，在键盘上弹出它",
             "listenNotes": [
               {
                 "midi": 64,
@@ -894,7 +664,7 @@
                 "dur": "2n"
               }
             ],
-            "answerSeq": [
+            "targetNotes": [
               64,
               67,
               69
@@ -915,15 +685,120 @@
                 "midi": 43,
                 "dur": "8n"
               }
-            ]
-          },
-          "scoring": 10,
-          "hints": [
-            {
-              "text": "从 mi 开始：mi sol la"
-            }
-          ],
-          "explanation": "E4-G4-A4。"
+            ],
+            "scoring": 10
+          }
+        ]
+      }
+    },
+    "run": {
+      "order": "manifest",
+      "count": null,
+      "seed": null,
+      "shuffleWithinPhase": true
+    },
+    "flow": {
+      "logicVersion": 3,
+      "kind": "flow",
+      "nodes": [
+        {
+          "id": "f_start",
+          "kind": "start"
+        },
+        {
+          "id": "f_each",
+          "kind": "foreach",
+          "items": "run.questions",
+          "itemVar": "slot",
+          "indexVar": "index"
+        },
+        {
+          "id": "f_ask",
+          "kind": "ask",
+          "target": "local.slot",
+          "resultVar": "result"
+        },
+        {
+          "id": "f_addScore",
+          "kind": "assign",
+          "target": "v.score",
+          "value": {
+            "expr": "v.score + (local.result.scoreDelta || 0)"
+          }
+        },
+        {
+          "id": "f_setRow",
+          "kind": "assign",
+          "target": "v.row",
+          "value": {
+            "expr": "local.index + 1"
+          }
+        },
+        {
+          "id": "f_settled",
+          "kind": "setView",
+          "view": "settled"
+        },
+        {
+          "id": "f_finish",
+          "kind": "finish",
+          "passed": "v.score >= 20"
+        },
+        {
+          "id": "f_comment",
+          "kind": "comment",
+          "text": "预设：顺序遍历题单 → 每题一次 ask → 应用 scoreDelta → 切结算视图 → 结算（数据增删不需要改本图）"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_f_start_f_each",
+          "from": "f_start",
+          "to": "f_each"
+        },
+        {
+          "id": "e_f_each_f_ask_true",
+          "from": "f_each",
+          "to": "f_ask",
+          "port": "true"
+        },
+        {
+          "id": "e_f_ask_f_addScore",
+          "from": "f_ask",
+          "to": "f_addScore"
+        },
+        {
+          "id": "e_f_addScore_f_setRow",
+          "from": "f_addScore",
+          "to": "f_setRow"
+        },
+        {
+          "id": "e_f_setRow_f_each",
+          "from": "f_setRow",
+          "to": "f_each"
+        },
+        {
+          "id": "e_f_each_f_settled_false",
+          "from": "f_each",
+          "to": "f_settled",
+          "port": "false"
+        },
+        {
+          "id": "e_f_settled_f_finish",
+          "from": "f_settled",
+          "to": "f_finish"
+        }
+      ],
+      "vars": [
+        {
+          "key": "score",
+          "type": "number",
+          "init": 0
+        },
+        {
+          "key": "row",
+          "type": "number",
+          "init": 0
         }
       ]
     }

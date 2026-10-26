@@ -24,7 +24,6 @@ import {
   type SeriesDoc,
   type TopicDoc,
 } from '../library/manage'
-import { blankLevelDoc } from '../editor/docState'
 import { EDITOR_HOOKS } from '../editor/editorHooks'
 import { getAccountSnapshot, subscribeAccount } from '../account/store'
 import { uploadLibraryFolder, uploadLibraryLevel } from '../cloud/api'
@@ -124,13 +123,8 @@ export function LibraryPage() {
 
   async function handleNew(): Promise<void> {
     setError('')
-    try {
-      const doc = blankLevelDoc()
-      await putResource(doc as never)
-      window.location.hash = `#/edit/${doc.id}`
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
+    // W9：v4 编辑器自带零代码模板向导（#/edit/new 首帧展示模板选择条）
+    window.location.hash = '#/edit/new'
   }
 
   /** 输入名称的公共前置：取消返回 null；空串报错返回 null */
@@ -266,15 +260,8 @@ export function LibraryPage() {
       return
     }
     setError('')
-    try {
-      const doc = blankLevelDoc()
-      await putResource(doc as never)
-      // 按 docId 键控（docs/40 C6）：单槽键在连续创建两个 AI 关卡时会被后一个覆盖
-      sessionStorage.setItem(`ai-kickoff:${doc.id}`, JSON.stringify({ docId: doc.id, prompt }))
-      window.location.hash = `#/edit/${doc.id}`
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
+    // W9：进入 v4 编辑器新建向导（模板选择在编辑器首帧展示）；AI 面板在编辑器内随时可开
+    window.location.hash = '#/edit/new'
   }
 
   // meta.featured 的内置资源置顶展示（教程/示例；其余按入库时间）

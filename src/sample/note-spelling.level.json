@@ -1,11 +1,11 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "kind": "level",
   "id": "res_01J9A0A0A0A0A0A0A0A0A0A0A5",
   "version": "1.0.0",
   "meta": {
     "title": "音名拼写 · 输入框作答",
-    "description": "听和弦，用音名拼写它并回车提交。演示 input 组件与大小写无关的文本判定。",
+    "description": "听和弦，用音名拼写它并回车提交。演示 input 组件与大小写无关的文本判定（含 aliases 兜底与提示）。",
     "author": {
       "name": "POC 内置示例"
     },
@@ -18,635 +18,442 @@
     "license": "CC0-1.0",
     "difficulty": 2
   },
-  "refs": [],
   "content": {
-    "components": [
-      {
-        "id": "scoreLabel",
-        "type": "label",
-        "name": "得分",
-        "visible": true,
-        "layout": {
-          "x": 40,
-          "y": 20,
-          "w": 300,
-          "h": 40
-        },
-        "props": {
-          "text": "得分: 0"
-        },
-        "view": "main"
-      },
-      {
-        "id": "feedback",
-        "type": "label",
-        "name": "反馈文本",
-        "visible": true,
-        "layout": {
-          "x": 40,
-          "y": 100,
-          "w": 720,
-          "h": 48
-        },
-        "props": {
-          "text": ""
-        },
-        "view": "main"
-      },
-      {
-        "id": "input1",
-        "type": "input",
-        "name": "答案输入框",
-        "visible": true,
-        "layout": {
-          "x": 40,
-          "y": 180,
-          "w": 400,
-          "h": 56
-        },
-        "props": {
-          "placeholder": "如 CEG，回车提交"
-        },
-        "view": "main"
-      },
-      {
-        "id": "listenBtn",
-        "type": "button",
-        "name": "重听",
-        "visible": true,
-        "layout": {
-          "x": 40,
-          "y": 280,
-          "w": 140,
-          "h": 48
-        },
-        "props": {
-          "text": "🔊 重听",
-          "enabled": true
-        },
-        "view": "main"
-      },
-      {
-        "id": "nextBtn",
-        "type": "button",
-        "name": "下一题",
-        "visible": true,
-        "layout": {
-          "x": 620,
-          "y": 280,
-          "w": 140,
-          "h": 48
-        },
-        "props": {
-          "text": "下一题 →",
-          "enabled": false
-        },
-        "view": "main"
-      },
-      {
-        "id": "sound1",
-        "type": "sound",
-        "name": "发声器",
-        "visible": false,
-        "view": "main"
-      }
-    ],
-    "logic": {
-      "logicVersion": 2,
-      "variables": {
-        "score": 0,
-        "done": false,
-        "__row": null,
-        "answered": null
-      },
-      "nodes": [
+    "shell": {
+      "views": [
         {
-          "id": "q0_load",
-          "kind": "on",
-          "event": "question.loaded"
+          "id": "main",
+          "name": "主视图"
         },
         {
-          "id": "q0_gate",
-          "kind": "branch",
-          "cond": "v.__row == 0"
-        },
-        {
-          "id": "q0_var_answered",
-          "kind": "assign",
-          "target": "answered",
-          "value": {
-            "expr": "false"
-          }
-        },
-        {
-          "id": "q1_load",
-          "kind": "on",
-          "event": "question.loaded"
-        },
-        {
-          "id": "q1_gate",
-          "kind": "branch",
-          "cond": "v.__row == 1"
-        },
-        {
-          "id": "q1_var_answered",
-          "kind": "assign",
-          "target": "answered",
-          "value": {
-            "expr": "false"
-          }
-        },
-        {
-          "id": "q2_load",
-          "kind": "on",
-          "event": "question.loaded"
-        },
-        {
-          "id": "q2_gate",
-          "kind": "branch",
-          "cond": "v.__row == 2"
-        },
-        {
-          "id": "q2_var_answered",
-          "kind": "assign",
-          "target": "answered",
-          "value": {
-            "expr": "false"
-          }
-        },
-        {
-          "id": "load-question_on",
-          "kind": "on",
-          "event": "question.loaded"
-        },
-        {
-          "id": "load-question_d0",
-          "kind": "call",
-          "target": "sound1",
-          "method": "play",
-          "args": [
-            "{ notes: q.data.listenNotes, mode: 'chord' }"
-          ]
-        },
-        {
-          "id": "load-question_d1",
-          "kind": "call",
-          "target": "input1",
-          "method": "clear",
-          "args": []
-        },
-        {
-          "id": "load-question_d2",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: false}"
-          ]
-        },
-        {
-          "id": "load-question_d3",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '听和弦，用音名拼写它（回车提交）', tone: 'info'}"
-          ]
-        },
-        {
-          "id": "replay_on",
-          "kind": "on",
-          "event": "listenBtn.clicked"
-        },
-        {
-          "id": "replay_d0",
-          "kind": "call",
-          "target": "sound1",
-          "method": "play",
-          "args": [
-            "{ notes: q.data.listenNotes, mode: 'chord' }"
-          ]
-        },
-        {
-          "id": "judge-correct_on",
-          "kind": "on",
-          "event": "input1.submitted"
-        },
-        {
-          "id": "judge-correct_cond",
-          "kind": "branch",
-          "cond": "(!v.answered) && (upper(event.value) == q.data.answer)"
-        },
-        {
-          "id": "judge-correct_d0",
-          "kind": "assign",
-          "target": "answered",
-          "value": {
-            "expr": "true"
-          }
-        },
-        {
-          "id": "judge-correct_d1",
-          "kind": "call",
-          "target": "sound1",
-          "method": "play",
-          "args": [
-            "{ notes: q.data.rewardChord, mode: 'chord' }"
-          ]
-        },
-        {
-          "id": "judge-correct_d2",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '拼对了！', tone: 'success'}"
-          ]
-        },
-        {
-          "id": "judge-correct_d3",
-          "kind": "assign",
-          "target": "score",
-          "value": {
-            "expr": "v.score + q.scoring"
-          }
-        },
-        {
-          "id": "judge-correct_d4",
-          "kind": "call",
-          "target": "scoreLabel",
-          "method": "show",
-          "args": [
-            "{text: '得分: ' + v.score, tone: 'success'}"
-          ]
-        },
-        {
-          "id": "judge-correct_d5",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: true}"
-          ]
-        },
-        {
-          "id": "judge-wrong_on",
-          "kind": "on",
-          "event": "input1.submitted"
-        },
-        {
-          "id": "judge-wrong_cond",
-          "kind": "branch",
-          "cond": "(!v.answered) && (!(upper(event.value) == q.data.answer))"
-        },
-        {
-          "id": "judge-wrong_d0",
-          "kind": "call",
-          "target": "sound1",
-          "method": "play",
-          "args": [
-            "{ notes: q.data.wrongBuzz, mode: 'chord' }"
-          ]
-        },
-        {
-          "id": "judge-wrong_d1",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '提示：' + q.data.hint, tone: 'error'}"
-          ]
-        },
-        {
-          "id": "next-or-restart_on",
-          "kind": "on",
-          "event": "nextBtn.clicked"
-        },
-        {
-          "id": "next-or-restart_cond",
-          "kind": "branch",
-          "cond": "(!v.done)"
-        },
-        {
-          "id": "next-or-restart_d0",
-          "kind": "call",
-          "target": "question",
-          "method": "next",
-          "args": []
-        },
-        {
-          "id": "next-or-restart_e0",
-          "kind": "call",
-          "target": "level",
-          "method": "restart",
-          "args": []
-        },
-        {
-          "id": "on-finish_on",
-          "kind": "on",
-          "event": "level.finished"
-        },
-        {
-          "id": "on-finish_cond",
-          "kind": "branch",
-          "cond": "(event.passed)"
-        },
-        {
-          "id": "on-finish_d0",
-          "kind": "assign",
-          "target": "done",
-          "value": {
-            "expr": "true"
-          }
-        },
-        {
-          "id": "on-finish_d1",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '完成！得分 ' + v.score + ' 🎉 理论扎实', tone: 'success'}"
-          ]
-        },
-        {
-          "id": "on-finish_d2",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setText",
-          "args": [
-            "{text: '重新开始'}"
-          ]
-        },
-        {
-          "id": "on-finish_d3",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: true}"
-          ]
-        },
-        {
-          "id": "on-finish_e0",
-          "kind": "assign",
-          "target": "done",
-          "value": {
-            "expr": "true"
-          }
-        },
-        {
-          "id": "on-finish_e1",
-          "kind": "call",
-          "target": "feedback",
-          "method": "show",
-          "args": [
-            "{text: '完成！得分 ' + v.score + '，再练一次', tone: 'info'}"
-          ]
-        },
-        {
-          "id": "on-finish_e2",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setText",
-          "args": [
-            "{text: '重新开始'}"
-          ]
-        },
-        {
-          "id": "on-finish_e3",
-          "kind": "call",
-          "target": "nextBtn",
-          "method": "setEnabled",
-          "args": [
-            "{enabled: true}"
-          ]
+          "id": "settled",
+          "name": "结算视图"
         }
       ],
-      "edges": [
+      "components": [
         {
-          "id": "m1",
-          "from": "load-question_d0",
-          "to": "load-question_d1"
+          "id": "titleLabel",
+          "type": "label",
+          "name": "关卡标题",
+          "view": "main",
+          "layout": {
+            "x": 24,
+            "y": 12,
+            "w": 536,
+            "h": 28
+          },
+          "props": {
+            "text": "音名拼写 · 输入框作答"
+          }
         },
         {
-          "id": "m2",
-          "from": "load-question_d1",
-          "to": "load-question_d2"
+          "id": "scoreLabel",
+          "type": "label",
+          "name": "得分",
+          "view": "main",
+          "layout": {
+            "x": 600,
+            "y": 12,
+            "w": 176,
+            "h": 28
+          },
+          "bindings": {
+            "text": "'得分 ' + v.score"
+          }
         },
         {
-          "id": "m3",
-          "from": "load-question_d2",
-          "to": "load-question_d3"
+          "id": "progressLabel",
+          "type": "label",
+          "name": "进度",
+          "view": "main",
+          "layout": {
+            "x": 24,
+            "y": 42,
+            "w": 536,
+            "h": 24
+          },
+          "bindings": {
+            "text": "'进度 ' + v.row + ' / ' + run.total"
+          }
         },
         {
-          "id": "m4",
-          "from": "load-question_on",
-          "to": "load-question_d0"
-        },
-        {
-          "id": "m5",
-          "from": "replay_on",
-          "to": "replay_d0"
-        },
-        {
-          "id": "m6",
-          "from": "judge-correct_on",
-          "to": "judge-correct_cond"
-        },
-        {
-          "id": "m7",
-          "from": "judge-correct_d0",
-          "to": "judge-correct_d1"
-        },
-        {
-          "id": "m8",
-          "from": "judge-correct_d1",
-          "to": "judge-correct_d2"
-        },
-        {
-          "id": "m9",
-          "from": "judge-correct_d2",
-          "to": "judge-correct_d3"
-        },
-        {
-          "id": "m10",
-          "from": "judge-correct_d3",
-          "to": "judge-correct_d4"
-        },
-        {
-          "id": "m11",
-          "from": "judge-correct_d4",
-          "to": "judge-correct_d5"
-        },
-        {
-          "id": "m12",
-          "from": "judge-correct_cond",
-          "to": "judge-correct_d0",
-          "port": "true"
-        },
-        {
-          "id": "m13",
-          "from": "judge-wrong_on",
-          "to": "judge-wrong_cond"
-        },
-        {
-          "id": "m14",
-          "from": "judge-wrong_d0",
-          "to": "judge-wrong_d1"
-        },
-        {
-          "id": "m15",
-          "from": "judge-wrong_cond",
-          "to": "judge-wrong_d0",
-          "port": "true"
-        },
-        {
-          "id": "m16",
-          "from": "next-or-restart_on",
-          "to": "next-or-restart_cond"
-        },
-        {
-          "id": "m17",
-          "from": "next-or-restart_cond",
-          "to": "next-or-restart_d0",
-          "port": "true"
-        },
-        {
-          "id": "m18",
-          "from": "next-or-restart_cond",
-          "to": "next-or-restart_e0",
-          "port": "false"
-        },
-        {
-          "id": "m19",
-          "from": "on-finish_on",
-          "to": "on-finish_cond"
-        },
-        {
-          "id": "m20",
-          "from": "on-finish_d0",
-          "to": "on-finish_d1"
-        },
-        {
-          "id": "m21",
-          "from": "on-finish_d1",
-          "to": "on-finish_d2"
-        },
-        {
-          "id": "m22",
-          "from": "on-finish_d2",
-          "to": "on-finish_d3"
-        },
-        {
-          "id": "m23",
-          "from": "on-finish_cond",
-          "to": "on-finish_d0",
-          "port": "true"
-        },
-        {
-          "id": "m24",
-          "from": "on-finish_e0",
-          "to": "on-finish_e1"
-        },
-        {
-          "id": "m25",
-          "from": "on-finish_e1",
-          "to": "on-finish_e2"
-        },
-        {
-          "id": "m26",
-          "from": "on-finish_e2",
-          "to": "on-finish_e3"
-        },
-        {
-          "id": "m27",
-          "from": "on-finish_cond",
-          "to": "on-finish_e0",
-          "port": "false"
-        },
-        {
-          "id": "e_p1",
-          "from": "q0_load",
-          "to": "q0_gate"
-        },
-        {
-          "id": "e_p2",
-          "from": "q0_gate",
-          "to": "q0_var_answered",
-          "port": "true"
-        },
-        {
-          "id": "e_p3",
-          "from": "q1_load",
-          "to": "q1_gate"
-        },
-        {
-          "id": "e_p4",
-          "from": "q1_gate",
-          "to": "q1_var_answered",
-          "port": "true"
-        },
-        {
-          "id": "e_p5",
-          "from": "q2_load",
-          "to": "q2_gate"
-        },
-        {
-          "id": "e_p6",
-          "from": "q2_gate",
-          "to": "q2_var_answered",
-          "port": "true"
+          "id": "settledLabel",
+          "type": "label",
+          "name": "结算文本",
+          "view": "settled",
+          "layout": {
+            "x": 200,
+            "y": 110,
+            "w": 400,
+            "h": 48
+          },
+          "bindings": {
+            "text": "'本关得分 ' + v.score"
+          }
         }
       ]
     },
-    "flow": {
-      "order": "sequential",
-      "count": null,
-      "pass": {
-        "expr": "v.score >= 20"
-      }
-    },
-    "views": [
+    "types": [
       {
-        "id": "main",
-        "name": "主视图"
+        "id": "text-answer",
+        "name": "文本作答",
+        "surface": {
+          "components": [
+            {
+              "id": "prompt",
+              "type": "label",
+              "name": "题面",
+              "layout": {
+                "x": 24,
+                "y": 16,
+                "w": 552,
+                "h": 32
+              },
+              "bindings": {
+                "text": "q.prompt"
+              }
+            },
+            {
+              "id": "listenBtn",
+              "type": "button",
+              "name": "重听",
+              "layout": {
+                "x": 600,
+                "y": 16,
+                "w": 176,
+                "h": 36
+              },
+              "props": {
+                "text": "🔊 重听"
+              }
+            },
+            {
+              "id": "input1",
+              "type": "input",
+              "name": "作答输入框",
+              "layout": {
+                "x": 24,
+                "y": 100,
+                "w": 480,
+                "h": 56
+              },
+              "props": {
+                "placeholder": "输入音名，如 CEG，回车提交"
+              }
+            },
+            {
+              "id": "feedback",
+              "type": "label",
+              "name": "反馈",
+              "layout": {
+                "x": 24,
+                "y": 180,
+                "w": 752,
+                "h": 40
+              },
+              "props": {
+                "text": ""
+              }
+            },
+            {
+              "id": "sound1",
+              "type": "sound",
+              "name": "发声器"
+            }
+          ]
+        },
+        "behavior": {
+          "logicVersion": 3,
+          "kind": "behavior",
+          "nodes": [
+            {
+              "id": "b_onStart",
+              "kind": "on",
+              "event": "start"
+            },
+            {
+              "id": "b_playListen",
+              "kind": "call",
+              "target": "sound1",
+              "method": "play",
+              "arg": "{ notes: q.listenNotes }"
+            },
+            {
+              "id": "b_start_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_start_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onReplay",
+              "kind": "on",
+              "event": "listenBtn.clicked"
+            },
+            {
+              "id": "b_playReplay",
+              "kind": "call",
+              "target": "sound1",
+              "method": "play",
+              "arg": "{ notes: q.listenNotes }"
+            },
+            {
+              "id": "b_replay_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_replay_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_onSubmit",
+              "kind": "on",
+              "event": "input1.submitted"
+            },
+            {
+              "id": "b_submit_guard",
+              "kind": "branch",
+              "cond": "q.state.answered"
+            },
+            {
+              "id": "b_submit_guard_ret",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: 0 }"
+            },
+            {
+              "id": "b_countTry",
+              "kind": "assign",
+              "target": "q.state.attempts",
+              "value": {
+                "expr": "q.state.attempts + 1"
+              }
+            },
+            {
+              "id": "b_isCorrect",
+              "kind": "branch",
+              "cond": "upper(event.payload.value) == upper(q.answer) || contains(q.aliases, lower(event.payload.value))"
+            },
+            {
+              "id": "b_markAnswered",
+              "kind": "assign",
+              "target": "q.state.answered",
+              "value": {
+                "expr": "true"
+              }
+            },
+            {
+              "id": "b_feedbackOk",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '拼写正确！', tone: 'success' }"
+            },
+            {
+              "id": "b_retOk",
+              "kind": "return",
+              "result": "{ status: 'answered', correct: true, scoreDelta: q.scoring }"
+            },
+            {
+              "id": "b_clearInput",
+              "kind": "call",
+              "target": "input1",
+              "method": "clear"
+            },
+            {
+              "id": "b_showHint",
+              "kind": "branch",
+              "cond": "q.state.attempts >= 2"
+            },
+            {
+              "id": "b_feedbackHint",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '提示：' + q.hint, tone: 'info' }"
+            },
+            {
+              "id": "b_feedbackBad",
+              "kind": "call",
+              "target": "feedback",
+              "method": "show",
+              "arg": "{ text: '还不对，先听一遍再输入。', tone: 'error' }"
+            },
+            {
+              "id": "b_comment",
+              "kind": "comment",
+              "text": "提交即判定：大小写无关 + aliases 兜底；两次错误后给提示（预设「提示/反馈」）"
+            }
+          ],
+          "edges": [
+            {
+              "id": "e_b_onStart_b_playListen",
+              "from": "b_onStart",
+              "to": "b_playListen"
+            },
+            {
+              "id": "e_b_playListen_b_start_guard",
+              "from": "b_playListen",
+              "to": "b_start_guard"
+            },
+            {
+              "id": "e_b_start_guard_b_start_guard_ret_true",
+              "from": "b_start_guard",
+              "to": "b_start_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onReplay_b_playReplay",
+              "from": "b_onReplay",
+              "to": "b_playReplay"
+            },
+            {
+              "id": "e_b_playReplay_b_replay_guard",
+              "from": "b_playReplay",
+              "to": "b_replay_guard"
+            },
+            {
+              "id": "e_b_replay_guard_b_replay_guard_ret_true",
+              "from": "b_replay_guard",
+              "to": "b_replay_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_onSubmit_b_submit_guard",
+              "from": "b_onSubmit",
+              "to": "b_submit_guard"
+            },
+            {
+              "id": "e_b_submit_guard_b_countTry_false",
+              "from": "b_submit_guard",
+              "to": "b_countTry",
+              "port": "false"
+            },
+            {
+              "id": "e_b_submit_guard_b_submit_guard_ret_true",
+              "from": "b_submit_guard",
+              "to": "b_submit_guard_ret",
+              "port": "true"
+            },
+            {
+              "id": "e_b_countTry_b_isCorrect",
+              "from": "b_countTry",
+              "to": "b_isCorrect"
+            },
+            {
+              "id": "e_b_isCorrect_b_markAnswered_true",
+              "from": "b_isCorrect",
+              "to": "b_markAnswered",
+              "port": "true"
+            },
+            {
+              "id": "e_b_markAnswered_b_feedbackOk",
+              "from": "b_markAnswered",
+              "to": "b_feedbackOk"
+            },
+            {
+              "id": "e_b_feedbackOk_b_retOk",
+              "from": "b_feedbackOk",
+              "to": "b_retOk"
+            },
+            {
+              "id": "e_b_isCorrect_b_clearInput_false",
+              "from": "b_isCorrect",
+              "to": "b_clearInput",
+              "port": "false"
+            },
+            {
+              "id": "e_b_clearInput_b_showHint",
+              "from": "b_clearInput",
+              "to": "b_showHint"
+            },
+            {
+              "id": "e_b_showHint_b_feedbackHint_true",
+              "from": "b_showHint",
+              "to": "b_feedbackHint",
+              "port": "true"
+            },
+            {
+              "id": "e_b_showHint_b_feedbackBad_false",
+              "from": "b_showHint",
+              "to": "b_feedbackBad",
+              "port": "false"
+            }
+          ]
+        },
+        "description": "输入音名（如 CEG）回车提交：演示 input.submitted、大小写无关比较与 aliases 兜底。",
+        "state": [
+          {
+            "key": "answered",
+            "type": "boolean",
+            "init": false
+          },
+          {
+            "key": "attempts",
+            "type": "number",
+            "init": 0
+          }
+        ]
       }
     ],
-    "table": {
-      "columns": [
-        {
-          "key": "prompt",
-          "label": "题面",
-          "type": "json"
-        },
-        {
-          "key": "data",
-          "label": "数据",
-          "type": "json"
-        },
-        {
-          "key": "scoring",
-          "label": "分值",
-          "type": "number"
-        },
-        {
-          "key": "hints",
-          "label": "提示",
-          "type": "json"
-        },
-        {
-          "key": "explanation",
-          "label": "解析",
-          "type": "text"
-        }
-      ],
-      "rows": [
-        {
-          "prompt": {
-            "text": "拼写这个和弦的音名"
+    "tables": {
+      "text-answer": {
+        "columns": [
+          {
+            "key": "prompt",
+            "label": "题面",
+            "type": "text"
           },
-          "data": {
+          {
+            "key": "answer",
+            "label": "答案",
+            "type": "text"
+          },
+          {
+            "key": "aliases",
+            "label": "可接受写法",
+            "type": "list"
+          },
+          {
+            "key": "listenNotes",
+            "label": "听音",
+            "type": "notes"
+          },
+          {
+            "key": "rewardChord",
+            "label": "答对音效",
+            "type": "notes"
+          },
+          {
+            "key": "wrongBuzz",
+            "label": "答错音效",
+            "type": "notes"
+          },
+          {
+            "key": "hint",
+            "label": "提示",
+            "type": "text"
+          },
+          {
+            "key": "scoring",
+            "label": "分值",
+            "type": "number"
+          }
+        ],
+        "rows": [
+          {
+            "id": "row_ceg",
+            "prompt": "拼写这个和弦的音名",
             "answer": "CEG",
+            "aliases": [
+              "ceg",
+              "c-e-g",
+              "c e g"
+            ],
             "listenNotes": [
               {
                 "midi": 60
@@ -678,22 +485,18 @@
                 "dur": "8n"
               }
             ],
-            "hint": "从 C 开始：C + 大三度 + 小三度"
+            "hint": "从 C 开始：C + 大三度 + 小三度",
+            "scoring": 10
           },
-          "scoring": 10,
-          "hints": [
-            {
-              "text": "C 大三和弦"
-            }
-          ],
-          "explanation": "C-E-G。"
-        },
-        {
-          "prompt": {
-            "text": "拼写这个和弦的音名"
-          },
-          "data": {
+          {
+            "id": "row_fac",
+            "prompt": "拼写这个和弦的音名",
             "answer": "FAC",
+            "aliases": [
+              "fac",
+              "f-a-c",
+              "f a c"
+            ],
             "listenNotes": [
               {
                 "midi": 53
@@ -725,22 +528,18 @@
                 "dur": "8n"
               }
             ],
-            "hint": "从 F 开始的大三和弦"
+            "hint": "从 F 开始的大三和弦",
+            "scoring": 10
           },
-          "scoring": 10,
-          "hints": [
-            {
-              "text": "F 大三和弦"
-            }
-          ],
-          "explanation": "F-A-C。"
-        },
-        {
-          "prompt": {
-            "text": "拼写这个和弦的音名"
-          },
-          "data": {
+          {
+            "id": "row_gbd",
+            "prompt": "拼写这个和弦的音名",
             "answer": "GBD",
+            "aliases": [
+              "gbd",
+              "g-b-d",
+              "g b d"
+            ],
             "listenNotes": [
               {
                 "midi": 55
@@ -772,15 +571,120 @@
                 "dur": "8n"
               }
             ],
-            "hint": "从 G 开始的大三和弦"
-          },
-          "scoring": 10,
-          "hints": [
-            {
-              "text": "G 大三和弦"
-            }
-          ],
-          "explanation": "G-B-D。"
+            "hint": "从 G 开始的大三和弦",
+            "scoring": 10
+          }
+        ]
+      }
+    },
+    "run": {
+      "order": "manifest",
+      "count": null,
+      "seed": null,
+      "shuffleWithinPhase": true
+    },
+    "flow": {
+      "logicVersion": 3,
+      "kind": "flow",
+      "nodes": [
+        {
+          "id": "f_start",
+          "kind": "start"
+        },
+        {
+          "id": "f_each",
+          "kind": "foreach",
+          "items": "run.questions",
+          "itemVar": "slot",
+          "indexVar": "index"
+        },
+        {
+          "id": "f_ask",
+          "kind": "ask",
+          "target": "local.slot",
+          "resultVar": "result"
+        },
+        {
+          "id": "f_addScore",
+          "kind": "assign",
+          "target": "v.score",
+          "value": {
+            "expr": "v.score + (local.result.scoreDelta || 0)"
+          }
+        },
+        {
+          "id": "f_setRow",
+          "kind": "assign",
+          "target": "v.row",
+          "value": {
+            "expr": "local.index + 1"
+          }
+        },
+        {
+          "id": "f_settled",
+          "kind": "setView",
+          "view": "settled"
+        },
+        {
+          "id": "f_finish",
+          "kind": "finish",
+          "passed": "v.score >= 20"
+        },
+        {
+          "id": "f_comment",
+          "kind": "comment",
+          "text": "预设：顺序遍历题单 → 每题一次 ask → 应用 scoreDelta → 切结算视图 → 结算（数据增删不需要改本图）"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_f_start_f_each",
+          "from": "f_start",
+          "to": "f_each"
+        },
+        {
+          "id": "e_f_each_f_ask_true",
+          "from": "f_each",
+          "to": "f_ask",
+          "port": "true"
+        },
+        {
+          "id": "e_f_ask_f_addScore",
+          "from": "f_ask",
+          "to": "f_addScore"
+        },
+        {
+          "id": "e_f_addScore_f_setRow",
+          "from": "f_addScore",
+          "to": "f_setRow"
+        },
+        {
+          "id": "e_f_setRow_f_each",
+          "from": "f_setRow",
+          "to": "f_each"
+        },
+        {
+          "id": "e_f_each_f_settled_false",
+          "from": "f_each",
+          "to": "f_settled",
+          "port": "false"
+        },
+        {
+          "id": "e_f_settled_f_finish",
+          "from": "f_settled",
+          "to": "f_finish"
+        }
+      ],
+      "vars": [
+        {
+          "key": "score",
+          "type": "number",
+          "init": 0
+        },
+        {
+          "key": "row",
+          "type": "number",
+          "init": 0
         }
       ]
     }

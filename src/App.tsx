@@ -14,7 +14,6 @@ import { getSkinSnapshot, initSkin, subscribeSkin } from './skin/store'
  * 路由级懒加载（批次11 Bundle 瘦身）：重组件只随路由按需加载，控制主包体积。
  * 编辑器（含 React Flow/VexFlow/StaffEditor 子树）、校音器（pitchy）、节奏训练不进首屏。
  */
-const GraphPage = lazy(() => import('./pages/GraphPage').then((m) => ({ default: m.GraphPage })))
 const EditorPage = lazy(() => import('./editor/EditorPage').then((m) => ({ default: m.EditorPage })))
 const TunerDemo = lazy(() => import('./pages/TunerDemo').then((m) => ({ default: m.TunerDemo })))
 const RhythmDemo = lazy(() => import('./pages/RhythmDemo').then((m) => ({ default: m.RhythmDemo })))
@@ -99,9 +98,10 @@ export default function App() {
   } else if (hash.startsWith('#/series/')) {
     page = <SeriesPage key={hash} id={hash.slice('#/series/'.length)} />
   } else if (hash.startsWith('#/graph/')) {
+    // W9：v3 图谱页已删除；旧链接兼容跳转到 v4 编辑器（流程 Tab 即节点图三视图之一）
     page = (
-      <Suspense fallback={<p className="muted">加载中…</p>}>
-        <GraphPage key={hash} id={hash.slice('#/graph/'.length)} />
+      <Suspense fallback={PageLoading}>
+        <EditorPage key={hash} id={hash.slice('#/graph/'.length)} />
       </Suspense>
     )
   } else if (hash.startsWith('#/edit/')) {

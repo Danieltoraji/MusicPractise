@@ -1,32 +1,32 @@
 # AGENTS.md — MusicPractise（音乐练习 UGC 平台）
 
-> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-24 由 ZCode 会话修订（docs/40 编辑器审计、docs/41 R1–R12 修复、docs/42 独立验收、docs/43 R13 返工、docs/44 后续批次 R14/R15/R16a/R16b/R17a/R17b1/R18/R19/R20/R21/R22/R23/R24/R25/R26/R27/R28/R29/R30/R31/R32/R33/R34/R35/R36/R37/R38/R39/R40/R41 落地；测试基线 805 → 808 → 861 → 915 → 929 → 938 → 967 → 971 → 972 → 974 → 980 → 981 → 986 → 988 → 992 → 996 → 997 → 1001 → 1005 → 1008 → 1010 → 1011 → 1015 → 1016 → 1017 → **1019 项 / 114 文件**）；2026-10-27 由 DeepSeek Harness 会话修订（v4 运行时设计确认并进入施工：docs/51 设计种子、docs/52 施工规划、docs/53 规格冻结；**当前代码仍为 v3**，W9 翻转前 v3 保持全绿）。
+> 本文件由 Hindsight 记忆库蒸馏而来（该服务已停用），深度历史资料见 `F:\hindsight\export\coding-agent_MusicPractise\`。蒸馏日期 2026-10-15；2026-10-15 由 ZCode 会话修订（docs/37/38 落地状态）；2026-10-16 由 ZCode 会话修订（docs/39 云盘共享与关卡库迭代 H1–H6 全部落地，测试基线 723 → 805）；2026-10-24 由 ZCode 会话修订（docs/40 编辑器审计、docs/41 R1–R12 修复、docs/42 独立验收、docs/43 R13 返工、docs/44 后续批次 R14/R15/R16a/R16b/R17a/R17b1/R18/R19/R20/R21/R22/R23/R24/R25/R26/R27/R28/R29/R30/R31/R32/R33/R34/R35/R36/R37/R38/R39/R40/R41 落地；测试基线 805 → 808 → 861 → 915 → 929 → 938 → 967 → 971 → 972 → 974 → 980 → 981 → 986 → 988 → 992 → 996 → 997 → 1001 → 1005 → 1008 → 1010 → 1011 → 1015 → 1016 → 1017 → **1019 项 / 114 文件**）；2026-10-27 由 DeepSeek Harness 会话修订（**v4 运行时已完成 W1–W9 并翻转：v3 运行时/编辑器/迁移器/旧 schema/旧测试已删除，当前代码为 v4，全量基线 103 文件 / 975 项**；docs/51 设计种子、docs/52 施工规划、docs/53 规格冻结、docs/54 实施记录、docs/55 最终验收（W10））。
 
 ## 项目定位
 
-音乐教育 UGC 平台：关卡「创作 → 游玩 → 进度」全链路在浏览器完成。内容层级固定为 **系列 Series → 专题 Topic → 关卡 Level → 题目 Question**；关卡由组件实例拼装，逻辑用控制流图 GraphProgram v2 描述（「单一 IR 三视图」：伪代码/节点图/JSON 是同一 IR 的投影，确立「先设计代码再设计节点图」）。前端 SPA（Vite + React + TS strict）+ Cloudflare Workers 单通道后端 + D1。
+音乐教育 UGC 平台：关卡「创作 → 游玩 → 进度」全链路在浏览器完成。内容层级固定为 **系列 Series → 专题 Topic → 关卡 Level → 题目 Question**；关卡由组件实例拼装，逻辑用 **v4 Flow IR（main 流程）+ Behavior IR（题型异步函数）** 描述（「单一 IR 三视图」：伪代码/节点图/JSON 是同一程序的投影）。前端 SPA（Vite + React + TS strict）+ Cloudflare Workers 单通道后端 + D1。
 
 ## 命令与工程基线
 
 - `npm run dev` 纯前端（5173，`/api` 代理到 wrangler 8787）；`npm run dev:worker` 全栈（先 `npm run build`）；`npm run db:migrate:local` 本地 D1 迁移；`npm test`（Vitest）；`npm run build` = `tsc --noEmit && vite build`。
-- 质量门禁：全量测试全绿（现行基线 **1019 项 / 114 文件**，R41 后；历史见 docs/41/43/44；**全局 console 门禁已启用，非预期 console.error/warn 即失败**）+ `tsc`/`build` 干净（build 以 exit 0 + 无新增告警为准；vexflow >500kB 警告为已知项）+ **生产构建静态门禁 `npm run verify:dist`（R33）与 G15 冲突分类 `npm run check:css-conflicts`（R35）** + **浏览器视觉矩阵 `node scripts/visual-matrix.mjs`（R39；需 build+preview+Edge CDP，期望 FAIL=0）或本地全栈模式（R40：MATRIX_BASE/MATRIX_LOGIN_*）** + **bundle 记录 `node scripts/bundle-report.mjs`（R40）** + **部署配置 dry-run `npx wrangler deploy --dry-run`（R41，期望无 schema 告警）** + 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环；写路径性能改动先跑 `npm run bench:update`（R11 门控，docs/44 §5）；编辑器交互新增/修改需同时补 `data-testid`（G3 契约，见 `src/test/g3Anchors.test.ts`）；双用 hook class 从 `src/editor/editorHooks.ts` 引用（G14 契约）。
+- 质量门禁：全量测试全绿（现行 v4 基线 **975 项 / 103 文件**，W9 翻转后；v3 时代 1019/114 历史见 docs/41/43/44；**全局 console 门禁已启用，非预期 console.error/warn 即失败**）+ `tsc`/`build` 干净（build 以 exit 0 + 无新增告警为准；vexflow >500kB 警告为已知项）+ **生产构建静态门禁 `npm run verify:dist`（R33）与 G15 冲突分类 `npm run check:css-conflicts`（R35）** + **浏览器视觉矩阵 `node scripts/visual-matrix.mjs`（R39；需 build+preview+Edge CDP，期望 FAIL=0）或本地全栈模式（R40：MATRIX_BASE/MATRIX_LOGIN_*）** + **bundle 记录 `node scripts/bundle-report.mjs`（R40）** + **部署配置 dry-run `npx wrangler deploy --dry-run`（R41，期望无 schema 告警）** + 关键交互浏览器实测；新特性必须带定向用例；P0/P1 缺陷当批闭环；写路径性能改动先跑 `npm run bench:update`（R11 门控，docs/44 §5）；编辑器交互新增/修改需同时补 `data-testid`（G3 契约，见 `src/test/g3Anchors.test.ts`）；双用 hook class 从 `src/editor/editorHooks.ts` 引用（G14 契约）。
 - 设计/评审/落地记录按编号归档 `docs/`（如 docs/02 数据结构契约、docs/27 数据表 2.0、docs/31 后端、docs/36 UI 全量重设计、docs/37 运行时 UI 改造、docs/38 编辑器界面改造；外部门禁见 docs/45，视觉矩阵手册见 docs/46，发布候选状态见 docs/47，视觉矩阵执行记录见 docs/48，本地全栈冒烟/bundle 记录见 docs/49）；数据模型或接口变更须同步对应文档与契约表。
 
 ## 目录与架构要点
 
-- `src/engine/`：`expr.ts` 沙箱表达式求值器（Pratt 解析；作用域根 `q./event./v.`——`$` 前缀仅 v1 迁移输入，新代码禁用；含 `checkExprText` 实时校验下沉；函数白名单 21 个；步数预算 1000；拒绝赋值/循环/原型逃逸；`==` 即严格相等）；`graphProgram.ts` IR v2 + lint；`graphEngine.ts` 异步执行器（wait/branch/loop、预算防死循环、generation 竞态作废）；`script.ts` `generateScript`/`parseScript` 伪代码↔IR 往返恒等；`migrate.ts`/`migrateDoc.ts` 迁移器；`rhythm.ts` rhythmScore/rhythmMatch 纯函数。
-- `src/runtime/`：`levelSession.ts` 完全解耦 DOM/React（无头可驱动、`session.dispatch` 注入事件、`SessionHost.budgets` 限步）；`LevelStage.tsx` 800×470 fit-scale 共享舞台（玩家页与编辑器调试画面单一真源，`viewportClassName`/`canvasClassName` 是被测试钩住的契约）；`LevelRunner.tsx` 渲染薄壳（题面 `.stage-prompt` 主视觉条 / 进度条 / 结算 `.result-bar`，重玩常驻）；`audio.ts` `scheduleNoteEvents` 统一调度；`audioHost.ts` 共享音频；`store.ts` ComponentStore（useSyncExternalStore + effect sink）；`componentDef.ts` 组件为纯函数 reducer，统一 `events/commands/state` 契约。
-- `src/editor/`：`EditorPage.tsx`（`#/edit/:id`）五 Tab = 画布/节点图/脚本/数据表/JSON；`docState.ts` 唯一权威数据源（纯函数）；`graph/` 节点图编辑器与 Dock 五面板（组件库/事件管理/变量/属性/AI，第 6 个 DebugPanel）；`TableGrid.tsx` 数据表（一行 = 一题）；`StaffEditor.tsx` 五线谱弹窗；`ListEditor.tsx` 字符串列表弹窗。
-- `src/ai/` 编辑器内 AI 助手：`providers/settings/client/agent/tools/tools-write/tools-debug/tools-plan/plan/runHarness/session/vision/checkpoint`。ask/plan/agent 三模式；写七件套 `write_script/edit_table/edit_components/edit_meta/edit_views/edit_flow/set_variable` 全走 `applyAndCheck` 管线（mutate → `loadLevelDoc` 校验 → `applyDoc`；被拒回喂自纠）+ 检查点回滚。
+- `src/engine/`：`expr.ts` 沙箱表达式求值器（Pratt 解析；v4 层根 `v/local/t/q/q.state/args/run/event`，`$` 前缀随 v3 迁移器一并删除；函数白名单 21 个；步数预算 1000）；`v4/` 关卡 IR 与解释器（model/manifest/expr/validate/lint/interpreter/flow/behavior/script 伪代码投影/presets 预设目录/templates 零代码模板）；`rhythm.ts` rhythmScore/rhythmMatch 纯函数。
+- `src/runtime/`：`v4/session.ts` 会话（异步调用栈解释器、无头可驱动、watchdog、shell/surface 事件、牌堆与结算）；`v4/LevelStageV4.tsx` 800×470 fit-scale 双层舞台（shell + 当前题 surface）；`v4/LevelRunnerV4.tsx` 渲染薄壳；`v4/sessionHost.ts` React 绑定；`v4/harness.ts` 无头运行报告；`audio.ts` `scheduleNoteEvents` 统一调度；`audioHost.ts` 共享音频；`store.ts` ComponentStore；`componentDef.ts` 组件纯函数 reducer（events/commands/state）。
+- `src/editor/`：`EditorPage.tsx` 懒加载 `v4/EditorPageV4`（`#/edit/:id`，`#/edit/new` 零代码模板向导），v4 编辑器六 Tab = 内容/流程/题型/舞台/预览/JSON；`v4/docStateV4.ts` 唯一权威数据源（纯函数、结构共享）；`v4/graph/` 图工作台（React Flow 12 + 伪代码视图 + 预设画廊）；`v4/ShellTab`（舞台编辑）、`v4/PreviewTab`（可见游玩 + 单步调试）、`v4/AiPanelV4`（按层 AI 面板）；`editorHooks.ts` 双用 hook class 契约。
+- `src/ai/` 编辑器内 AI 助手：`providers/settings/client/session` + `v4/{tools,agent,prompts}`（ask=只读 5 工具 / agent=读 5 + 写 7；`applyAndCheckV4` = revision 冲突门 → mutate → `loadLevelDoc` 预检 → applyDoc；一次 run 一条撤销 tag `ai:<n>`）。
 - `src/library/` Dexie 资源库（db / io 导入导出 / browse 文件夹树 / validate / manage 文件管理器与 bundle 收集纯函数）；`src/cloud/` 云盘（api 客户端 / `#/cloud` 我的云盘页 / 设置页摘要）；`src/hub/` 关卡库（`#/hub` 四 Tab：公共/精选/官方/群组 + GroupPanel 群组面板）；`src/components/` 组件与视图；`src/skin/` 皮肤系统（`#/skins`）；`src/admin/` 管理后台页（`#/admin` lazy）。
-- `worker/` 单通道 API：http/router/session/ratelimit/admin（stats、用户 PATCH、关卡管理、审计分页）/password(pbkdf2)/`withSecurityHeaders`。`migrations/` 编号 SQL（0004 = audit_log）。`schemas/v1/` JSON Schema。`public/_headers` 静态安全头。
-- 路由（hash）：`#/` 首页、`#/series/:id`、`#/library`、`#/cloud` 我的云盘、`#/hub` 关卡库（公共/精选/官方/群组）、`#/level/:id`、`#/edit/:id`、`#/graph/:id`、`#/settings`、`#/admin`、`#/docs`（含 `#/docs/changelog` 更新日志）、`#/skins`、`#/tuner`、`#/rhythm`。
+- `worker/` 单通道 API：http/router/session/ratelimit/admin（stats、用户 PATCH、关卡管理、审计分页）/password(pbkdf2)/`withSecurityHeaders`。`migrations/` 编号 SQL（0004 = audit_log）。`schemas/v4/level.json`（关卡）+ `schemas/v1/`（series/topic/instrument/common）JSON Schema。`public/_headers` 静态安全头。
+- 路由（hash）：`#/` 首页、`#/series/:id`、`#/library`、`#/cloud` 我的云盘、`#/hub` 关卡库（公共/精选/官方/群组）、`#/level/:id`、`#/edit/:id`（v4 编辑器，`#/edit/new` 模板向导）、`#/graph/:id`（兼容重定向到 v4 编辑器）、`#/settings`、`#/admin`、`#/docs`（含 `#/docs/changelog` 更新日志）、`#/skins`、`#/tuner`、`#/rhythm`。
 
 ## 硬性约定
 
-- 版本判别：信封 `schemaVersion` 恒为 1，逻辑版本由 `logic.logicVersion: 2` 判别，内容结构为 schemaVersion 3。迁移铁律 **只增不改不删**，旧档「先放行后清洗」（迁移器清理，视图层不感知版本）。
+- 版本判别：关卡文档 `schemaVersion: 4`（v4 clean break，旧 v1/v3 关卡与迁移器已随 W9 删除）；`schemaVersion` 恒为 4、`logicVersion: 3`；series/topic/instrument 仍用 v1 信封。**v4 编辑器六 Tab = 内容/流程/题型/舞台/预览/JSON**。
 - ID 一律 ULID 程序化生成，严禁手抄；组件 id 查重递增；`level` 与组件 id 为保留字；`__` 前缀系统变量（如行指针 `v.__row`）只归运行时，AI/工具禁写。
-- 行指针语义：`v.__row` 赋值 = 原始行号（`order.indexOf` 反查）；越界忽略、严禁 clamp；shuffle 下读出再写回按同行 no-op。`level.next` 纯推进、换行靠 `loadRow` 刷新；视图不划分作用域、全局单图；`level.*` 仅 `started/finished/restart`。
+- 进度/作用域语义（v4）：题目进度由 **flow 显式维护**（样例以 `v.row` 记录当前题号、`v.score` 为结算账本；`finish.passed` 读 `v.score`）；scope 四层 `v/local/t/q.state`（+ 只读 `q`、`run`、`args`、`event`）；当前题目由 `v.row`/牌堆驱动，manifest 自动或 `run.questions` 显式；不再有 v3 的 `v.__row` 自动反查、`level.next` 隐式推进（已随 v3 删除）。
 - 组件数据应用只用 `call` 三命令 `setText`/`setOptions`/`setMusic`（静态 bindings 已废除）；共享映射收口 `engine/level.ts`：`DATA_APPLY_COMMANDS`/`DATA_APPLY_ACCEPTED_TYPES`/`COLUMN_TYPE_LABELS`（内层键是槽位名不是方法名，须按 `.method` find）。
 - Schema 红线：`Note.dur` 白名单 `(1|2|4|8|16|32)n` 及附点变体；`NoteList` 上限 64；`Rule.on` 必须带 `.`/`:` 分隔符。
 - 内置种子标 `builtIn` 禁删；就地编辑保存自动另存副本（新 ID，标题加「（副本）」，重复保存不叠加）；`ensureSeeded` 只补缺失、不覆写。导入导出冲突：**同 id 同版本跳过、异版本覆盖更新**；zip 条目 ≤50MB、整包 ≤100MB；产出 added/updated/skipped/rejected 报告。
@@ -43,25 +43,25 @@
 
 ## 关键决策与理由
 
-- ECA 规则引擎已被异步 GraphEngine 全面替代（需原生支持 wait/中断节点），LogicEngine 仅作等价基准。
+- v4 架构裁决：关卡 = **main 流程 + 题型异步函数 + 每型实例表**；Flow IR（start/assign/call/setView/ask/foreach/branch/loop/wait/waitShell/finish/restart/comment）与 Behavior IR（on/return/assign/call/emit/branch/loop/wait/comment）是同一程序的三视图（伪代码/节点图/JSON）；单一异步调用栈解释器 + 事件队列（return 首个生效、emit 入队）；预算 nodes 2000 / tasks 64 / events 256 / flow 10000 / watchdog 120s；旧 v1/v3 关卡与迁移器随 clean break 删除（不再提供迁移）。
 - 音频：`AudioContext.currentTime` 唯一时钟（禁 performance.now）；调度收口 `audio.scheduleNoteEvents`（`Note` 带 `t`/`rest`，`mode` 仅运行时兼容键）；组件效果统一走 effect sink（曾因视图直调旁路全奏同一音高）；synth 六音色、参数严格钳制 + NaN 守卫（非法值沿增益总线毒化整轨）；velocity 用 MIDI 0..127（默认 100）；麦克风流 10Hz 节流。
 - 后端：Workers 单通道 + D1，不引入多通道多存储。权限门禁在后端 `requireAdmin`（403），前端入口仅 UX 提示；级联删除显式逐表删（不依赖 FK）；审计写入与业务同成败。安全头双通道（静态 `public/_headers` + API `withSecurityHeaders`）；CSP `connect-src` 放开 `https:` 是有意裁决（AI BaseURL 可为任意域名）。
 - 管理员只能经 `scripts/seed-admin.ts` 播种（注册不产生管理员）；远端播种用文件式三步：`node scripts/seed-admin.ts --nickname=admin --password=<密码> --out=seed-admin.sql` → `npx wrangler d1 execute musicpractise-db --remote --file=seed-admin.sql` → 删除临时 SQL。昵称用 ASCII。
-- 无头验证闭环：`src/ai/runHarness.ts`（`run_level` 只读工具）= loadLevelDoc 预检 → LevelSession → 剧本化注入事件 → dispose 前采集变量终态。**Agent 守则：每次代码变更后必须 run_level 自验证**。
-- AI 会话治理现行值：下发窗口 120 条（最近 48 条全量、更早 tool 结果截断 200 字符、不拆 assistant/tool_calls 对）；轮数上限 agent 32 / ask·plan 8，撞限出紫色「▶ 继续」恢复条（不重存检查点）；工具支持事务性批量参数（`vars`/`items`/`updates`/`ids`/`ops`/`events`），任一项失败整批不应用。
-- AI 编辑撤销/冲突现行值（docs/43）：检查点懒存于 agent 首次写入前（单级回滚）；每次 run 独立撤销 tag、回滚独立 tag；写前 revision 冲突拒绝并回喂重读；AiPanel 卸载不 abort（宿主 EditorPage 负责显式停止）。
-- Debug：`debugRun` 单例人机共享（AI 试玩全程可见）；暂停只在节点边界；stop 时必须 resolve 所有挂起门防死锁；变量快照读取用 400ms 轮询；可见游玩画面 800×470 fit-scale，右列宽 280–560px。
+- 无头验证闭环：`src/runtime/v4/harness.ts`（`run_level` 工具）= loadLevelDoc 预检 → V4Session 无头驱动（script/events/seed）→ 采集每题结果/score/passed/牌局/日志。**Agent 守则：每次代码变更后必须 run_level 自验证**。
+- AI 会话治理现行值：下发窗口 120 条（最近 48 条全量、更早 tool 结果截断 200 字符、不拆 assistant/tool_calls 对）；轮数上限 agent 32 / ask 8，撞限出「▶ 继续」恢复条；v4 写工具支持整体替换/批量行操作，任一项失败整批不应用。
+- AI 编辑撤销/冲突现行值（v4）：一次 run 独立撤销 tag `ai:<n>`（整段 Ctrl+Z）；写前 revision 冲突拒绝并回喂重读；AiPanel 卸载不 abort（宿主 EditorPage 负责显式停止）。
+- Debug（v4）：`V4DebugController`（编辑器预览 Tab）负责暂停只在节点边界、单步/继续、计时器暂停、调用栈/作用域/牌堆/日志快照；stop 时先放行门控再 dispose；面板卸载由宿主 stop（docs/40 §12.4 纪律沿用）。
 
 ## 已知坑
 
 - VexFlow 5 内联 style 覆盖 width → 用 `fitWidth` 等比缩放；`g.vf-stavenote` 数量与 notes 不齐时跳过命中区；jsdom 无 `getBBox` 必须防御回落。
 - 键盘流/连续输入：React 闭包快照会过期，必须 ref 为真源并在 commit 统一写入；effect 依赖原始值不重跑 → `RhythmState.runId` 每次 start 递增强刷；节奏评分用相对起拍时间（绝对秒曾致恒 0 分）。
 - `html-to-image` 在隐藏/遮挡容器挂起（rAF 不触发）→ 只抓节点卡层 + 8 秒竞速兜底；必要时以 setTimeout 补偿 rAF。
-- 迁移产物 call 链严禁跨事件处理器共享节点（golden 往返丢节点），每入口独立成链；等价 golden 双跑时 v1 侧用 v1 原始行对照。
+- **伪代码锚点合并是启发式（v4）**：`mergeFlowScriptAnchors`/`mergeBehaviorScriptAnchors` 按语句特征配对，仅对「配对成功且旧节点有坐标」的节点保留 id/x/y；二次编辑、重排/插入/删除可能产生 id 冲突——合并后必须保证 id 唯一、无悬空边/自环，并在合并后跑 `loadLevelDoc` 预检（曾因写出 `x: undefined` 使保存/AI 写入全部失败）。
 - Shell 转义红线：批量修改含 `$expr` 的关卡 JSON 用 Write 工具写脚本文件，不走 bash/PowerShell 内联（shell 会损坏 `$expr`；PowerShell 双引号会展开 `$100000` 类片段，曾致播种 INSERT 整条失效）。
 - 数据表非标量值必须走 `JsonFallbackCell`、严禁 `String()` 兜底（曾泄漏 `[object Object]`）；新建列默认 text，先文本录入后切类型产生的脏数据曾是「编辑 JSON」死胡同根因（已全面弹窗化，紧凑记法 `C4 C#4 60 62:8n. r:4n` 由 `parseNoteTokens` 解析）。
 - Windows：Vite HMR 用 `usePolling`（vite.config.ts，300ms）；僵尸 dev server 互相抢占端口需 taskkill；`.gitattributes` 强制 eol=lf。
-- localStorage 键约定：`ai-settings`（AI 配置，Key 明文本地存）、`graph-panels/graph-panel-w-*`（面板列宽）、`graph-dock/graph-dock-h/graph-dock-dbg-w/-h`（节点图 dock 布局与调试列尺寸）、`graph-theme`（节点图明暗，默认深色）、`graph-summary-mode`（节点摘要中英文）、`skin.prefs.v1`（皮肤元数据；二进制资产在 Dexie 库 skin-assets）；sessionStorage：`ai-kickoff:<docId>`（AI 新建关卡开工指令，按 docId 键控）。**FOUC 预置必须用外置 `public/skin-boot.js`**（`index.html` 内联脚本会被生产 CSP 拦截，见已知坑）。拖拽列宽每帧按「起始值 + 总位移」重算，逐帧累加会因 React 渲染滞后漂移。
+- localStorage 键约定：`ai-settings`（AI 配置，Key 明文本地存）、`graph-theme`（节点图明暗，默认深色）、`skin.prefs.v1`（皮肤元数据；二进制资产在 Dexie 库 skin-assets）。**FOUC 预置必须用外置 `public/skin-boot.js`**（`index.html` 内联脚本会被生产 CSP 拦截，见已知坑）。
 - 资源库树循环引用防护：`browse.ts` 硬编码 3 层深度截断。进度写入 `progress` 表事务只存最高分（只升不降）、通过保持、`attempts+1`。
 - CSS 同特异性「后者胜」两次实案：旧按钮基块写在组件层之后覆盖全站（已删，勿再在文件尾部补按钮基样式）；媒体查询里的规则会被文件尾同名区块覆盖——**媒体查询必须放在被覆盖区块之后**（theater 移动端规则实测踩坑）。
 - 内容层浅色岛必须钉**全套**语义 token：只钉旧 10 token 不够，语义扩展层（`--accent-soft` 系等）同样会漂移进舞台（深色皮肤下琴键 hover 曾漂移）。空文本组件注意残留观感：`.comp-label:empty` 已透明化（反馈位初始空串 + tone 软底曾渲染成无字色块）。
@@ -81,7 +81,7 @@
 - **内置副本保存 = 文档身份迁移**：内置示例另存副本换 id 时，必须同步迁移按 docId 键控的状态（AI session/checkpoint/draftStore/runLog）、重映射撤销栈身份、切换 `activeId` 且 record 查询跟随；否则出现假「外部修改」横幅、undo 回退到内置 id、再保存建第二份副本（docs/42 §4.6）。
 - **AI 写冲突检测依赖 revision**：宿主必须给 AiPanel 传 `getRevision`/`getLiveDoc`；只给引用快照会因 React 提交时序漏检（旧 `lastSeenExternal` 方案已被 docs/42 动态证伪）。新增写工具仍必须走 `applyAndCheck`（mutate→loadLevelDoc→applyDoc）。
 - **AI 会话持久化（F10 / docs/44 R19）**：`aiSessions` 记录带 `schemaVersion`，hydrate 必须经 `sanitizePersistedSession`（未来版本拒绝、坏消息逐条清洗、400 条×200k 上限）；改动记录结构要提升 `AI_SESSION_SCHEMA_VERSION`；删除资源由 `deleteResource` 事务级联删 aiSessions，勿在 UI 层零散删。
-- **受控 React Flow 单基线（O9 / docs/44 R19）**：GraphEditor 的 `apply` 用 `pendingDocRef` 维护同 task 最新基线（onNodesChange/onEdgesChange 或连续编辑不丢前一笔）；新增 change 处理器必须走 `apply`，禁止用渲染期 `doc` 闭包直接构造 next doc。
+- **受控 React Flow 单基线（O9 / docs/44 R19，v4 沿用）**：`GraphWorkbench` 的 `applyProgram` 用 `pendingDocRef` 维护同 task 最新基线（onNodesChange/onEdgesChange 或连续编辑不丢前一笔）；新增 change 处理器必须走 `applyProgram`，禁止用渲染期 `doc` 闭包直接构造 next doc。
 - **全局 console 失败门禁（H2 / docs/44 R20）**：`setup.ts` 安装 `consoleGate`——用例结束出现非预期 `console.error/warn` 即失败；测试平台噪音与夹具故意触发的负向诊断在 `consoleGate.GLOBAL_ALLOW` 按类别放行，**禁止向放行表加应用业务错误**；新负向用例优先 `withConsoleGuard(..., { allow })`；重建基线用 `CONSOLE_GATE_REPORT=1 npm test`（只写 tmp-console-gate.log）。
 - **G3 锚点契约（docs/44 R21）**：编辑器关键交互必须有 `data-testid`（AiPanel 输入/发送/错误/计划、GraphEditor 面板开关/视图切换、节点卡 `graph-card-*`、palette `palette-item-*`、数据表 `tgrid-*`、Modal `modal`）；`src/test/g3Anchors.test.ts` 锁定关键锚点存在且高频测试不回退 class/文案查询——改编辑器 UI 时同步维护锚点与契约，不要新增对样式类名/精确文案的断言。
 - **派生 token / 内容岛字体（G4/G5 / docs/44 R22）**：`--focus-ring`/`--shadow-*` 在 `:root` 一次性计算，**覆盖 `--accent`/`--shadow-rgb` 的作用域（ge-dark、内容岛等）必须重新声明派生 token**；内容岛只钉 `--font-*` 不够——body 的 font-family 已在根上计算并继承，必须同时在 `.stage-canvas/.editor-canvas` 上直接落 `font-family` 并覆盖 `--user-font-*`（内容层稳定性，用户字体不进入舞台/画布）。
@@ -94,9 +94,11 @@
 - **CSS 完全重复规则 / 死类（G15 / docs/44 R29–R35）**：不允许「同选择器 + 完全相同声明」的重复规则，也不允许被后置同选择器规则完全覆盖的非 important 死声明、src/ 中零引用的死类样式（`g15Css.test` 守卫，防回涨）；动态拼接类名前缀（react-flow__/bar-/tone-/st-/gedge-/skin-preview-）在测试白名单内，新增动态前缀须同步。剩余同名选择器用 `npm run check:css-conflicts` 复核——当前 35 组中 0 重复/0 覆盖/0 值冲突，其余为令牌分层/皮肤覆盖/无同名属性叠加（预期保留，G15 代码层已闭环）。
 - **文档与代码互锁（docs/40 I7–I16 / docs/44 R31）**：Tab 名、表达式作用域根、GraphEditor localStorage 键、docs/36 令牌清单由 `docsConsistency.test` 从代码反查文档——改这些真源时必须同步 README/AGENTS/docs29/docs36，否则测试失败；外部门禁（视觉矩阵/G15 冲突/G11 残构/生产 CSP）见 **docs/45**，未执行矩阵不得写成闭环。
 
-## 待办与搁置（2026-10-23 修订；2026-10-27 追加 v4 施工状态）
+## 待办与搁置（2026-10-27 修订；v4 W9 翻转完成）
 
-- **v4 施工进行中（2026-10-27 起，自主迭代）**：关卡运行时重构为「流程 main + 题型异步函数 + 每型实例表 + 自动/显式题单」的 v4 架构（单调用栈、四层作用域、预设而非策略、clean break 不迁移旧关卡）。**设计已确认**（docs/51）；**施工规划 docs/52**（W1–W10 批次、验收口径、写作用域、门禁策略）；**规格冻结 docs/53**（LevelDocV4/Flow IR/Behavior IR/作用域/调用协议/Session API/编辑器模型/错误码，实现以它为准）；实施记录追加 docs/54、最终验收 docs/55。**当前代码仍为 v3**：v4 全部为新增模块（`src/{engine,runtime,editor,ai,sample}/v4/`、`schemas/v4/`），W9 一次翻转后删除 v3 运行时/编辑器/迁移器/schema/测试。旧 docs/50 兼容迁移方案作废。新基线在 W9 后回写本文件。
+- **v4 已完成 W1–W9（2026-10-27 自主迭代）**：关卡运行时重构为「流程 main + 题型异步函数 + 每型实例表 + 自动/显式题单」的 v4 架构（单调用栈、四层作用域、预设而非策略、clean break 不迁移旧关卡）。设计 docs/51、施工规划 docs/52、规格冻结 docs/53、实施记录 docs/54、最终验收 docs/55（W10 待收口）。**当前代码为 v4**（`src/{engine,runtime,editor,ai,sample}/v4/`、`schemas/v4/`）；v3 运行时/编辑器/迁移器/旧 schema/旧测试已删除，全量基线 **975 项 / 103 文件**。
+- **W10 待办**：视觉矩阵脚本改 v4 锚点后重跑（FAIL=0，或按 docs/45 EXT-1 记外依赖）；bundle 报告 + wrangler dry-run；浏览器手工验收（游玩/编辑器模板向导/AI agent/预览单步）；docs/55 报告与文档最终收口。
+- **v4 已知缺口（后续迭代候选）**：AI 应用预设（需 connect 语义）、AI 检查点回滚（现以 Ctrl+Z 整段撤销兜底）、plan/流式/vision/截图/节点高亮未移植；图编辑撤销 tag 可再细化；伪代码仅覆盖结构化子集；ScriptTab 选区上报（AI 上下文）；编辑器移动端未适配。
 
 - **R13 后仍开放（后续批次见 docs/44）**：G2 `.ge-dark` 剩余结构性收敛与视觉矩阵（R17a 语义 token 层 + R17b1 单色规则首批收敛：17 选择器提升、选择器行 158→143、预算 ≤143 防回涨；**R39 矩阵已视觉确认，docs/48**）、G3 视觉回归（R15 起步、**R21 锚点扩到 127 处/静态唯一 52 并加静态契约**；**R38 补数据表非文本单元格锚点、R39 矩阵已确认**）、H2 视觉覆盖（R15 canvas 噪音清零、**R20 全局 console 门禁已闭环**；**R39 矩阵无意外 console 噪音**）、G4/G5 已由 R22 落地（R39 视觉确认）、G13/G14 已由 R23 落地、G10/G12 已由 R24 落地（R39 弹窗视觉确认）、G6/G8 已由 R25 落地（R39 FOUC 探针确认）、G11 主要项已由 R26 落地（R39 视觉确认；选中态伪元素/边阴影重构 EXT-3 为可选优化）、G7 已由 R27 闭环、G9 已由 R28 落地（R39 视觉确认）、**G15 已由 R29–R30/R32/R34/R35 闭环**（重复规则/死声明/死类清理 + 冲突分类器证明 0 冲突）、**I7–I16 文档漂移已由 R31 校正**、编辑器移动端适配（游玩舞台 R39 确认，编辑器仍出范围）。**R16a/R16b 已闭环 F8/F13/F18/F19/F9/E18/O2/A5/F6**，**D1 已由 R14 闭环**，**R18/R11 热路径 patch 化已完成**（基准 P95 0.02–0.03ms；增删/整表深拷贝为残余；bundle 评估暂不改造，docs/44 §5），**R19 已闭环 F10/O9**（docs/44 §6），**R20 已闭环 H2 console 门禁**（docs/44 §7），**R21 已落地 G3 锚点增量**（docs/44 §8），**R22 已落地 G4/G5 机制**（docs/44 §9），**R23 已落地 G13/G14**（docs/44 §10），**R24 已落地 G10/G12 机制**（docs/44 §11），**R25 已落地 G6/G8**（docs/44 §12），**R26 已落地 G11 主要项**（docs/44 §13），**R27 已闭环 G7**（docs/44 §14），**R28 已落地 G9 机制**（docs/44 §15），**R29–R30 已落地 G15 清理**（docs/44 §16–§17），**R31 已落地文档互锁 + docs/45 外部门禁清单**（docs/44 §18），**R32 已落地 G15 .level-canvas 清理**（docs/44 §19），**R33 已落地生产构建静态门禁 verify:dist**（docs/44 §20），**R34 已落地 G15 死类样式清理 + 死类名守卫**（docs/44 §22），**R35 已落地 G15 冲突分类并闭环**（docs/44 §23），**R36 已落地视觉矩阵执行手册 docs/46**（docs/44 §24），**R37 已落地发布候选状态报告 docs/47**（docs/44 §25），**R38 已补齐数据表非文本单元格 data-testid**（docs/44 §26，`dd7a8ba`），**R39 已执行浏览器视觉矩阵（EXT-1，FAIL=0）并落地 docs/48 + `scripts/visual-matrix.mjs`**（docs/44 §27），**R40 已完成本地全栈登录态矩阵（wrangler dev + 本地 D1 + admin，严格控制台 0 error/warn）与发布构建 bundle 记录（首屏 gzip ~203.5KB）**（docs/44 §28、docs/49），**R41 已修正 wrangler 部署路由配置（run_worker_first 移入 assets + 静态守卫 + dry-run/路由实测）**（docs/44 §29）；剩余发布项为 EXT-4 生产部署冒烟；EXT-3 为可选优化。
 - **云盘共享与关卡库已全部落地（docs/39，H1–H6）**：资源库文件管理器、云盘文件夹化、公共/精选/官方/群组关卡库、申请公开审核、admin 审核队列与官方/群组管理。后续候选：下载排行榜/排序参数、通知系统、拖拽整理、移动端适配（延续 docs/38 口径）。

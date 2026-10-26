@@ -13,7 +13,7 @@ import { Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
 import { durToQuarters, playNotes } from '../runtime/audio'
 import { Modal } from './Modal'
 import { registerModalOpen } from './keyGuard'
-import { DUR_OPTIONS, parseNoteTokens, type PlayNote } from './graph/NoteChipsEditor'
+import { DUR_OPTIONS, parseNoteTokens, type PlayNote } from './NoteChipsEditor'
 import { SCHEMA_LIMITS } from '../library/schemaLimits'
 
 // ---------------------------------------------------------------------------
