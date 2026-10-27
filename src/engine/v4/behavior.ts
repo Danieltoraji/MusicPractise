@@ -45,6 +45,8 @@ class StoppedError extends Error {
 export interface BehaviorHost extends SharedEnv {
   /** 在 handler 的事件上下文中求值（event 根 = { name, payload }） */
   evalExprForEvent(src: string, event: Json): Json
+  /** 切换本题题型内视图（v4.1；无题内视图或视图不存在时由宿主记运行日志） */
+  setView(view: string): void
   gate?(node: BehaviorNode): Promise<void>
   log(level: 'error' | 'warning', message: string, nodeId?: string): void
 }
@@ -230,6 +232,9 @@ export class BehaviorRunner {
             this.enqueue(emit.event, payload)
             return {}
           }
+          case 'setView':
+            this.host.setView(node.view)
+            return {}
           case 'on':
             throw new FlowRuntimeError(`on 节点「${node.id}」不能作为执行链成员`)
           default:

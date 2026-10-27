@@ -339,6 +339,64 @@
   gap: 2px;
 }
 
+/* 题型内视图（v4.1）：视图管理 + 组件视图归属 */
+.v4-subcard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: var(--sp-2) 0;
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--soft);
+}
+
+.v4-subcard-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+.v4-subcard-head .muted {
+  flex: 1 1 320px;
+}
+
+.v4-type-view-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.v4-type-view-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+.v4-type-view-id {
+  min-width: 48px;
+}
+
+.v4-type-view-row button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.v4-comp-view {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-0);
+}
+
+.v4-type-view-empty {
+  font-size: var(--fs-0);
+}
+
 .v4-num {
   width: 72px;
 }

@@ -62,10 +62,35 @@ describe('v4 validate：身份 / shell', () => {
     expectError(badInitial, 'V4_REF', /initialView/)
   })
 
-  it('surface 组件不允许 view；shell 绑定槽位/根错误被拒', () => {
-    const surfaceView = minimalLevelDoc()
-    surfaceView.content.types[0].surface.components[0].view = 'main'
-    expectError(surfaceView, 'V4_REF', /不允许设置 view/)
+  it('surface 组件 view 必须指向题型内已声明视图（v4.1）；绑定槽位/根错误被拒', () => {
+    // 没声明题内视图时，组件不能带 view
+    const noViews = minimalLevelDoc()
+    noViews.content.types[0].surface.components[0].view = 'main'
+    expectError(noViews, 'V4_REF', /指向不存在的题内视图/)
+
+    const dangling = minimalLevelDoc()
+    dangling.content.types[0].surface.views = [{ id: 'intro' }, { id: 'answer' }]
+    dangling.content.types[0].surface.components[0].view = 'nope'
+    expectError(dangling, 'V4_REF', /不存在的题内视图/)
+
+    const dupView = minimalLevelDoc()
+    dupView.content.types[0].surface.views = [{ id: 'intro' }, { id: 'intro' }]
+    expectError(dupView, 'V4_DUPLICATE_ID', /题内视图/)
+
+    const badInitial = minimalLevelDoc()
+    badInitial.content.types[0].surface.views = [{ id: 'intro' }]
+    badInitial.content.types[0].surface.initialView = 'nope'
+    expectError(badInitial, 'V4_REF', /initialView/)
+
+    const initialWithoutViews = minimalLevelDoc()
+    initialWithoutViews.content.types[0].surface.initialView = 'intro'
+    expectError(initialWithoutViews, 'V4_REF', /需要同时声明 surface.views/)
+
+    const viewsOk = minimalLevelDoc()
+    viewsOk.content.types[0].surface.views = [{ id: 'intro', name: '读题' }, { id: 'answer', name: '作答' }]
+    viewsOk.content.types[0].surface.initialView = 'intro'
+    viewsOk.content.types[0].surface.components[0].view = 'intro'
+    expect(validateLevelDocV4(viewsOk).errors).toEqual([])
 
     const badSlot = minimalLevelDoc()
     badSlot.content.shell.components[0].bindings = { nope: "'x'" }
@@ -78,6 +103,23 @@ describe('v4 validate：身份 / shell', () => {
     const surfaceOk = minimalLevelDoc()
     surfaceOk.content.types[0].surface.components[1].bindings = { options: 'q.options' }
     expect(validateLevelDocV4(surfaceOk).errors).toEqual([])
+  })
+
+  it('behavior setView 节点（v4.1）：视图存在则通过，悬空/未声明视图被拒', () => {
+    const ok = minimalLevelDoc()
+    ok.content.types[0].surface.views = [{ id: 'intro' }, { id: 'answer' }]
+    ok.content.types[0].surface.components[0].view = 'answer'
+    ok.content.types[0].behavior.nodes.push({ id: 'b_view', kind: 'setView', view: 'answer' })
+    expect(validateLevelDocV4(ok).errors).toEqual([])
+
+    const dangling = minimalLevelDoc()
+    dangling.content.types[0].surface.views = [{ id: 'intro' }]
+    dangling.content.types[0].behavior.nodes.push({ id: 'b_view', kind: 'setView', view: 'nope' })
+    expectError(dangling, 'V4_NODE', /不存在的视图/)
+
+    const noViews = minimalLevelDoc()
+    noViews.content.types[0].behavior.nodes.push({ id: 'b_view', kind: 'setView', view: 'intro' })
+    expectError(noViews, 'V4_NODE', /不存在的视图/)
   })
 })
 

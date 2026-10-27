@@ -18,10 +18,23 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { ComponentView } from '../../components/views'
 import { EDITOR_HOOKS } from '../../editor/editorHooks'
 import type { Json } from '../../engine/expr'
+import type { ComponentInstanceV4 } from '../../engine/v4/model'
 import { STAGE_H, STAGE_W, computeStageFit } from '../stageGeometry'
 import type { ComponentStore } from '../store'
 import type { V4Session, V4Snapshot } from './session'
 import './v4-runtime.css'
+
+/**
+ * 题型内视图过滤（v4.1，docs/56）：组件未声明 `view` 时在所有视图可见（题面/反馈等常驻件）；
+ * 题型没有视图时全部渲染。视图只过滤渲染，组件 store 不重建。
+ */
+export function filterSurfaceComponents(
+  components: ComponentInstanceV4[],
+  view: string,
+): ComponentInstanceV4[] {
+  if (view === '') return components
+  return components.filter((component) => component.view === undefined || component.view === view)
+}
 
 export interface LevelStageV4Props {
   session: V4Session
@@ -120,8 +133,9 @@ export function LevelStageV4({ session, snapshot, viewportClassName, canvasClass
             className="v4-surface"
             data-testid="v4-surface"
             data-call-id={surface.callId}
+            data-view={surface.view}
           >
-            {surface.components.map((component) => (
+            {filterSurfaceComponents(surface.components, surface.view).map((component) => (
               <ComponentView
                 key={component.id}
                 spec={component}

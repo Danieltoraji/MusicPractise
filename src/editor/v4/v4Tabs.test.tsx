@@ -552,7 +552,7 @@ describe('TypesTab（元信息 / state / surface）', () => {
       expect(components.length).toBe(before + 1)
       const added = components[components.length - 1]
       expect(added.id.length).toBeGreaterThan(0)
-      expect(added.view).toBeUndefined() // surface 禁止 view
+      expect(added.view).toBeUndefined() // 未声明题内视图时不带 view
       // 布局编辑
       const xInput = byTestId(container, `v4-comp-x-${added.id}`) as HTMLInputElement
       typeInput(xInput, '33')
@@ -570,6 +570,47 @@ describe('TypesTab（元信息 / state / surface）', () => {
       harness.mounted.rerender()
       expect(harness.current().content.types[0].surface.components.length).toBe(before)
       // 数据/表现编辑不触碰 flow
+      expect(harness.current().content.flow).toBe(doc.content.flow)
+    } finally {
+      harness.mounted.unmount()
+    }
+  })
+
+  it('题内视图：新增 / 命名 / 设初始 / 组件视图归属 / 删除（v4.1）', () => {
+    const doc = sampleDoc()
+    const harness = harnessTab(TypesTab, doc)
+    try {
+      const { container } = harness.mounted
+      click(byTestId(container, 'v4-type-subtab-surface'))
+
+      // 新增视图 → 组件出现「视图归属」下拉
+      click(byTestId(container, 'v4-type-view-add'))
+      harness.mounted.rerender()
+      const views = harness.current().content.types[0].surface.views
+      expect(views?.map((view) => view.id)).toEqual(['view1'])
+      chooseSelect(byTestId(container, 'v4-comp-view-prompt') as HTMLSelectElement, 'view1')
+      harness.mounted.rerender()
+      expect(harness.current().content.types[0].surface.components[0].view).toBe('view1')
+
+      // 设为初始视图
+      click(byTestId(container, 'v4-type-view-initial-view1'))
+      harness.mounted.rerender()
+      expect(harness.current().content.types[0].surface.initialView).toBe('view1')
+
+      // 视图改名（失焦提交）
+      const nameInput = byTestId(container, 'v4-type-view-name-view1') as HTMLInputElement
+      typeInput(nameInput, '作答')
+      blurInput(nameInput)
+      harness.mounted.rerender()
+      expect(harness.current().content.types[0].surface.views?.[0].name).toBe('作答')
+
+      // 删除视图：组件不删、归属清空、initialView 清除
+      click(byTestId(container, 'v4-type-view-remove-view1'))
+      harness.mounted.rerender()
+      const surface = harness.current().content.types[0].surface
+      expect(surface.views).toBeUndefined()
+      expect(surface.initialView).toBeUndefined()
+      expect(surface.components[0].view).toBeUndefined()
       expect(harness.current().content.flow).toBe(doc.content.flow)
     } finally {
       harness.mounted.unmount()

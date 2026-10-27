@@ -428,7 +428,19 @@ function renderLayerText(doc: LevelDocV4, layer: string, typeId: string): string
   if (layer === 'behavior') {
     if (!typeId) throw new Error(`layer=behavior 需要 typeId。现有题型：${typeListText(doc)}`)
     const type = requireType(doc, typeId)
-    return wrap(`行为层 ${typeId}`, type.behavior, '内容过长时请分事件精简后重读')
+    // v4.1：行为层 setView 的目标是题内视图，读层时带 surface 视图上下文
+    return wrap(
+      `行为层 ${typeId}`,
+      {
+        surface: {
+          views: type.surface.views ?? null,
+          initialView: type.surface.initialView ?? null,
+          components: type.surface.components.map((component) => ({ id: component.id, type: component.type, view: component.view ?? null })),
+        },
+        behavior: type.behavior,
+      },
+      '内容过长时请分事件精简后重读；setView 只能指向本题 surface.views 里声明的视图',
+    )
   }
   if (layer === 'manifest') {
     return wrap(

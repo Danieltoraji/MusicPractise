@@ -91,6 +91,13 @@ function answerSteps(doc: LevelDocV4, item: DeckItem): HarnessStep[] {
         settleStep(),
       ]
     }
+    case 'step-choice': {
+      return [
+        ...act('startBtn', 'clicked'),
+        ...act('choice1', 'chosen', { index: row.answerIndex }),
+        ...act('nextBtn', 'clicked'),
+      ]
+    }
     default:
       throw new Error(`模板测试未覆盖题型 ${item.type}`)
   }
@@ -114,8 +121,14 @@ function expectNoErrors(report: HarnessReport): void {
 // ---------------------------------------------------------------------------
 
 describe('零代码模板目录', () => {
-  it('提供 blank / listen-choice / rhythm-tap / tutorial 四个模板，未知 id 报中文错误', () => {
-    expect(LEVEL_TEMPLATES.map((template) => template.id)).toEqual(['blank', 'listen-choice', 'rhythm-tap', 'tutorial'])
+  it('提供 blank / listen-choice / rhythm-tap / tutorial / step-clock 五个模板，未知 id 报中文错误', () => {
+    expect(LEVEL_TEMPLATES.map((template) => template.id)).toEqual([
+      'blank',
+      'listen-choice',
+      'rhythm-tap',
+      'tutorial',
+      'step-clock',
+    ])
     for (const template of LEVEL_TEMPLATES) {
       expect(template.name.trim()).not.toBe('')
       expect(template.description.trim()).not.toBe('')
@@ -202,6 +215,32 @@ describe('模板无头通关', () => {
     const deck = buildDeck(doc).deck
     expect(deck).toHaveLength(2)
     const report = await play(doc, answerScript(doc, deck), 5000)
+    expect(report.error).toBeUndefined()
+    expect(report.finished).toBe(true)
+    expect(report.questions).toHaveLength(2)
+    expect(report.result).toEqual({ score: 20, passed: true })
+    expectNoErrors(report)
+  })
+
+  it('step-clock（v4.1）：题内两视图 + 全局时钟模板可通关（题面/选项分步切换）', async () => {
+    const doc = expectTemplateLoadable(createLevelFromTemplate('step-clock'))
+    const type = getType(doc, 'step-choice')
+    if (!type) throw new Error('模板缺少 step-choice 题型')
+    expect(type.surface.views?.map((view) => view.id)).toEqual(['intro', 'answer'])
+    expect(type.surface.initialView).toBe('intro')
+    expect(type.surface.components.find((component) => component.id === 'startBtn')?.view).toBe('intro')
+    expect(type.surface.components.find((component) => component.id === 'choice1')?.view).toBe('answer')
+    expect(type.behavior.nodes.some((node) => node.kind === 'setView' && node.view === 'intro')).toBe(true)
+    // 全局时钟：shell 绑定引用 run.elapsedMs（运行期由 session 每 100ms 刷新）
+    expect(
+      doc.content.shell.components.some((component) =>
+        Object.values(component.bindings ?? {}).some((expr) => expr.includes('run.elapsedMs')),
+      ),
+    ).toBe(true)
+
+    const deck = buildDeck(doc).deck
+    expect(deck).toHaveLength(2)
+    const report = await play(doc, answerScript(doc, deck))
     expect(report.error).toBeUndefined()
     expect(report.finished).toBe(true)
     expect(report.questions).toHaveLength(2)

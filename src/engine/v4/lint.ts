@@ -42,7 +42,7 @@ function warn(lint: Lint, code: string, message: string, extra: Omit<V4Issue, 'c
   lint.issues.push({ code, level: 'warning', message, ...extra })
 }
 
-const RUN_READ_KEYS = new Set(['questions', 'total', 'seed', 'index'])
+const RUN_READ_KEYS = new Set(['questions', 'total', 'seed', 'index', 'elapsedMs'])
 const EVENT_READ_KEYS = new Set(['name', 'payload'])
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ function checkPathParts(parts: string[], scope: ExprScopeInfo): string | null {
     case 'run':
       return RUN_READ_KEYS.has(head)
         ? null
-        : `未知的运行时字段 "run.${head}"（可用：questions/total/seed/index）`
+        : `未知的运行时字段 "run.${head}"（可用：questions/total/seed/index/elapsedMs）`
     case 'event':
       if (!scope.allowEvent) return `"event" 只能用于行为事件处理链`
       return EVENT_READ_KEYS.has(head) ? null : `未知的事件字段 "event.${head}"（可用：name/payload）`

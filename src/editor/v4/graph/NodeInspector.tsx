@@ -22,6 +22,7 @@ import {
   shellComponents,
   shellEventCandidates,
   surfaceComponents,
+  surfaceViews,
 } from './layerConfig'
 import type { AnyGraphNode, GraphLayer } from './ops'
 import { nodeKindLabel } from './summary'
@@ -402,12 +403,20 @@ function InspectorBody(props: NodeInspectorProps & { node: AnyGraphNode }): Reac
 
       {node.kind === 'setView' && (
         <SelectField
-          label="目标视图"
+          label={flow ? '目标视图（shell）' : '目标视图（题内）'}
           value={node.view}
           testId="v4-graph-field-view"
-          options={doc.content.shell.views.map((view) => ({ value: view.id, label: view.name ?? view.id }))}
+          options={(flow ? doc.content.shell.views : surfaceViews(doc, typeId)).map((view) => ({
+            value: view.id,
+            label: view.name ?? view.id,
+          }))}
           onChange={(view) => onPatch({ view })}
         />
+      )}
+      {node.kind === 'setView' && !flow && surfaceViews(doc, typeId).length === 0 && (
+        <span className="muted v4-graph-field-hint">
+          该题型还没有题内视图：先到「题型 → 表现 → 题内视图」添加视图，再回来切视图。
+        </span>
       )}
 
       {node.kind === 'ask' && (

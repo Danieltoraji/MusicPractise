@@ -15,6 +15,7 @@ import {
   addColumn,
   addComponent,
   addRow,
+  addSurfaceView,
   addType,
   addView,
   blankLevelDocV4,
@@ -27,11 +28,13 @@ import {
   removeColumn,
   removeComponent,
   removeRow,
+  removeSurfaceView,
   removeType,
   removeView,
   renameColumn,
   setManifest,
   setRunConfig,
+  setSurfaceInitialView,
   setTypeArgs,
   setTypeState,
   SHELL_LAYER,
@@ -41,6 +44,7 @@ import {
   updateFlow,
   updateRowMeta,
   updateShell,
+  updateSurfaceView,
   updateTableCell,
   updateType,
   updateView,
@@ -404,7 +408,7 @@ describe('docStateV4 · 舞台（视图/组件）', () => {
     expect(removeView(fixed, 'main')).toBe(fixed)
   })
 
-  it('addComponent 在 shell/surface 层各自查重生成 id；surface 禁止 view', () => {
+  it('addComponent 在 shell/surface 层各自查重生成 id；surface 无视图时丢弃 view', () => {
     const doc = sampleDoc()
     const shell1 = addComponent(doc, SHELL_LAYER, 'label')
     const shell2 = addComponent(shell1.doc, SHELL_LAYER, 'label')
@@ -437,6 +441,41 @@ describe('docStateV4 · 舞台（视图/组件）', () => {
     expect(updated.content.shell.components.some((c) => c.id === 'hacked')).toBe(false)
     const removed = removeComponent(updated, SHELL_LAYER, added.id)
     expect(removed.content.shell.components.some((c) => c.id === added.id)).toBe(false)
+  })
+
+  it('题型内视图：add/update/remove/initial 与组件 view 归属（v4.1）', () => {
+    const doc = sampleDoc()
+    const added = addSurfaceView(doc, 'choice', '读题')
+    expect(added.id).toBe('view1')
+    expect(added.doc.content.types[0].surface.views?.map((v) => v.id)).toEqual(['view1'])
+    expect(added.doc.content.types[0].surface.views?.[0].name).toBe('读题')
+
+    const renamed = updateSurfaceView(added.doc, 'choice', 'view1', { name: '作答' })
+    expect(renamed.content.types[0].surface.views?.[0].name).toBe('作答')
+
+    const withInitial = setSurfaceInitialView(renamed, 'choice', 'view1')
+    expect(withInitial.content.types[0].surface.initialView).toBe('view1')
+    expect(setSurfaceInitialView(withInitial, 'choice', 'nope')).toBe(withInitial)
+
+    // 声明视图后，surface 组件可以带合法 view；非法 view 仍被丢弃
+    const comp = addComponent(withInitial, { kind: 'surface', typeId: 'choice' }, 'label', { view: 'view1' })
+    expect(comp.doc.content.types[0].surface.components.at(-1)!.view).toBe('view1')
+    const badComp = addComponent(withInitial, { kind: 'surface', typeId: 'choice' }, 'label', { view: 'ghost' })
+    expect(badComp.doc.content.types[0].surface.components.at(-1)!.view).toBeUndefined()
+
+    // 删除视图：组件不删，归属改为全部视图可见；initialView 清理
+    const removed = removeSurfaceView(comp.doc, 'choice', 'view1')
+    const surface = removed.content.types[0].surface
+    expect(surface.views).toBeUndefined()
+    expect(surface.initialView).toBeUndefined()
+    expect(surface.components.at(-1)!.id).toBe(comp.id)
+    expect(surface.components.at(-1)!.view).toBeUndefined()
+    // 结构共享：其它分支未变
+    expect(removed.content.flow).toBe(doc.content.flow)
+    expect(removed.content.shell).toBe(doc.content.shell)
+    // 结果仍可装载
+    const loaded = loadLevelDocV4(removed)
+    expect(loaded.ok, loaded.ok ? '' : loaded.errors.join(' / ')).toBe(true)
   })
 })
 

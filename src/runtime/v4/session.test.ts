@@ -9,7 +9,7 @@ import type {
   RunResult,
 } from '../../engine/v4/model'
 import type { V4RunEvent } from './session'
-import { V4Session, type V4SessionHost } from './session'
+import { V4Session, type TimerApi, type V4SessionHost } from './session'
 
 interface Harness {
   finished: RunResult[]
@@ -374,3 +374,215 @@ function waitThenReturnByEventFixture(): BehaviorProgram {
     [out('b_on', 'b_ret')],
   )
 }
+
+// ---------------------------------------------------------------------------
+// v4.1：题型内视图（docs/56）
+// ---------------------------------------------------------------------------
+
+describe('v4 session：题型内视图', () => {
+  /** prompt 属 intro、choice 属 answer、startBtn 所有视图可见；行为在 startBtn 点击后切到 answer */
+  function viewDoc(): LevelDocV4 {
+    const doc = docWith(
+      behavior(
+        [
+          { id: 'b_start', kind: 'on', event: 'start' },
+          { id: 'b_onStartBtn', kind: 'on', event: 'startBtn.clicked' },
+          { id: 'b_view', kind: 'setView', view: 'answer' },
+          { id: 'b_onChosen', kind: 'on', event: 'choice1.chosen' },
+          { id: 'b_ret', kind: 'return', result: "{ status: 'answered', scoreDelta: q.scoring }" },
+        ],
+        [out('b_onStartBtn', 'b_view'), out('b_onChosen', 'b_ret')],
+      ),
+    )
+    const type = doc.content.types[0]
+    type.surface.views = [{ id: 'intro', name: '读题' }, { id: 'answer', name: '作答' }]
+    type.surface.initialView = 'intro'
+    type.surface.components[0].view = 'intro'
+    type.surface.components[1].view = 'answer'
+    type.surface.components.push({ id: 'startBtn', type: 'button', props: { text: '开始' } })
+    return doc
+  }
+
+  it('每次 ask 从 initialView 开始；behavior setView 切视图；下一题回到初始视图', async () => {
+    const h = makeHost()
+    const session = track(new V4Session(viewDoc(), h.host))
+    session.start()
+    await waitFor(() => session.getSnapshot().surface !== null, '挂载第一帧')
+    expect(session.getSnapshot().surface?.view).toBe('intro')
+    expect(session.getSnapshot().surface?.components.map((c) => c.id)).toContain('prompt')
+
+    session.dispatchSurfaceEvent('startBtn', 'clicked')
+    await waitFor(() => session.getSnapshot().surface?.view === 'answer', '切到作答视图')
+    session.dispatchSurfaceEvent('choice1', 'chosen', { index: 0 })
+    await waitFor(() => session.getSnapshot().surface?.callId === 2, '挂载第二帧')
+    expect(session.getSnapshot().surface?.view).toBe('intro')
+    session.dispatchSurfaceEvent('startBtn', 'clicked')
+    session.dispatchSurfaceEvent('choice1', 'chosen', { index: 0 })
+    await waitFor(() => session.getSnapshot().result !== null, '结算')
+  })
+
+  it('没有题内视图时 setView 记运行错误，不改变帧视图', async () => {
+    const doc = docWith(
+      behavior(
+        [
+          { id: 'b_start', kind: 'on', event: 'start' },
+          { id: 'b_view', kind: 'setView', view: 'nope' },
+          { id: 'b_on', kind: 'on', event: 'choice1.chosen' },
+          { id: 'b_ret', kind: 'return', result: '{}' },
+        ],
+        [out('b_start', 'b_view'), out('b_on', 'b_ret')],
+      ),
+    )
+    const h = makeHost()
+    const session = track(new V4Session(doc, h.host))
+    session.start()
+    await waitFor(() => session.getSnapshot().surface !== null, '挂载 surface')
+    expect(session.getSnapshot().surface?.view).toBe('')
+    expect(h.events.some((event) => event.kind === 'error' && /没有题内视图/.test(event.message ?? ''))).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// v4.1：全局时钟 run.elapsedMs（docs/56）
+// ---------------------------------------------------------------------------
+
+interface FakeClock {
+  timer: TimerApi
+  now(): number
+  advance(ms: number): void
+  tick(): void
+  intervals: number
+}
+
+function fakeClock(initialMs = 0): FakeClock {
+  let nowMs = initialMs
+  const callbacks: { fn: () => void; cleared: boolean }[] = []
+  const timer: TimerApi = {
+    setTimeout: () => null,
+    clearTimeout: () => {},
+    setInterval: (fn) => {
+      const record = { fn, cleared: false }
+      callbacks.push(record)
+      return record
+    },
+    clearInterval: (handle) => {
+      const record = handle as { cleared?: boolean } | null
+      if (record) record.cleared = true
+    },
+  }
+  return {
+    timer,
+    now: () => nowMs / 1000,
+    advance(ms) {
+      nowMs += ms
+    },
+    tick() {
+      for (const record of callbacks) if (!record.cleared) record.fn()
+    },
+    get intervals() {
+      return callbacks.filter((record) => !record.cleared).length
+    },
+  }
+}
+
+function clockDoc(withClock: boolean): LevelDocV4 {
+  const doc = minimalLevelDoc()
+  doc.content.flow = flowProgram(
+    [
+      { id: 'f_start', kind: 'start' },
+      { id: 'f_wait', kind: 'waitShell', event: 'btn1.clicked' },
+      { id: 'f_finish', kind: 'finish', passed: 'true' },
+    ],
+    [out('f_start', 'f_wait'), out('f_wait', 'f_finish')],
+  )
+  doc.content.shell.components.push({ id: 'btn1', type: 'button', view: 'main', layout: { x: 20, y: 60, w: 120, h: 40 } })
+  if (withClock) {
+    doc.content.shell.components.push({
+      id: 'clockLabel',
+      type: 'label',
+      view: 'main',
+      layout: { x: 20, y: 100, w: 240, h: 32 },
+      bindings: { text: "'t=' + floor(run.elapsedMs / 1000)" },
+    })
+  }
+  return doc
+}
+
+describe('v4 session：全局时钟 run.elapsedMs', () => {
+  function clockText(session: V4Session): string {
+    const state = session.shellStore.snapshot('clockLabel').state as { text?: string } | null
+    return state?.text ?? ''
+  }
+
+  it('有 run.elapsedMs 绑定 → 100ms tick 刷新 shell 显示；finish 定格；restart 归零', async () => {
+    const clock = fakeClock()
+    const h = makeHost()
+    const session = track(new V4Session(clockDoc(true), { ...h.host, getNowSeconds: () => clock.now(), timer: clock.timer }))
+    session.start()
+    expect(clock.intervals).toBe(1)
+    expect(clockText(session)).toBe('t=0')
+
+    clock.advance(1500)
+    clock.tick()
+    expect(clockText(session)).toBe('t=1')
+
+    await waitFor(() => session.waitingShellEvents.includes('btn1.clicked'), '流程停在 waitShell')
+    session.dispatchShellEvent('btn1', 'clicked')
+    await waitFor(() => session.getSnapshot().result !== null, '结算')
+    expect(clock.intervals).toBe(0)
+    clock.advance(3000)
+    clock.tick()
+    expect(clockText(session)).toBe('t=1')
+
+    session.restart()
+    expect(clock.intervals).toBe(1)
+    expect(clockText(session)).toBe('t=0')
+    clock.advance(800)
+    clock.tick()
+    expect(clockText(session)).toBe('t=0')
+  })
+
+  it('没有时钟绑定时不起 tick 定时器；behavior 仍可在事件里读到实时 run.elapsedMs', async () => {
+    const clock = fakeClock()
+    const doc = clockDoc(false)
+    doc.content.flow = askAllFlow()
+    doc.content.types[0].behavior = behavior(
+      [
+        { id: 'b_start', kind: 'on', event: 'start' },
+        { id: 'b_t0', kind: 'assign', target: 'q.state.t0', value: { expr: 'run.elapsedMs' } },
+        { id: 'b_on', kind: 'on', event: 'choice1.chosen' },
+        { id: 'b_ret', kind: 'return', result: "{ status: 'answered', payload: run.elapsedMs - q.state.t0, scoreDelta: q.scoring }" },
+      ],
+      [out('b_start', 'b_t0'), out('b_on', 'b_ret')],
+    )
+    const h = makeHost()
+    const session = track(new V4Session(doc, { ...h.host, getNowSeconds: () => clock.now(), timer: clock.timer }))
+    session.start()
+    await waitFor(() => session.getSnapshot().surface !== null, '挂载 surface')
+    expect(clock.intervals).toBe(0)
+    clock.advance(1234)
+    session.dispatchSurfaceEvent('choice1', 'chosen', { index: 0 })
+    await waitFor(() => session.getSnapshot().surface?.callId === 2, '第二题')
+    expect(session.questionResults[0].result.payload).toBe(1234)
+  })
+
+  it('debug 暂停计时器时全局时钟冻结（暂停区间不计入 elapsedMs）', () => {
+    const clock = fakeClock()
+    const h = makeHost()
+    const session = track(new V4Session(clockDoc(true), { ...h.host, getNowSeconds: () => clock.now(), timer: clock.timer }))
+    session.start()
+    clock.advance(1000)
+    clock.tick()
+    expect(clockText(session)).toBe('t=1')
+
+    session.setTimersPaused(true)
+    clock.advance(5000)
+    clock.tick()
+    expect(clockText(session)).toBe('t=1')
+
+    session.setTimersPaused(false)
+    clock.advance(1000)
+    clock.tick()
+    expect(clockText(session)).toBe('t=2')
+  })
+})

@@ -37,6 +37,18 @@ export interface LevelShell {
   initialView?: string
 }
 
+/**
+ * 题型表现层（surface）：`views`/`initialView` 是 v4.1 的「题型内视图」（docs/56）。
+ * - 视图只过滤渲染：不重建组件 store，组件内部状态在同一题内跨视图保留；
+ * - 组件 `view` 缺省 = 所有视图可见（题面/反馈这类常驻件），填写则只属于该视图；
+ * - 每次 ask 都从 initialView 开始（与 shell 视图跨题持久的语义不同）。
+ */
+export interface QuestionSurface {
+  views?: ViewDefV4[]
+  initialView?: string
+  components: ComponentInstanceV4[]
+}
+
 // ---------------------------------------------------------------------------
 // 题型：定义 / 实例表 / 题单 / 发牌
 // ---------------------------------------------------------------------------
@@ -84,7 +96,7 @@ export interface QuestionTypeDef {
   name: string
   description?: string
   /** 题型本地组件（id 在题型内唯一，运行时内部命名空间隔离） */
-  surface: { components: ComponentInstanceV4[] }
+  surface: QuestionSurface
   /** 题型行为：一次 ask 调用的异步函数（docs/53 §7） */
   behavior: BehaviorProgram
   /** q.state.* 初始 schema（每 (type,row) 一份，本局持久） */
@@ -288,6 +300,7 @@ export type BehaviorNode =
   | BranchNode
   | LoopNode
   | WaitNode
+  | SetViewNode
   | CommentNode
 
 export interface BehaviorProgram {
@@ -446,6 +459,8 @@ export const SCHEMA_LIMITS_V4 = {
   manifestEntries: 2048,
   /** 每型 surface 组件数 */
   surfaceComponentsPerType: 32,
+  /** 每型题内视图数（v4.1 题型内视图） */
+  surfaceViewsPerType: 16,
   /** shell 组件数 */
   shellComponents: 64,
   /** 视图数 */
@@ -558,13 +573,29 @@ function normalizeBehavior(raw: unknown): BehaviorProgram {
   return out
 }
 
+function normalizeViews(raw: unknown): ViewDefV4[] {
+  return asArray(raw).map((item) => {
+    const v = asRecord(item)
+    const view: ViewDefV4 = { id: asString(v.id, '') }
+    if (typeof v.name === 'string') view.name = v.name
+    return view
+  })
+}
+
+function normalizeSurface(raw: unknown): QuestionSurface {
+  const surface = asRecord(raw)
+  const out: QuestionSurface = { components: asArray(surface.components).map(normalizeComponent) }
+  if (surface.views !== undefined) out.views = normalizeViews(surface.views)
+  if (typeof surface.initialView === 'string') out.initialView = surface.initialView
+  return out
+}
+
 function normalizeType(raw: unknown): QuestionTypeDef {
   const t = asRecord(raw)
-  const surface = asRecord(t.surface)
   const out: QuestionTypeDef = {
     id: asString(t.id, ''),
     name: asString(t.name, ''),
-    surface: { components: asArray(surface.components).map(normalizeComponent) },
+    surface: normalizeSurface(t.surface),
     behavior: normalizeBehavior(t.behavior),
   }
   if (typeof t.description === 'string') out.description = t.description

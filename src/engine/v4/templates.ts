@@ -11,10 +11,12 @@
  */
 import type { Json } from '../expr'
 import type {
+  BehaviorNode,
   BehaviorProgram,
   ColumnDefV4,
   ComponentInstanceV4,
   FlowNode,
+  GraphEdge,
   LevelDocV4,
   LevelShell,
   QuestionRow,
@@ -500,10 +502,177 @@ function buildTutorialTemplate(options: { id?: string; title?: string } = {}): L
 }
 
 // ---------------------------------------------------------------------------
+// step-clock：分步作答 + 全局计时（v4.1：题内视图 + run.elapsedMs 实时显示）
+// ---------------------------------------------------------------------------
+
+/** 题内分步：intro 视图（题面 + 开始）→ answer 视图（选项 + 反馈 + 下一题） */
+function buildStepClockType(): QuestionTypeDef {
+  const nodes: BehaviorNode[] = [
+    { id: 'b_onStart', kind: 'on', event: 'start' },
+    { id: 'b_startView', kind: 'setView', view: 'intro' },
+    { id: 'b_startGuard', kind: 'branch', cond: 'q.state.answered' },
+    { id: 'b_startRet', kind: 'return', result: "{ status: 'answered', scoreDelta: 0 }" },
+    { id: 'b_onGo', kind: 'on', event: 'startBtn.clicked' },
+    { id: 'b_goView', kind: 'setView', view: 'answer' },
+    { id: 'b_setOptions', kind: 'call', target: 'choice1', method: 'setOptions', arg: '{ options: q.options }' },
+    { id: 'b_goGuard', kind: 'branch', cond: 'q.state.answered' },
+    { id: 'b_goRet', kind: 'return', result: "{ status: 'answered', scoreDelta: 0 }" },
+    { id: 'b_onChosen', kind: 'on', event: 'choice1.chosen' },
+    { id: 'b_chosenGuard', kind: 'branch', cond: 'q.state.answered' },
+    { id: 'b_chosenRet', kind: 'return', result: "{ status: 'answered', scoreDelta: 0 }" },
+    { id: 'b_isCorrect', kind: 'branch', cond: 'event.payload.index == q.answerIndex' },
+    { id: 'b_markAnswered', kind: 'assign', target: 'q.state.answered', value: { expr: 'true' } },
+    { id: 'b_reveal', kind: 'call', target: 'choice1', method: 'reveal', arg: '{ correctIndex: q.answerIndex }' },
+    { id: 'b_feedbackOk', kind: 'call', target: 'feedback', method: 'show', arg: "{ text: '答对了！点「下一题」继续。', tone: 'success' }" },
+    { id: 'b_feedbackBad', kind: 'call', target: 'feedback', method: 'show', arg: "{ text: '不是这个，再看看。', tone: 'error' }" },
+    { id: 'b_onNext', kind: 'on', event: 'nextBtn.clicked' },
+    { id: 'b_nextGuard', kind: 'branch', cond: 'q.state.answered' },
+    { id: 'b_nextScored', kind: 'return', result: "{ status: 'answered', correct: true, scoreDelta: q.scoring }" },
+    { id: 'b_nextSkipped', kind: 'return', result: "{ status: 'skipped', correct: false, scoreDelta: 0 }" },
+    { id: 'b_comment', kind: 'comment', text: '分步作答：intro 视图读题 → answer 视图作答；题内视图只过滤渲染，q.state 跨视图保留' },
+  ]
+  const edges: GraphEdge[] = [
+    { id: 'be_1', from: 'b_onStart', to: 'b_startView' },
+    { id: 'be_2', from: 'b_startView', to: 'b_startGuard' },
+    { id: 'be_3', from: 'b_startGuard', to: 'b_startRet', port: 'true' },
+    { id: 'be_4', from: 'b_onGo', to: 'b_goView' },
+    { id: 'be_5', from: 'b_goView', to: 'b_setOptions' },
+    { id: 'be_6', from: 'b_setOptions', to: 'b_goGuard' },
+    { id: 'be_7', from: 'b_goGuard', to: 'b_goRet', port: 'true' },
+    { id: 'be_8', from: 'b_onChosen', to: 'b_chosenGuard' },
+    { id: 'be_9', from: 'b_chosenGuard', to: 'b_chosenRet', port: 'true' },
+    { id: 'be_10', from: 'b_chosenGuard', to: 'b_isCorrect', port: 'false' },
+    { id: 'be_11', from: 'b_isCorrect', to: 'b_markAnswered', port: 'true' },
+    { id: 'be_12', from: 'b_markAnswered', to: 'b_reveal' },
+    { id: 'be_13', from: 'b_reveal', to: 'b_feedbackOk' },
+    { id: 'be_14', from: 'b_isCorrect', to: 'b_feedbackBad', port: 'false' },
+    { id: 'be_15', from: 'b_onNext', to: 'b_nextGuard' },
+    { id: 'be_16', from: 'b_nextGuard', to: 'b_nextScored', port: 'true' },
+    { id: 'be_17', from: 'b_nextGuard', to: 'b_nextSkipped', port: 'false' },
+  ]
+  return {
+    id: 'step-choice',
+    name: '分步选择题',
+    description: '题内两视图（读题 / 作答）+ 跨视图保留作答状态；点「开始作答」切到选项。',
+    surface: {
+      views: [view('intro', '读题'), view('answer', '作答')],
+      initialView: 'intro',
+      components: [
+        {
+          id: 'prompt',
+          type: 'label',
+          name: '题面',
+          layout: box(24, 16, 752, 40),
+          bindings: { text: 'q.prompt' },
+        },
+        {
+          id: 'startBtn',
+          type: 'button',
+          name: '开始作答',
+          view: 'intro',
+          layout: box(300, 200, 200, 56),
+          props: { text: '开始作答 →' },
+        },
+        {
+          id: 'choice1',
+          type: 'choice',
+          name: '选项',
+          view: 'answer',
+          layout: box(24, 80, 752, 240),
+        },
+        {
+          id: 'feedback',
+          type: 'label',
+          name: '反馈',
+          view: 'answer',
+          layout: box(24, 336, 752, 40),
+          props: { text: '' },
+        },
+        {
+          id: 'nextBtn',
+          type: 'button',
+          name: '下一题',
+          view: 'answer',
+          layout: box(600, 388, 176, 44),
+          props: { text: '下一题 →' },
+        },
+      ],
+    },
+    behavior: {
+      logicVersion: LOGIC_VERSION_V4,
+      kind: 'behavior',
+      nodes,
+      edges,
+    },
+    state: [{ key: 'answered', type: 'boolean', init: false }],
+  }
+}
+
+function buildStepClockTemplate(options: { id?: string; title?: string } = {}): LevelDocV4 {
+  const title = '分步作答 · 全局计时'
+  const shell: LevelShell = {
+    views: [view('main', '主视图'), view('settled', '结算视图')],
+    components: [
+      shellComponent('titleLabel', 'label', 'main', box(24, 12, 420, 28), { name: '关卡标题', props: { text: title } }),
+      shellComponent('clockLabel', 'label', 'main', box(460, 12, 180, 28), {
+        name: '全局计时',
+        bindings: { text: "'⏱ ' + floor(run.elapsedMs / 1000) + 's'" },
+      }),
+      shellComponent('scoreLabel', 'label', 'main', box(650, 12, 126, 28), {
+        name: '得分',
+        bindings: { text: "'得分 ' + v.score" },
+      }),
+      shellComponent('progressLabel', 'label', 'main', box(24, 44, 552, 24), {
+        name: '进度',
+        bindings: { text: "'进度 ' + v.row + ' / ' + run.total" },
+      }),
+      shellComponent('settledLabel', 'label', 'settled', box(200, 110, 400, 48), {
+        name: '结算文本',
+        bindings: { text: "'本关得分 ' + v.score + ' · 用时 ' + floor(run.elapsedMs / 1000) + 's'" },
+      }),
+    ],
+  }
+  const doc = baseTemplateDoc({
+    title,
+    description:
+      '分步作答 + 全局计时：题内 intro/answer 两视图（behavior setView 切换）；shell 绑定 run.elapsedMs 实时显示本关用时（finish 定格）。',
+    tags: ['分步', '计时', '模板'],
+    difficulty: 2,
+    shell,
+    types: [buildStepClockType()],
+    tables: {
+      'step-choice': table(
+        [
+          column('prompt', 'text', '题面'),
+          column('options', 'list', '选项'),
+          column('answerIndex', 'number', '答案下标'),
+          column('scoring', 'number', '分值'),
+        ],
+        [
+          row('row_01', {
+            prompt: '先读题，再点「开始作答」：这是第一个音吗？（示例题）',
+            options: ['是', '否'],
+            answerIndex: 0,
+            scoring: 10,
+          }),
+          row('row_02', {
+            prompt: '再来一题：分步视图切回读题了吗？',
+            options: ['是', '否'],
+            answerIndex: 0,
+            scoring: 10,
+          }),
+        ],
+      ),
+    },
+  })
+  return withOverrides(withSequenceFlow(doc, 'v.score >= 10'), options)
+}
+
+// ---------------------------------------------------------------------------
 // 模板注册表 / 创建入口
 // ---------------------------------------------------------------------------
 
-export type LevelTemplateId = 'blank' | 'listen-choice' | 'rhythm-tap' | 'tutorial'
+export type LevelTemplateId = 'blank' | 'listen-choice' | 'rhythm-tap' | 'tutorial' | 'step-clock'
 
 export interface LevelTemplateCreateOptions {
   /** 覆盖新关卡 id（默认程序化生成 res_…；测试/导入场景用） */
@@ -557,6 +726,14 @@ export const LEVEL_TEMPLATES: LevelTemplateDef[] = [
     tags: ['教程', '新手'],
     difficulty: 1,
     create: (options = {}) => buildTutorialTemplate(options),
+  },
+  {
+    id: 'step-clock',
+    name: '分步作答 · 全局计时',
+    description: '题内 intro/answer 两视图分步作答；shell 绑定 run.elapsedMs 实时显示本关用时（finish 定格）。',
+    tags: ['分步', '计时', '模板'],
+    difficulty: 2,
+    create: (options = {}) => buildStepClockTemplate(options),
   },
 ]
 

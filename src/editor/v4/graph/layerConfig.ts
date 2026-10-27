@@ -63,6 +63,12 @@ export function surfaceComponents(doc: LevelDocV4, typeId: string | undefined): 
   return (type?.surface.components ?? []).map((component) => ({ id: component.id, type: component.type, name: component.name }))
 }
 
+/** 题型内视图（v4.1）：行为层 setView 的候选；无题内视图时返回空数组 */
+export function surfaceViews(doc: LevelDocV4, typeId: string | undefined): { id: string; name?: string }[] {
+  if (typeId === undefined) return []
+  return (getType(doc, typeId)?.surface.views ?? []).map((view) => ({ id: view.id, name: view.name }))
+}
+
 /** 组件命令候选（契约命令 + 基座命令，去重；不含 `__` 内部命令） */
 export function componentCommands(componentType: string): { name: string; doc?: string }[] {
   const contract = contractOfType(componentType)
@@ -355,6 +361,7 @@ export function buildBehaviorPalette(
 ): PaletteGroup[] {
   const surface = surfaceComponents(doc, typeId)
   const firstSurface = surface[0]
+  const views = surfaceViews(doc, typeId)
   const events = onEventCandidates(doc, typeId, program)
   const eventItems: PaletteItem[] = events.map((candidate) => ({
     key: `on-${candidate.value.replace(/[^A-Za-z0-9_-]/g, '-')}`,
@@ -436,6 +443,23 @@ export function buildBehaviorPalette(
         { key: 'behavior-wait', label: '等待 wait', desc: '休眠指定毫秒（任务内顺序执行）', make: (pos) => ({ kind: 'wait', ms: '200', ...at(pos) }) },
       ],
     },
+    ...(views.length > 0
+      ? [
+          {
+            id: 'view',
+            label: '题内视图',
+            hint: '切换题型内部视图（只过滤渲染，组件状态保留）',
+            items: [
+              {
+                key: 'behavior-setview',
+                label: '切换视图 view',
+                desc: '切换到题型内已声明的视图（如 读题 → 作答 → 反馈）',
+                make: (pos): GraphNodeShape => ({ kind: 'setView', view: views[0].id, ...at(pos) }),
+              } satisfies PaletteItem,
+            ],
+          } satisfies PaletteGroup,
+        ]
+      : []),
     {
       id: 'comment',
       label: '注释',

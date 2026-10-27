@@ -350,6 +350,32 @@ describe('v4 GraphWorkbench · behavior 层', () => {
     }
   })
 
+  it('题型内视图：调色板插入 setView（tag=behavior），检查器候选来自题内视图（v4.1）', () => {
+    const doc = sampleDoc()
+    doc.content.types[0].surface.views = [{ id: 'intro', name: '读题' }, { id: 'answer', name: '作答' }]
+    const harness = mountSlot('behavior', doc, 'choice')
+    try {
+      expect(hasTestId(harness.container, 'palette-item-behavior-setview')).toBe(true)
+      click(byTestId(harness.container, 'palette-item-behavior-setview'))
+      expect(harness.tags()).toEqual(['behavior'])
+      const behavior = harness.current().content.types.find((type) => type.id === 'choice')!.behavior
+      const node = behavior.nodes.at(-1)!
+      expect(node.kind).toBe('setView')
+      expect((node as { view: string }).view).toBe('intro')
+      // 检查器：视图下拉候选 = 题内视图，可改
+      harness.rerender()
+      click(byTestId(harness.container, `graph-card-${node.id}`))
+      const select = byTestId(harness.container, 'v4-graph-field-view') as HTMLSelectElement
+      expect([...select.options].map((option) => option.value)).toEqual(['intro', 'answer'])
+      chooseSelect(select, 'answer')
+      expect(harness.tags()).toEqual(['behavior', 'behavior'])
+      const updated = harness.current().content.types.find((type) => type.id === 'choice')!.behavior
+      expect((updated.nodes.find((candidate) => candidate.id === node.id) as { view: string }).view).toBe('answer')
+    } finally {
+      harness.unmount()
+    }
+  })
+
   it('行为检查器：on 事件下拉切换 / return 返回值编辑（tag=behavior）', () => {
     const harness = mountSlot('behavior', sampleDoc(), 'choice')
     try {

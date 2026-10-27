@@ -15,6 +15,7 @@ const SCOPE_CATALOG = [
   'local.<键>：behavior 局部量（behavior.locals 或 ask 的 resultVar）',
   'v.<键>：run 变量（必须在 flow.vars 声明；query 用 stateOf/contentOf 只读）',
   'run.questions / run.total / run.seed / run.index：牌堆只读',
+  'run.elapsedMs：本局全局时钟（毫秒；行为事件里实时、finish 定格、restart 归零；shell/surface 绑定可实时显示）',
   'event.name / event.payload：behavior 事件处理器可用',
 ].join('\n- ')
 
@@ -23,7 +24,8 @@ function typeSummary(doc: LevelDocV4): string {
   return doc.content.types
     .map((type) => {
       const table = doc.content.tables[type.id]
-      return `- ${type.id}（${type.name}）：${table?.rows.length ?? 0} 行 / ${table?.columns.length ?? 0} 列；surface 组件 ${type.surface.components.length} 个`
+      const views = type.surface.views?.map((view) => view.id).join('/') ?? '无题内视图'
+      return `- ${type.id}（${type.name}）：${table?.rows.length ?? 0} 行 / ${table?.columns.length ?? 0} 列；surface 组件 ${type.surface.components.length} 个；视图 ${views}`
     })
     .join('\n')
 }
@@ -41,11 +43,13 @@ export function buildV4SystemPrompt(doc: LevelDocV4, mode: 'ask' | 'agent'): str
 ## v4 关卡模型（LevelDocV4）
 content = { shell, types[], tables{题型id → {columns, rows}}, manifest?, run, flow }
 - shell：舞台视图（views）与常驻组件（components，跨题显示；可写 bindings 只读投影）
-- types[]：题型定义（id/name/surface 组件/behavior 行为图/state/typeState/args）
+- types[]：题型定义（id/name/surface{views?,initialView?,components}/behavior 行为图/state/typeState/args）
+- 题型内视图（surface.views）：只过滤渲染；组件 view 省略 = 所有视图可见；behavior 用 setView 节点切题内视图，flow 的 setView 切 shell 视图
 - tables：每种题型一张实例表，**一行 = 一道题**；行 id 稳定（增删/重排不变），draft 行不进自动题单，phase/order 影响题单排序
 - manifest：显式题单 entries[{type,row,args?}]；缺省 = 自动题单（run.order=manifest|shuffle、count、seed、shuffleWithinPhase）
 - flow：关卡主流程 main（节点 kind：start/assign/ask/foreach/branch/loop/call/setView/wait/waitShell/finish/restart/comment）
-- behavior：题型行为（一次 ask 调用的异步函数；on start / on 组件.事件 / internal.* 事件、return 返回 QuestionResult）
+- behavior：题型行为（一次 ask 调用的异步函数；on start / on 组件.事件 / internal.* 事件、assign/call/branch/loop/wait/setView/emit/return）
+- 全局时钟：run.elapsedMs 可被 shell/surface 绑定实时显示（session 100ms 刷新），也可在行为事件中读取；finish 定格
 - 题库与流程解耦：改数据（加题/改行/改题单）不需要动 flow；只有改调度/计分/结算才改 flow
 
 ## 工具

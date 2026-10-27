@@ -273,6 +273,29 @@ function validateTypesAndTables(doc: LevelDocV4, issues: Issues): void {
       issues,
       (type.args ?? []).map((a) => ({ id: a.key, what: `题型 "${type.id}" 参数` })),
     )
+    // 题型内视图（v4.1）：id 唯一/initialView 必须存在；组件 view 必须指向这些视图
+    const surfaceViews = type.surface.views
+    const surfaceViewIds = new Set<string>()
+    if (surfaceViews !== undefined) {
+      if (surfaceViews.length === 0) {
+        issues.error('V4_REF', `题型 "${type.id}" 的 surface.views 不能为空数组（不需要视图请省略该字段）`, { typeId: type.id })
+      }
+      if (surfaceViews.length > SCHEMA_LIMITS_V4.surfaceViewsPerType) {
+        issues.error('V4_LIMIT', `题型 "${type.id}" 的题内视图数超过上限 ${SCHEMA_LIMITS_V4.surfaceViewsPerType}`, { typeId: type.id })
+      }
+      checkUniqueIds(
+        issues,
+        surfaceViews.map((v) => ({ id: v.id, what: `题型 "${type.id}" 的题内视图` })),
+      )
+      for (const view of surfaceViews) surfaceViewIds.add(view.id)
+      if (type.surface.initialView !== undefined && !surfaceViewIds.has(type.surface.initialView)) {
+        issues.error('V4_REF', `题型 "${type.id}" 的 surface.initialView 指向不存在的题内视图 "${type.surface.initialView}"`, {
+          typeId: type.id,
+        })
+      }
+    } else if (type.surface.initialView !== undefined) {
+      issues.error('V4_REF', `题型 "${type.id}" 的 surface.initialView 需要同时声明 surface.views`, { typeId: type.id })
+    }
     // surface 组件
     const surfaceIds = new Set<string>()
     type.surface.components.forEach((rawComp) => {
@@ -286,7 +309,12 @@ function validateTypesAndTables(doc: LevelDocV4, issues: Issues): void {
         issues.error('V4_RESERVED', `题型 "${type.id}" 的 surface 组件 id「${compId}」是保留字`, { typeId: type.id })
       }
       if (comp.view !== undefined) {
-        issues.error('V4_REF', `题型 "${type.id}" 的 surface 组件「${compId}」不允许设置 view（题目区域整体渲染）`, { typeId: type.id })
+        const view = str(comp.view)
+        if (view === null || !surfaceViewIds.has(view)) {
+          issues.error('V4_REF', `题型 "${type.id}" 的 surface 组件「${compId}」指向不存在的题内视图「${describeId(comp.view)}」`, {
+            typeId: type.id,
+          })
+        }
       }
       checkBindings(issues, 'surface', comp, `题型 "${type.id}" 的 surface 组件`)
     })
@@ -427,7 +455,7 @@ const FLOW_KINDS = new Set([
   'restart',
   'comment',
 ])
-const BEHAVIOR_KINDS = new Set(['on', 'return', 'assign', 'call', 'emit', 'branch', 'loop', 'wait', 'comment'])
+const BEHAVIOR_KINDS = new Set(['on', 'return', 'assign', 'call', 'emit', 'branch', 'loop', 'wait', 'setView', 'comment'])
 
 interface GraphCtx {
   flow: boolean
@@ -742,7 +770,8 @@ export function validateLevelDocV4(doc: LevelDocV4): V4Validation {
       {
         flow: false,
         shellComponents,
-        views,
+        // 行为层的 setView 指向题型内视图（v4.1）；shell 视图不参与行为层校验
+        views: new Set((type.surface.views ?? []).map((view) => view.id)),
         surfaceComponents: new Set(type.surface.components.map((c) => c.id)),
         typeId: type.id,
       },

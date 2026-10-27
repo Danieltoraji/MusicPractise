@@ -250,6 +250,17 @@
     "Surface": {
       "type": "object",
       "properties": {
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/View"
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "initialView": {
+          "$ref": "#/$defs/LocalId"
+        },
         "components": {
           "type": "array",
           "items": {
@@ -579,7 +590,8 @@
             "branch",
             "loop",
             "wait",
-            "comment"
+            "comment",
+            "setView"
           ]
         },
         "x": {

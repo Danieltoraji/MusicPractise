@@ -18,16 +18,21 @@ import {
   type QuestionTypeDef,
   type StateFieldDef,
   type StateType,
+  type ViewDefV4,
 } from '../../engine/v4/model'
 import {
   V4_TAGS,
   addComponent,
+  addSurfaceView,
   addType,
   removeComponent,
+  removeSurfaceView,
   removeType,
+  setSurfaceInitialView,
   setTypeArgs,
   setTypeState,
   updateComponent,
+  updateSurfaceView,
   updateType,
 } from './docStateV4'
 import { JsonEditModal, errText, type V4EditorBehaviorSlotProps, type V4TabProps } from './shared'
@@ -296,6 +301,8 @@ function SurfacePane(props: {
   const contractTypes = useMemo(() => allContracts().map((c) => ({ type: c.type, label: c.displayName })), [])
   const [newType, setNewType] = useState(contractTypes[0]?.type ?? 'label')
   const components = type.surface.components
+  const views = type.surface.views ?? []
+  const initialView = type.surface.initialView ?? views[0]?.id
 
   const patch = (componentId: string, next: Partial<ComponentInstanceV4>, tag?: string): void => {
     onChange(updateComponent(doc, layer, componentId, next), tag ?? V4_TAGS.component)
@@ -304,6 +311,15 @@ function SurfacePane(props: {
   const addComponentOfType = (): void => {
     try {
       const result = addComponent(doc, layer, newType)
+      onChange(result.doc)
+    } catch (err) {
+      props.onError(errText(err))
+    }
+  }
+
+  const addView = (): void => {
+    try {
+      const result = addSurfaceView(doc, type.id)
       onChange(result.doc)
     } catch (err) {
       props.onError(errText(err))
@@ -330,6 +346,62 @@ function SurfacePane(props: {
           </button>
         </span>
       </div>
+
+      <div className="v4-subcard" data-testid="v4-type-views">
+        <div className="v4-subcard-head">
+          <b>题内视图</b>
+          <span className="muted">
+            {views.length}/{SCHEMA_LIMITS_V4.surfaceViewsPerType} · 只过滤渲染；同一题内切视图不重置组件状态，每次 ask 从初始视图开始
+          </span>
+          <button type="button" data-testid="v4-type-view-add" onClick={addView} disabled={views.length >= SCHEMA_LIMITS_V4.surfaceViewsPerType}>
+            + 视图
+          </button>
+        </div>
+        {views.length === 0 ? (
+          <p className="muted v4-type-view-empty">
+            还没有题内视图——加视图后可按「读题 → 作答 → 反馈」分组显示；不给组件选视图 = 所有视图可见。
+          </p>
+        ) : (
+          <div className="v4-type-view-list">
+            {views.map((view) => (
+              <div key={view.id} className="v4-type-view-row" data-testid={`v4-type-view-${view.id}`}>
+                <code className="v4-type-view-id">{view.id}</code>
+                <input
+                  className="v4-comp-name"
+                  defaultValue={view.name ?? ''}
+                  placeholder="视图显示名"
+                  maxLength={120}
+                  data-testid={`v4-type-view-name-${view.id}`}
+                  onBlur={(e) => {
+                    if (e.currentTarget.value !== (view.name ?? '')) {
+                      onChange(updateSurfaceView(doc, type.id, view.id, { name: e.currentTarget.value }))
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className={initialView === view.id ? 'active' : undefined}
+                  data-testid={`v4-type-view-initial-${view.id}`}
+                  title="每次 ask 从这个视图开始"
+                  onClick={() => onChange(setSurfaceInitialView(doc, type.id, view.id))}
+                >
+                  {initialView === view.id ? '✓ 初始视图' : '设为初始'}
+                </button>
+                <button
+                  type="button"
+                  className="ginsp-argdel"
+                  data-testid={`v4-type-view-remove-${view.id}`}
+                  title="删除视图（其组件改为所有视图可见）"
+                  onClick={() => onChange(removeSurfaceView(doc, type.id, view.id))}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {components.length === 0 && <p className="muted">还没有 surface 组件——加一个 label 显示题面。</p>}
       {components.map((component) => (
         <ComponentCard
@@ -338,6 +410,7 @@ function SurfacePane(props: {
           onChange={onChange}
           layer={layer}
           component={component}
+          views={views}
           onPatch={(next, tag) => patch(component.id, next, tag)}
           onEditProps={() => props.onEditProps(component.id, component.props ?? null)}
           onRemove={() => onChange(removeComponent(doc, layer, component.id))}
@@ -347,12 +420,13 @@ function SurfacePane(props: {
   )
 }
 
-/** 单个 surface 组件：布局 / 初始 props / 绑定（只读表达式） */
+/** 单个 surface 组件：布局 / 视图归属 / 初始 props / 绑定（只读表达式） */
 function ComponentCard(props: {
   doc: LevelDocV4
   onChange: (next: LevelDocV4, tag?: string) => void
   layer: { kind: 'surface'; typeId: string }
   component: ComponentInstanceV4
+  views: ViewDefV4[]
   onPatch: (next: Partial<ComponentInstanceV4>, tag?: string) => void
   onEditProps: () => void
   onRemove: () => void
@@ -435,6 +509,23 @@ function ComponentCard(props: {
         ))}
         <span className="muted">800×470 坐标系</span>
       </div>
+      {props.views.length > 0 && (
+        <div className="v4-comp-view">
+          <span>视图归属</span>
+          <select
+            value={component.view ?? ''}
+            data-testid={`v4-comp-view-${component.id}`}
+            onChange={(e) => props.onPatch({ view: e.target.value === '' ? undefined : e.target.value })}
+          >
+            <option value="">全部视图（常驻）</option>
+            {props.views.map((view) => (
+              <option key={view.id} value={view.id}>
+                {view.name ?? view.id}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="v4-comp-props">
         <span>初始 props</span>
         <code className="v4-props-preview">{component.props === undefined ? '（未设置）' : JSON.stringify(component.props)}</code>

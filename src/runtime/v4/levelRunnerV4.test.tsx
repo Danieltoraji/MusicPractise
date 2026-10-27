@@ -199,6 +199,51 @@ describe('LevelRunnerV4（播放层组合 / DOM 契约）', () => {
     expect(finished).toHaveLength(1) // 重玩不重复上报上一轮结算
   })
 
+  it('题型内视图（v4.1）：surface 只渲染当前视图组件；下一题回到初始视图', async () => {
+    const doc = minimalLevelDoc()
+    doc.content.types[0].surface.views = [{ id: 'intro', name: '读题' }, { id: 'answer', name: '作答' }]
+    doc.content.types[0].surface.initialView = 'intro'
+    doc.content.types[0].surface.components[0].view = 'intro'
+    doc.content.types[0].surface.components[1].view = 'answer'
+    doc.content.types[0].surface.components.push({ id: 'goBtn', type: 'button', props: { text: '开始作答' } })
+    doc.content.types[0].behavior = {
+      logicVersion: 3,
+      kind: 'behavior',
+      nodes: [
+        { id: 'b_start', kind: 'on', event: 'start' },
+        { id: 'b_onGo', kind: 'on', event: 'goBtn.clicked' },
+        { id: 'b_view', kind: 'setView', view: 'answer' },
+        { id: 'b_on', kind: 'on', event: 'choice1.chosen' },
+        { id: 'b_ret', kind: 'return', result: "{ status: 'answered', scoreDelta: 10 }" },
+      ],
+      edges: [edge('b_onGo', 'b_view'), edge('b_on', 'b_ret')],
+    }
+    doc.content.flow = askAllFlow()
+
+    const session = trackSession(doc)
+    session.start()
+    renderEl(<StageHarness session={session} />)
+    await waitFor(() => document.querySelector('.v4-surface')?.getAttribute('data-view') === 'intro', '初始视图 intro')
+    // intro：题面渲染、选项不渲染；goBtn 未声明 view → 所有视图可见
+    expect(text(document.querySelector('.v4-surface .comp-label'))).toBe('听一听，这是什么音？')
+    expect(document.querySelectorAll('.v4-surface .choice-item')).toHaveLength(0)
+    expect(document.querySelector('.v4-surface .comp-button')).not.toBeNull()
+
+    await act(async () => {
+      session.dispatchSurfaceEvent('goBtn', 'clicked')
+    })
+    await waitFor(() => document.querySelector('.v4-surface')?.getAttribute('data-view') === 'answer', '切到作答视图')
+    expect(document.querySelector('.v4-surface .comp-label')).toBeNull()
+    expect(document.querySelectorAll('.v4-surface .choice-item')).toHaveLength(3)
+
+    await act(async () => {
+      session.dispatchSurfaceEvent('choice1', 'chosen', { index: 0 })
+    })
+    await waitFor(() => document.querySelector('.v4-surface')?.getAttribute('data-view') === 'intro', '下一题回到初始视图')
+    expect(text(document.querySelector('.v4-surface .comp-label'))).toBe('再听一个')
+    session.dispose()
+  })
+
   it('无题型调用时不渲染 surface 层；shell 事件经 waitShell 驱动流程（视图过滤生效）', async () => {
     const doc = minimalLevelDoc()
     doc.content.shell.views.push({ id: 'other', name: '其它视图' })

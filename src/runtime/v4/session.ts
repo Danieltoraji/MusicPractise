@@ -64,6 +64,21 @@ const DEFAULT_BUDGETS: V4Budgets = {
   watchdogMs: 120_000,
 }
 
+/**
+ * 全局时钟（v4.1，docs/56）：`run.elapsedMs` 是本局开始后的累计毫秒（debug 暂停时冻结、
+ * finish 时定格、restart 归零）。只有存在 UI 绑定引用 `run.elapsedMs` 时才启动 100ms
+ * 刷新定时器——纯逻辑读取（behavior/flow 表达式）在每次求值时现算，不需要 tick。
+ */
+export const CLOCK_TICK_MS = 100
+
+function hasClockBinding(doc: LevelDocV4): boolean {
+  const usesClock = (components: ComponentInstanceV4[]): boolean =>
+    components.some((component) =>
+      Object.values(component.bindings ?? {}).some((expr) => expr.includes('run.elapsedMs')),
+    )
+  return usesClock(doc.content.shell.components) || doc.content.types.some((type) => usesClock(type.surface.components))
+}
+
 export interface TimerApi {
   setTimeout(fn: () => void, ms: number): unknown
   clearTimeout(handle: unknown): void
@@ -97,7 +112,7 @@ export interface V4Snapshot {
   version: number
   view: string
   shell: ComponentInstanceV4[]
-  surface: { callId: number; typeId: string; components: ComponentInstanceV4[] } | null
+  surface: { callId: number; typeId: string; view: string; components: ComponentInstanceV4[] } | null
   progress: { index: number; total: number }
   result: RunResult | null
   running: boolean
@@ -166,6 +181,8 @@ interface SurfaceFrame {
   type: QuestionTypeDef
   store: ComponentStore
   layer: BindingLayer
+  /** 当前题内视图 id；无题内视图时为空串（surface 组件全部渲染） */
+  view: string
   qState: Record<string, Json>
   t: Record<string, Json>
   args: Record<string, Json>
@@ -262,13 +279,23 @@ export class V4Session {
   private logs: V4RunEvent[] = []
   private questionLog: V4QuestionLogEntry[] = []
 
+  // 全局时钟（docs/56）：run.elapsedMs = 本局累计毫秒；finish 定格、debug 暂停冻结、restart 归零
+  private readonly clockNeeded: boolean
+  private clockStartedAt = 0
+  private clockFrozenMs: number | null = null
+  private clockPausedAt: number | null = null
+  private clockPausedSeconds = 0
+  private clockTicker: unknown = null
+
   constructor(doc: LevelDocV4, host: V4SessionHost) {
     this.doc = doc
     this.host = host
+    this.clockNeeded = hasClockBinding(doc)
     this.budgets = { ...DEFAULT_BUDGETS, ...host.budgets }
     this.timerApi = host.timer ?? DEFAULT_TIMER_API
     this.view = doc.content.shell.initialView ?? doc.content.shell.views[0]?.id ?? 'main'
     this.resetRunState()
+    this.resetClock()
     this.shellStore.setEffectSink((componentId, effects) => this.handleEffects({ layer: 'shell' }, componentId, effects))
     this.shellLayer = this.mountLayer(this.shellStore, doc.content.shell.components, this.flowBindingEnv(), SHELL_BINDING_ROOTS)
     this.snapshot = this.buildSnapshot()
@@ -290,9 +317,13 @@ export class V4Session {
       total: this.deckBuild.deck.length,
       seed: this.deckBuild.seed,
       index: 0,
+      elapsedMs: 0,
     }
     this.progress = { index: 0, total: this.deckBuild.deck.length }
+    this.resetClock()
     this.mountShell()
+    this.startClockTicker()
+    if (this.timersPaused) this.pauseClock()
     this.notify()
     void this.runFlowLoop()
   }
@@ -315,6 +346,7 @@ export class V4Session {
     if (this.disposed) return
     this.disposed = true
     this.running = false
+    this.stopClockTicker()
     this.cancelActive()
     this.stopAllTimers()
     this.listeners.clear()
@@ -356,6 +388,7 @@ export class V4Session {
       }
       this.handleFlowOutcome(outcome)
       this.running = false
+      this.freezeClock()
       this.rejectShellWaiters()
       this.notify()
       return
@@ -387,10 +420,14 @@ export class V4Session {
       total: this.deckBuild.deck.length,
       seed: this.deckBuild.seed,
       index: 0,
+      elapsedMs: 0,
     }
     this.progress = { index: 0, total: this.deckBuild.deck.length }
     this.view = this.doc.content.shell.initialView ?? this.doc.content.shell.views[0]?.id ?? 'main'
+    this.resetClock()
     this.mountShell()
+    this.startClockTicker()
+    if (this.timersPaused) this.pauseClock()
     this.log('restart', '关卡已重新开始')
   }
 
@@ -417,6 +454,72 @@ export class V4Session {
       this.flowBindingEnv(),
       SHELL_BINDING_ROOTS,
     )
+  }
+
+  // -------------------------------------------------------------------------
+  // 全局时钟（v4.1，docs/56）
+  // -------------------------------------------------------------------------
+
+  private nowSeconds(): number {
+    return this.host.getNowSeconds ? this.host.getNowSeconds() : performance.now() / 1000
+  }
+
+  /** 本局累计毫秒（暂停时冻结；finish 后取定格值） */
+  private clockElapsedMs(): number {
+    if (this.clockFrozenMs !== null) return this.clockFrozenMs
+    const until = this.clockPausedAt ?? this.nowSeconds()
+    return Math.max(0, Math.floor((until - this.clockStartedAt - this.clockPausedSeconds) * 1000))
+  }
+
+  private resetClock(): void {
+    this.clockStartedAt = this.nowSeconds()
+    this.clockFrozenMs = null
+    this.clockPausedAt = null
+    this.clockPausedSeconds = 0
+    this.runInfo = { ...this.runInfo, elapsedMs: 0 }
+  }
+
+  private refreshClock(): void {
+    this.runInfo = { ...this.runInfo, elapsedMs: this.clockElapsedMs() }
+  }
+
+  private freezeClock(): void {
+    if (this.clockFrozenMs !== null) return
+    this.clockFrozenMs = this.clockElapsedMs()
+    this.refreshClock()
+    this.stopClockTicker()
+  }
+
+  /** UI 实时显示才需要 tick：纯表达式读取由 refreshClock 在求值时现算 */
+  private startClockTicker(): void {
+    if (!this.clockNeeded || this.clockTicker !== null || this.disposed) return
+    if (this.clockFrozenMs !== null || this.clockPausedAt !== null) return
+    this.clockTicker = this.timerApi.setInterval(() => {
+      if (this.disposed || this.clockFrozenMs !== null || this.clockPausedAt !== null) return
+      this.refreshClock()
+      this.syncBindings()
+    }, CLOCK_TICK_MS)
+  }
+
+  private stopClockTicker(): void {
+    if (this.clockTicker === null) return
+    this.timerApi.clearInterval(this.clockTicker)
+    this.clockTicker = null
+  }
+
+  private pauseClock(): void {
+    if (this.clockPausedAt !== null) return
+    this.clockPausedAt = this.nowSeconds()
+    this.refreshClock()
+    this.stopClockTicker()
+  }
+
+  private resumeClock(): void {
+    if (this.clockPausedAt === null) return
+    this.clockPausedSeconds += Math.max(0, this.nowSeconds() - this.clockPausedAt)
+    this.clockPausedAt = null
+    this.refreshClock()
+    this.startClockTicker()
   }
 
   // -------------------------------------------------------------------------
@@ -456,6 +559,7 @@ export class V4Session {
   }
 
   private flowBindingEnv(): Record<string, Json> {
+    this.refreshClock()
     return { v: this.vars, local: this.flowLocals, run: this.runInfo }
   }
 
@@ -502,6 +606,7 @@ export class V4Session {
     const score = typeof scoreValue === 'number' && Number.isFinite(scoreValue) ? scoreValue : 0
     this.result = { score, passed }
     this.log('finish', `结算：score=${score} passed=${passed}`)
+    this.freezeClock()
     try {
       this.host.onFinished({ score, passed })
     } catch (err) {
@@ -604,6 +709,11 @@ export class V4Session {
       if (value !== undefined) qContent[key] = value
     }
     qContent.id = row.id
+    const surfaceViews = type.surface.views
+    const view =
+      surfaceViews !== undefined && surfaceViews.length > 0
+        ? (type.surface.initialView ?? surfaceViews[0].id)
+        : ''
     const frame: SurfaceFrame = {
       callId,
       typeId: type.id,
@@ -611,6 +721,7 @@ export class V4Session {
       type,
       store,
       layer: { store, specs: [], applied: new Map(), failed: new Set() },
+      view,
       qState,
       t,
       args,
@@ -632,6 +743,7 @@ export class V4Session {
   }
 
   private surfaceBindingEnv(frame: SurfaceFrame): Record<string, Json> {
+    this.refreshClock()
     return {
       q: { ...frame.qContent, state: frame.qState },
       t: frame.t,
@@ -642,6 +754,7 @@ export class V4Session {
   }
 
   private behaviorEnv(frame: SurfaceFrame): Record<string, Json> {
+    this.refreshClock()
     return {
       q: { ...frame.qContent, state: frame.qState },
       t: frame.t,
@@ -650,6 +763,22 @@ export class V4Session {
       v: this.vars,
       run: this.runInfo,
     }
+  }
+
+  /** 题型内视图切换（behavior 的 setView 节点）：只过滤渲染，不重建组件 store */
+  private setSurfaceView(frame: SurfaceFrame, view: string): void {
+    const views = frame.type.surface.views
+    if (views === undefined || views.length === 0) {
+      this.log('error', `题型「${frame.typeId}」没有题内视图，setView("${view}") 无效`)
+      return
+    }
+    if (!views.some((candidate) => candidate.id === view)) {
+      this.log('error', `setView 指向题型「${frame.typeId}」不存在的题内视图 "${view}"`)
+      return
+    }
+    if (frame.view === view) return
+    frame.view = view
+    this.notify()
   }
 
   private runFrameBehavior(frame: SurfaceFrame, type: QuestionTypeDef): Promise<BehaviorOutcome> {
@@ -674,6 +803,7 @@ export class V4Session {
       readLocal: (name) => frame.locals[name] ?? null,
       command: (target, method, arg) => this.runComponentCommand('surface', frame.store, target, method, arg),
       query: (target, method, arg) => this.runComponentQuery(frame.store, target, method, arg),
+      setView: (view) => this.setSurfaceView(frame, view),
       sleep: (ms) => this.sleepInFrame(frame, ms),
       gate: this.host.debug
         ? (node) => this.host.debug!.gate('behavior', node.id, { callId: frame.callId })
@@ -818,6 +948,7 @@ export class V4Session {
   // -------------------------------------------------------------------------
 
   private syncBindings(): void {
+    this.refreshClock()
     this.applyBindings(this.shellLayer, this.flowBindingEnv(), SHELL_BINDING_ROOTS)
     const frame = this.currentFrame
     if (frame) this.applyBindings(frame.layer, this.surfaceBindingEnv(frame), SURFACE_BINDING_ROOTS)
@@ -1022,6 +1153,7 @@ export class V4Session {
     if (paused === this.timersPaused) return
     this.timersPaused = paused
     if (paused) {
+      this.pauseClock()
       for (const [key, record] of this.timers) {
         if (record.repeat) this.timerApi.clearInterval(record.handle)
         else this.timerApi.clearTimeout(record.handle)
@@ -1036,6 +1168,7 @@ export class V4Session {
       }
       this.timers.clear()
     } else {
+      this.resumeClock()
       for (const [key, pausedRecord] of this.pausedTimers) {
         this.pausedTimers.delete(key)
         this.startTimer(
@@ -1077,6 +1210,7 @@ export class V4Session {
         ? {
             callId: this.currentFrame.callId,
             typeId: this.currentFrame.typeId,
+            view: this.currentFrame.view,
             components: this.currentFrame.layer.specs,
           }
         : null,

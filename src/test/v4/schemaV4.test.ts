@@ -76,6 +76,27 @@ describe('v4 level JSON Schema', () => {
     bothReject(tooManyComponents)
   })
 
+  it('v4.1 题型内视图：surface.views/initialView/组件 view/behavior setView 双校验器一致接受', () => {
+    const doc = minimalLevelDoc()
+    const type = doc.content.types[0]
+    type.surface.views = [{ id: 'intro', name: '读题' }, { id: 'answer' }]
+    type.surface.initialView = 'intro'
+    type.surface.components[0].view = 'intro'
+    type.surface.components[1].view = 'answer'
+    type.behavior.nodes.push({ id: 'b_view', kind: 'setView', view: 'answer' })
+    expect(ajvOk(doc)).toBe(true)
+    expect(cfworkerOk(doc)).toBe(true)
+    expect(loadLevelDocV4(doc).ok).toBe(true)
+
+    const emptyViews = minimalLevelDoc()
+    emptyViews.content.types[0].surface.views = []
+    bothReject(emptyViews)
+
+    const tooManyViews = minimalLevelDoc()
+    tooManyViews.content.types[0].surface.views = Array.from({ length: 17 }, (_, i) => ({ id: `v_${i}` }))
+    bothReject(tooManyViews)
+  })
+
   it('cfworker 错误信息带中文位置（v4 路径格式化）', () => {
     const doc = minimalLevelDoc()
     doc.content.tables.choice.rows[0].phase = 0

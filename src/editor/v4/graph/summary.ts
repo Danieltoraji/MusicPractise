@@ -38,6 +38,7 @@ export const BEHAVIOR_KIND_META: Record<BehaviorNode['kind'], KindMeta> = {
   branch: { label: '分支' },
   loop: { label: '循环' },
   wait: { label: '等待' },
+  setView: { label: '切换视图' },
   comment: { label: '注释' },
 }
 

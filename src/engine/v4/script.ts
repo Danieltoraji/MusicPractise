@@ -576,7 +576,6 @@ function generateBehaviorChain(
       case 'start':
       case 'ask':
       case 'foreach':
-      case 'setView':
       case 'waitShell':
       case 'finish':
       case 'restart':
@@ -584,6 +583,7 @@ function generateBehaviorChain(
       case 'assign':
       case 'call':
       case 'emit':
+      case 'setView':
       case 'wait': {
         lines.push(nodeScriptText(node))
         cur = idx.single.get(node.id)
@@ -1039,10 +1039,7 @@ class ScriptParser {
       if (this.layer !== 'behavior') return this.parseAsk(line)
       throw this.errorAt(line, '行为伪代码不支持 ask（流程层专属）')
     }
-    if (text.startsWith('view ')) {
-      if (this.layer !== 'behavior') return this.parseSetView(line)
-      throw this.errorAt(line, '行为伪代码不支持 view（流程层专属）')
-    }
+    if (text.startsWith('view ')) return this.parseSetView(line)
     if (text.startsWith('waitShell ')) {
       if (this.layer !== 'behavior') return this.parseWaitShell(line)
       throw this.errorAt(line, '行为伪代码不支持 waitShell（流程层专属）')
@@ -1063,7 +1060,7 @@ class ScriptParser {
     if (assign) return this.parseAssign(line, assign[1], assign[2])
     throw this.errorAt(
       line,
-      `无法识别的语句「${text}」（可用：赋值 / call / ask / while / repeat / foreach / if / wait / finish / restart / 注释）`,
+      `无法识别的语句「${text}」（可用：赋值 / call / view / ask / while / repeat / foreach / if / wait / finish / restart / 注释）`,
     )
   }
 
@@ -1466,7 +1463,7 @@ function graphNodeKey(layer: Layer, node: FlowNode | BehaviorNode): string {
   if (layer === 'flow' && (node.kind === 'on' || node.kind === 'return' || node.kind === 'emit')) {
     return `#invalid:${node.kind}`
   }
-  if (layer === 'behavior' && (node.kind === 'start' || node.kind === 'ask' || node.kind === 'setView')) {
+  if (layer === 'behavior' && (node.kind === 'start' || node.kind === 'ask')) {
     return `#invalid:${node.kind}`
   }
   if (layer === 'behavior' && (node.kind === 'foreach' || node.kind === 'waitShell' || node.kind === 'finish' || node.kind === 'restart')) {

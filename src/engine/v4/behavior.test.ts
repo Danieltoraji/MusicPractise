@@ -16,6 +16,7 @@ interface BState {
   queries: { target: string; method: string }[]
   logs: { level: string; message: string }[]
   sleeps: number[]
+  views: string[]
 }
 
 function makeHost(): { host: BehaviorHost; state: BState } {
@@ -30,6 +31,7 @@ function makeHost(): { host: BehaviorHost; state: BState } {
     queries: [],
     logs: [],
     sleeps: [],
+    views: [],
   }
   const qContent = () => ({
     id: 'row_01',
@@ -76,6 +78,9 @@ function makeHost(): { host: BehaviorHost; state: BState } {
     query(target, method) {
       state.queries.push({ target, method })
       return null
+    },
+    setView(view) {
+      state.views.push(view)
     },
     async sleep(ms) {
       state.sleeps.push(ms)
@@ -138,6 +143,23 @@ describe('v4 behavior：start / return', () => {
     const outcome = await runner.run()
     expect(outcome.kind).toBe('return')
     if (outcome.kind === 'return') expect(outcome.result.status).toBe('error')
+  })
+  it('v4.1 setView 节点：调用宿主 setView（失败/未知视图由宿主处理）', async () => {
+    const { host, state } = makeHost()
+    const runner = new BehaviorRunner(
+      program(
+        [
+          { id: 'b_on', kind: 'on', event: 'start' },
+          { id: 'b_view', kind: 'setView', view: 'answer' },
+          { id: 'b_ret', kind: 'return', result: '{}' },
+        ],
+        [out('b_on', 'b_view'), out('b_view', 'b_ret')],
+      ),
+      host,
+      { cancel: new CancelToken() },
+    )
+    await runner.run()
+    expect(state.views).toEqual(['answer'])
   })
 })
 

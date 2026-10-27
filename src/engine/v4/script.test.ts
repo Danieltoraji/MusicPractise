@@ -279,6 +279,28 @@ describe('v4 伪代码 · behavior 往返恒等', () => {
     expect(text).toContain('on start {')
     expect(generateBehaviorScript(parseBehaviorScript(text))).toBe(text)
   })
+
+  it('v4.1 题型内视图：view 语句可生成/解析（行为层）', () => {
+    const program: BehaviorProgram = {
+      logicVersion: LOGIC_VERSION_V4,
+      kind: 'behavior',
+      nodes: [
+        { id: 'b1', kind: 'on', event: 'start' },
+        { id: 'b2', kind: 'setView', view: 'answer' },
+        { id: 'b3', kind: 'on', event: 'choice1.chosen' },
+        { id: 'b4', kind: 'return', result: '{}' },
+      ],
+      edges: [
+        { id: 'e1', from: 'b1', to: 'b2' },
+        { id: 'e2', from: 'b3', to: 'b4' },
+      ],
+    }
+    const text = generateBehaviorScript(program)
+    expect(text).toContain("view answer")
+    const reparsed = parseBehaviorScript(text)
+    expect(generateBehaviorScript(reparsed)).toBe(text)
+    expect(reparsed.nodes.some((node) => node.kind === 'setView' && node.view === 'answer')).toBe(true)
+  })
 })
 
 describe('v4 伪代码 · 锚点合并（二次编辑保留 id/x/y）', () => {

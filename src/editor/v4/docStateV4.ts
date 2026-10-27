@@ -582,7 +582,7 @@ function withLayerComponents(
   components: ComponentInstanceV4[],
 ): LevelDocV4 {
   if (layer.kind === 'shell') return withShell(doc, { ...doc.content.shell, components })
-  return withTypeAt(doc, layer.typeId, (type) => ({ ...type, surface: { components } }))
+  return withTypeAt(doc, layer.typeId, (type) => ({ ...type, surface: { ...type.surface, components } }))
 }
 
 function componentIdBase(type: string): string {
@@ -619,8 +619,10 @@ export function addComponent(
       component.view = doc.content.shell.initialView ?? doc.content.shell.views[0]?.id ?? 'main'
     }
   } else if (component.view !== undefined) {
-    // surface 组件禁止 view（docs/53 §3）；忽略调用方误传
-    delete component.view
+    // 题型内视图（v4.1）：只接受该题型已声明的视图；否则视为「所有视图可见」
+    const type = doc.content.types.find((candidate) => candidate.id === layer.typeId)
+    const views = type?.surface.views
+    if (views === undefined || !views.some((view) => view.id === component.view)) delete component.view
   }
   return { doc: withLayerComponents(doc, layer, [...components, component]), id }
 }
@@ -715,6 +717,98 @@ export function removeView(doc: LevelDocV4, viewId: string): LevelDocV4 {
 export function updateShell(doc: LevelDocV4, fn: (shell: LevelShell) => LevelShell): LevelDocV4 {
   const next = fn(doc.content.shell)
   return next === doc.content.shell ? doc : withShell(doc, next)
+}
+
+// ---------------------------------------------------------------------------
+// 题型内视图（v4.1，docs/56）：与 shell 视图同构，但挂在 type.surface 上
+// ---------------------------------------------------------------------------
+
+/** 新增题内视图：id 自动去重（view2/view3…，与 shell 视图同一命名习惯） */
+export function addSurfaceView(doc: LevelDocV4, typeId: string, name?: string): { doc: LevelDocV4; id: string } {
+  const type = doc.content.types.find((candidate) => candidate.id === typeId)
+  if (!type) throw new Error(`题型 "${typeId}" 不存在`)
+  const views = type.surface.views ?? []
+  if (views.length >= SCHEMA_LIMITS_V4.surfaceViewsPerType) {
+    throw new Error(`题内视图数已达上限 ${SCHEMA_LIMITS_V4.surfaceViewsPerType}`)
+  }
+  const used = new Set(views.map((view) => view.id))
+  let n = views.length + 1
+  while (used.has(`view${n}`) || RESERVED_ID_SET.has(`view${n}`)) n += 1
+  const id = `view${n}`
+  const view: ViewDefV4 = { id, name: name ?? `视图${n}` }
+  const next = withTypeAt(doc, typeId, (current) => ({
+    ...current,
+    surface: { ...current.surface, views: [...(current.surface.views ?? []), view] },
+  }))
+  return { doc: next, id }
+}
+
+/** 题内视图更新（name 为空串 = 删除显示名，回落 id） */
+export function updateSurfaceView(
+  doc: LevelDocV4,
+  typeId: string,
+  viewId: string,
+  patch: { name?: string },
+): LevelDocV4 {
+  const type = doc.content.types.find((candidate) => candidate.id === typeId)
+  if (!type || type.surface.views === undefined) return doc
+  const index = type.surface.views.findIndex((view) => view.id === viewId)
+  if (index < 0) return doc
+  const current = type.surface.views[index]
+  const next: ViewDefV4 = { ...current }
+  if (patch.name !== undefined) {
+    if (patch.name === '') delete next.name
+    else next.name = patch.name
+  }
+  if (next.name === current.name) return doc
+  const views = type.surface.views.slice()
+  views[index] = next
+  return withTypeAt(doc, typeId, (existing) => ({ ...existing, surface: { ...existing.surface, views } }))
+}
+
+/**
+ * 删除题内视图：组件不删除，归属该视图的组件改为「所有视图可见」（view 置空）；
+ * 删除最后一个视图时一并移除 initialView，恢复「无题内视图」形态。
+ */
+export function removeSurfaceView(doc: LevelDocV4, typeId: string, viewId: string): LevelDocV4 {
+  const type = doc.content.types.find((candidate) => candidate.id === typeId)
+  if (!type || type.surface.views === undefined) return doc
+  if (!type.surface.views.some((view) => view.id === viewId)) return doc
+  const views = type.surface.views.filter((view) => view.id !== viewId)
+  const components = type.surface.components.map((component) =>
+    component.view === viewId ? stripComponentView(component) : component,
+  )
+  const surface: LevelDocV4['content']['types'][number]['surface'] = { ...type.surface, components }
+  if (views.length > 0) surface.views = views
+  else delete surface.views
+  if (surface.initialView !== undefined && !views.some((view) => view.id === surface.initialView)) {
+    delete surface.initialView
+  }
+  return withTypeAt(doc, typeId, (existing) => ({ ...existing, surface }))
+}
+
+/** 设置题内初始视图；null = 清除（回落首个视图） */
+export function setSurfaceInitialView(doc: LevelDocV4, typeId: string, viewId: string | null): LevelDocV4 {
+  const type = doc.content.types.find((candidate) => candidate.id === typeId)
+  if (!type) return doc
+  if (viewId === null) {
+    if (type.surface.initialView === undefined) return doc
+    const surface = { ...type.surface }
+    delete surface.initialView
+    return withTypeAt(doc, typeId, (existing) => ({ ...existing, surface }))
+  }
+  if (type.surface.views === undefined || !type.surface.views.some((view) => view.id === viewId)) return doc
+  if (type.surface.initialView === viewId) return doc
+  return withTypeAt(doc, typeId, (existing) => ({
+    ...existing,
+    surface: { ...existing.surface, initialView: viewId },
+  }))
+}
+
+function stripComponentView(component: ComponentInstanceV4): ComponentInstanceV4 {
+  const { view: _view, ...rest } = component
+  void _view
+  return rest
 }
 
 // ---------------------------------------------------------------------------

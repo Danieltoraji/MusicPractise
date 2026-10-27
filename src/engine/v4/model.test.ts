@@ -106,6 +106,33 @@ describe('v4 model：normalize', () => {
     expect(doc.content.tables.a).toEqual({ columns: [{ key: 'x' }], rows: [] })
   })
 
+  it('题型 surface 视图/初始视图归一化；未声明视图时不产生空 views（v4.1）', () => {
+    const doc = normalizeLevelDocV4({
+      content: {
+        types: [
+          {
+            id: 't',
+            name: 'T',
+            surface: {
+              views: [{ id: 'intro' }, { id: 'answer', name: '作答' }],
+              initialView: 'intro',
+              components: [{ id: 'prompt', type: 'label', view: 'intro' }],
+            },
+            behavior: {},
+          },
+        ],
+      },
+    })
+    const surface = doc.content.types[0].surface
+    expect(surface.views).toEqual([{ id: 'intro' }, { id: 'answer', name: '作答' }])
+    expect(surface.initialView).toBe('intro')
+    expect(surface.components[0].view).toBe('intro')
+
+    const noViews = normalizeLevelDocV4({ content: { types: [{ id: 't', name: 'T', surface: { components: [] } }] } })
+    expect('views' in noViews.content.types[0].surface).toBe(false)
+    expect('initialView' in noViews.content.types[0].surface).toBe(false)
+  })
+
   it('显式 manifest 归一化；run.order 非 shuffle 掉落为 manifest', () => {
     const doc = normalizeLevelDocV4({
       content: {
