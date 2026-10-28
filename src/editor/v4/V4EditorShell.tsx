@@ -2,10 +2,10 @@
  * v4 编辑器外壳（docs/53 §13.3 Tab IA）：props 驱动的纯表现层壳。
  *
  * - 头部：返回 / 标题（tag='title'）/ 撤销重做 / 保存 / 修订号；
- * - Tab：content 内容 · flow 流程 · types 题型 · shell 舞台 · preview 预览 · json JSON
+ * - Tab：content 内容 · flow 流程 · types 题型 · shell 画布 · preview 预览 · json JSON
  *   （`data-testid=editor-tab-<id>`，G3 锚点契约）；
  * - 可插槽 props：`renderFlow` / `renderBehavior` / `renderShell` / `renderPreview` / `renderAiPanel`
- *   —— W6（图工作台）与 W7（舞台/预览/AI 调试）通过 fork 的槽位实现接入，本壳只提供占位；
+ *   —— W6（图工作台）与 W7（画布/预览/AI 调试）通过 fork 的槽位实现接入，本壳只提供占位；
  * - 宿主（EditorPageV4）负责文档状态、撤销栈、保存、脏标与 lint，本壳不持有文档真源。
  *
  * 复用 v3 既有编辑器 chrome 样式类（`.editor-head` / `.editor-tabs` / `.editor-body` 等），
@@ -28,7 +28,7 @@ export const V4_EDITOR_TABS: { id: V4EditorTab; label: string }[] = [
   { id: 'content', label: '内容' },
   { id: 'flow', label: '流程' },
   { id: 'types', label: '题型' },
-  { id: 'shell', label: '舞台' },
+  { id: 'shell', label: '画布' },
   { id: 'preview', label: '预览' },
   { id: 'json', label: 'JSON' },
 ]
@@ -40,7 +40,7 @@ export type { V4EditorBehaviorSlotProps, V4EditorSlotProps, V4TabProps }
  * 可插槽区域（W6/W7 接入点）：
  * - flow → GraphWorkbench flow 模式（W6）
  * - behavior → GraphWorkbench behavior 模式（W6，在「题型 → 行为」子页内）
- * - shell → ShellTab 舞台编辑（W7）
+ * - shell → ShellTab 画布编辑（W7；W13 起与题型内画布同源）
  * - preview → PreviewTab 游玩+调试（W7）
  * - aiPanel → AiPanel v4 适配（W8）
  */
@@ -83,7 +83,7 @@ export interface V4EditorShellProps extends V4EditorSlots {
 
 const PLACEHOLDER: Record<'flow' | 'shell' | 'preview', string> = {
   flow: '流程（Flow main 图工作台）将在 W6 接入：图 / 伪代码切换、调色板、检查器、预设、lint 面板。',
-  shell: '舞台（shell 视图与组件画布）将在 W7 接入：视图管理、拖放/缩放、属性与绑定编辑、组件预览。',
+  shell: '画布（shell 视图与组件画布）将在 W7 接入：视图管理、拖放/缩放、属性与绑定编辑、组件预览。',
   preview: '预览（v4 游玩画面 + 调试面板）将在 W7 接入：调用栈 / 四层作用域 / 牌堆 / 日志 / 每题返回。',
 }
 

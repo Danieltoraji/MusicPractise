@@ -1,6 +1,6 @@
 /**
  * 编辑器路由入口（W9 后唯一路径）：`#/edit/:id` → 懒加载 EditorPageV4。
- * W6/W7/W8 的可插槽视图（流程图/行为图/舞台/预览/AI 面板）在模块级 `V4_EDITOR_SLOTS`
+ * W6/W7/W8 的可插槽视图（流程图/行为图/画布/预览/AI 面板）在模块级 `V4_EDITOR_SLOTS`
  * 以稳定引用注册，避免 EditorPageV4 重渲染导致插槽子树重挂/预览会话重建。
  *
  * `#/edit/new` 的从零建关联：EditorPageV4 在首帧展示零代码模板选择条（W8.2）。

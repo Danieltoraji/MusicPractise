@@ -52,7 +52,7 @@ export const V4_TAGS = {
   column: 'column',
   /** 题型元信息 / 状态参数 schema */
   type: 'type',
-  /** 舞台组件（布局/属性/绑定） */
+  /** 画布组件（布局/属性/绑定） */
   component: 'component',
   /** 题单 / run 配置 */
   manifest: 'manifest',
@@ -561,7 +561,7 @@ export function updateTableCell(
 }
 
 // ---------------------------------------------------------------------------
-// 舞台：视图 / 组件（shell 与题型 surface 两层）
+// 画布：视图 / 组件（shell 与题型 surface 两层）
 // ---------------------------------------------------------------------------
 
 /** 组件层：shell（跨题常驻）或某题型的 surface（调用期局部） */

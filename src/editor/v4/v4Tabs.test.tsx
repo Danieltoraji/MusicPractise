@@ -100,6 +100,14 @@ function blurInput(input: HTMLInputElement): void {
   })
 }
 
+/** 画布选中：down→up（W13 起选中在 pointerup 触发，避免拖拽中属性栏出现改变画布缩放） */
+function pointerSelect(el: Element): void {
+  act(() => {
+    el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 9, clientX: 10, clientY: 10 }))
+    el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 9 }))
+  })
+}
+
 /** 受控文档 + onChange 捕获（模拟 EditorPageV4.update 的单向数据流） */
 function harnessTab(
   Component: (props: { doc: LevelDocV4; onChange: (next: LevelDocV4, tag?: string) => void }) => React.ReactElement,
@@ -539,34 +547,46 @@ describe('TypesTab（元信息 / state / surface）', () => {
     }
   })
 
-  it('surface 组件：新增 / 布局 / 绑定编辑 / 删除', () => {
+  it('surface 画布：真实组件预览 / 预览行 / 新增 / 布局 / 绑定 / 删除', () => {
     const doc = sampleDoc()
     const harness = harnessTab(TypesTab, doc)
     try {
       const { container } = harness.mounted
       click(byTestId(container, 'v4-type-subtab-surface'))
+      // 与 shell 画布同源的画布骨架 + 题型已有两个组件
+      expect(byTestId(container, 'v4-type-surface')).toBeTruthy()
+      expect(byTestId(container, 'v4-canvas').getAttribute('data-layer')).toBe('surface')
+      expect(byTestId(container, 'v4-canvas-palette')).toBeTruthy()
+      expect(byTestId(container, 'v4-canvas-stage')).toBeTruthy()
+      expect(byTestId(container, 'v4-canvas-box-prompt')).toBeTruthy()
+      expect(byTestId(container, 'v4-canvas-box-choice1')).toBeTruthy()
+      // 绑定按 surface 层根求值：q.prompt 取预览行（默认首条非草稿行）
+      expect(byTestId(container, 'v4-canvas-box-prompt').textContent).toContain('听一听，这是什么音？')
+      // 预览行切换 → 画布内真实组件内容跟着变
+      chooseSelect(byTestId(container, 'v4-canvas-preview-row') as HTMLSelectElement, 'row_02')
+      expect(byTestId(container, 'v4-canvas-box-prompt').textContent).toContain('再听一个')
+
       const before = harness.current().content.types[0].surface.components.length
-      click(byTestId(container, 'v4-surface-add'))
+      click(byTestId(container, 'v4-canvas-add-label'))
       harness.mounted.rerender()
       const components = harness.current().content.types[0].surface.components
       expect(components.length).toBe(before + 1)
       const added = components[components.length - 1]
       expect(added.id.length).toBeGreaterThan(0)
       expect(added.view).toBeUndefined() // 未声明题内视图时不带 view
-      // 布局编辑
-      const xInput = byTestId(container, `v4-comp-x-${added.id}`) as HTMLInputElement
-      typeInput(xInput, '33')
+      expect(added.layout?.x).toBeLessThan(800)
+      // 选中新组件 → 检查器布局编辑
+      typeInput(byTestId(container, 'v4-canvas-layout-x') as HTMLInputElement, '33')
       harness.mounted.rerender()
       expect(harness.current().content.types[0].surface.components.at(-1)!.layout!.x).toBe(33)
-      // 新增绑定（label 组件有 text 槽位）
-      click(byTestId(container, `v4-binding-add-${added.id}`))
+      // 绑定（surface 只读投影：q.* 合法；label 有 text 槽位）
+      click(byTestId(container, 'v4-canvas-binding-add'))
       harness.mounted.rerender()
-      const bindingInput = byTestId(container, `v4-binding-expr-${added.id}-text`) as HTMLInputElement
-      typeInput(bindingInput, 'q.prompt')
+      typeInput(byTestId(container, 'v4-canvas-binding-expr-text') as HTMLInputElement, 'q.prompt')
       harness.mounted.rerender()
       expect(harness.current().content.types[0].surface.components.at(-1)!.bindings).toEqual({ text: 'q.prompt' })
       // 删除组件
-      click(byTestId(container, `v4-comp-remove-${added.id}`))
+      click(byTestId(container, 'v4-canvas-remove'))
       harness.mounted.rerender()
       expect(harness.current().content.types[0].surface.components.length).toBe(before)
       // 数据/表现编辑不触碰 flow
@@ -576,41 +596,61 @@ describe('TypesTab（元信息 / state / surface）', () => {
     }
   })
 
-  it('题内视图：新增 / 命名 / 设初始 / 组件视图归属 / 删除（v4.1）', () => {
+  it('题内视图：经画布视图条新增 / 归属 / 设初始 / 命名 / 删除（v4.1）', () => {
     const doc = sampleDoc()
     const harness = harnessTab(TypesTab, doc)
     try {
       const { container } = harness.mounted
       click(byTestId(container, 'v4-type-subtab-surface'))
 
-      // 新增视图 → 组件出现「视图归属」下拉
-      click(byTestId(container, 'v4-type-view-add'))
+      // 新增视图 → 画布切到新视图（常驻组件仍可见，无视图专属组件）
+      click(byTestId(container, 'v4-canvas-view-add'))
       harness.mounted.rerender()
-      const views = harness.current().content.types[0].surface.views
-      expect(views?.map((view) => view.id)).toEqual(['view1'])
-      chooseSelect(byTestId(container, 'v4-comp-view-prompt') as HTMLSelectElement, 'view1')
+      expect(harness.current().content.types[0].surface.views?.map((view) => view.id)).toEqual(['view1'])
+      expect(byTestId(container, 'v4-canvas-view-view1')).toBeTruthy()
+
+      // 有视图时新增组件默认归入当前视图
+      click(byTestId(container, 'v4-canvas-add-label'))
+      harness.mounted.rerender()
+      const added = harness.current().content.types[0].surface.components.at(-1)!
+      expect(added.view).toBe('view1')
+      // 检查器可改为「全部视图（常驻）」
+      chooseSelect(byTestId(container, 'v4-canvas-view-field') as HTMLSelectElement, '')
+      harness.mounted.rerender()
+      expect(harness.current().content.types[0].surface.components.at(-1)!.view).toBeUndefined()
+
+      // 选中已有组件并指派视图归属（画布点选 = pointerup）
+      pointerSelect(byTestId(container, 'v4-canvas-box-prompt'))
+      harness.mounted.rerender()
+      chooseSelect(byTestId(container, 'v4-canvas-view-field') as HTMLSelectElement, 'view1')
       harness.mounted.rerender()
       expect(harness.current().content.types[0].surface.components[0].view).toBe('view1')
 
-      // 设为初始视图
-      click(byTestId(container, 'v4-type-view-initial-view1'))
+      // 新增第二个视图 → 可将「非首视图」设为显式初始视图
+      click(byTestId(container, 'v4-canvas-view-add'))
       harness.mounted.rerender()
-      expect(harness.current().content.types[0].surface.initialView).toBe('view1')
+      expect(harness.current().content.types[0].surface.views?.map((view) => view.id)).toEqual(['view1', 'view2'])
+      click(byTestId(container, 'v4-canvas-view-initial-view2'))
+      harness.mounted.rerender()
+      expect(harness.current().content.types[0].surface.initialView).toBe('view2')
 
-      // 视图改名（失焦提交）
-      const nameInput = byTestId(container, 'v4-type-view-name-view1') as HTMLInputElement
-      typeInput(nameInput, '作答')
-      blurInput(nameInput)
+      // 视图改名（逐键写入，tag 合并）
+      typeInput(byTestId(container, 'v4-canvas-view-name-view1') as HTMLInputElement, '作答')
       harness.mounted.rerender()
       expect(harness.current().content.types[0].surface.views?.[0].name).toBe('作答')
 
-      // 删除视图：组件不删、归属清空、initialView 清除
-      click(byTestId(container, 'v4-type-view-remove-view1'))
+      // 删除视图：组件不删、归属清空、initialView 清除；删到 0 回到「无题内视图」形态
+      click(byTestId(container, 'v4-canvas-view-remove-view2'))
+      harness.mounted.rerender()
+      expect(harness.current().content.types[0].surface.views?.map((view) => view.id)).toEqual(['view1'])
+      expect(harness.current().content.types[0].surface.initialView).toBeUndefined()
+      click(byTestId(container, 'v4-canvas-view-remove-view1'))
       harness.mounted.rerender()
       const surface = harness.current().content.types[0].surface
       expect(surface.views).toBeUndefined()
       expect(surface.initialView).toBeUndefined()
       expect(surface.components[0].view).toBeUndefined()
+      expect(surface.components.at(-1)!.view).toBeUndefined()
       expect(harness.current().content.flow).toBe(doc.content.flow)
     } finally {
       harness.mounted.unmount()

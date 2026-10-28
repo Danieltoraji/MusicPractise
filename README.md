@@ -27,8 +27,8 @@ npm run check:css-conflicts # R35：G15 同名选择器冲突分类（期望 0 �
 练习进度（最高分/通过/次数）存 IndexedDB，只升不降；登录后自动云端同步（多端单调合并，离线/未登录完全不受影响）。
 内置 10 个示例关卡与入门系列自动入库；支持导入 `.json` 关卡与 `.zip` 系列包、导出自包含 zip（同 id 同版本跳过、异版本覆盖）。
 
-**创作**：`#/edit/:id` v4 关卡编辑器，v4 编辑器六 Tab = 内容 / 流程 / 题型 / 舞台 / 预览 / JSON；
-内容=题型与实例表（一行一题）、流程=main 图（伪代码/节点图/JSON 三视图同源）、题型=surface+behavior、舞台=shell、预览=可见游玩+调试（断点/单步/作用域/每题返回）。
+**创作**：`#/edit/:id` v4 关卡编辑器，v4 编辑器六 Tab = 内容 / 流程 / 题型 / 画布 / 预览 / JSON；
+内容=题型与实例表（一行一题）、流程=main 图（伪代码/节点图/JSON 三视图同源）、题型=surface+behavior（表现子页含题内画布）、画布=shell 视图与组件画布（与题内画布同源）、预览=可见游玩+调试（断点/单步/作用域/每题返回）。
 内置 AI 助手（ask / agent 两模式，按层读写工具全走「mutate→loadLevelDoc→applyDoc」管线 + revision 冲突门）；
 `#/edit/new` 提供零代码模板向导；`#/graph/:id` 兼容重定向到 v4 编辑器。资源库 `#/library` 提供文件夹树 / 文件管理器 / 就地编辑（保存自动另存副本）。
 
@@ -96,7 +96,7 @@ schemas/v4/        关卡 JSON Schema v4（v1 仅剩 series/topic/instrument/com
 src/engine/        v4 沙箱表达式求值器、流程/行为 IR 解释器、manifest 题单、伪代码投影、语义 lint、预设目录
 src/runtime/       v4 会话（无头可驱动）、双层播放舞台 LevelStageV4、音频调度（smplr 钢琴 + AudioContext 时钟）、组件状态仓库
 src/components/    组件定义（纯函数 reducer：events/commands/state 契约）与视图（VexFlow 谱面等）
-src/editor/        v4 编辑器（内容/流程/题型/舞台/预览/JSON）+ 图工作台 + 预设画廊 + AI 面板
+src/editor/        v4 编辑器（内容/流程/题型/画布/预览/JSON）+ 共享画布 + 图工作台 + 预设画廊 + AI 面板
 src/ai/            编辑器内 AI：providers/client/session + v4 按层工具与 agent 循环（src/ai/v4）
 src/library/       Dexie 资源库：db/导入导出 io/文件夹树 browse/校验 validate/文件管理 manage
 src/cloud/         云盘 API 客户端与 #/cloud 我的云盘页

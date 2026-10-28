@@ -61,13 +61,13 @@ describe('EditorPage v4 路由分派', () => {
     // AI 面板插槽（W8b）：默认打开即懒加载真实 AiPanelV4
     await waitFor(() => container!.querySelector('[data-testid="v4-ai"]') !== null, 'AI 面板插槽挂载')
 
-    // 舞台/预览插槽接线（W7）：切 Tab 后懒加载组件挂载
+    // 画布/预览插槽接线（W7）：切 Tab 后懒加载组件挂载
     const shellTab = container.querySelector('[data-testid="editor-tab-shell"]') as HTMLButtonElement | null
     expect(shellTab).not.toBeNull()
     await act(async () => {
       shellTab!.click()
     })
-    await waitFor(() => container!.querySelector('[data-testid="v4-shell-tab"]') !== null, '舞台插槽挂载')
+    await waitFor(() => container!.querySelector('[data-testid="v4-shell-tab"]') !== null, '画布插槽挂载')
 
     const previewTab = container.querySelector('[data-testid="editor-tab-preview"]') as HTMLButtonElement | null
     expect(previewTab).not.toBeNull()

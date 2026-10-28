@@ -44,6 +44,7 @@
   align-items: stretch;
   gap: var(--sp-3);
   flex: 1 1 0%;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -119,6 +120,11 @@
   flex-direction: column;
   gap: var(--sp-2);
   overflow: auto;
+}
+
+/* 表现/画布子页：主区不再整页滚动，画布自己吃满剩余高度（W13） */
+.v4-main-fill {
+  overflow: hidden;
 }
 
 .v4-empty {
@@ -290,111 +296,6 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.v4-comp {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: var(--sp-2);
-  background: var(--panel-2);
-}
-
-.v4-comp-head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  font-size: var(--fs-0);
-}
-
-.v4-comp-name {
-  max-width: 160px;
-}
-
-.v4-comp-visible {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-size: var(--fs-0);
-}
-
-.v4-comp-head .ginsp-argdel {
-  margin-left: auto;
-}
-
-.v4-comp-layout {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  font-size: var(--fs-0);
-}
-
-.v4-comp-layout label {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-/* 题型内视图（v4.1）：视图管理 + 组件视图归属 */
-.v4-subcard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  margin: var(--sp-2) 0;
-  padding: var(--sp-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--soft);
-}
-
-.v4-subcard-head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  font-size: var(--fs-0);
-}
-
-.v4-subcard-head .muted {
-  flex: 1 1 320px;
-}
-
-.v4-type-view-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.v4-type-view-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  font-size: var(--fs-0);
-}
-
-.v4-type-view-id {
-  min-width: 48px;
-}
-
-.v4-type-view-row button.active {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.v4-comp-view {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--fs-0);
-}
-
-.v4-type-view-empty {
-  font-size: var(--fs-0);
 }
 
 .v4-num {

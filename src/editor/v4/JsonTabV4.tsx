@@ -27,7 +27,7 @@ interface LayerOption {
 function layerOptions(doc: LevelDocV4): LayerOption[] {
   const options: LayerOption[] = [
     { value: 'level', label: '整关卡（保留 id/version）' },
-    { value: 'shell', label: 'content.shell 舞台' },
+    { value: 'shell', label: 'content.shell 画布' },
     { value: 'types', label: 'content.types 题型定义' },
     { value: 'tables', label: 'content.tables 实例表' },
     ...(doc.content.manifest !== undefined ? [{ value: 'manifest' as const, label: 'content.manifest 显式题单' }] : []),

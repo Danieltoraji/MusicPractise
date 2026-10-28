@@ -244,10 +244,26 @@ const STEPS = [
   { id: 'P5', label: '编辑器·内容', route: `#/edit/${SYNTH}`, wait: '[data-testid="editor-tab-content"]' },
   {
     id: 'P5b',
-    label: '编辑器·舞台',
+    label: '编辑器·画布',
     action: async (client) => {
       await evaluate(client, `document.querySelector('[data-testid="editor-tab-shell"]')?.click()`)
       await waitFor(client, `!!document.querySelector('[data-testid="v4-shell-tab"]')`, 'v4 shell tab')
+      await waitFor(client, `!!document.querySelector('[data-testid="v4-canvas-stage"]')`, 'v4 canvas stage')
+      await sleep(500)
+    },
+  },
+  {
+    id: 'P5b2',
+    label: '编辑器·题型画布（surface）',
+    action: async (client) => {
+      await evaluate(client, `document.querySelector('[data-testid="editor-tab-types"]')?.click()`)
+      await waitFor(client, `!!document.querySelector('[data-testid="v4-types-tab"]')`, 'v4 types tab')
+      await evaluate(client, `document.querySelector('[data-testid="v4-type-subtab-surface"]')?.click()`)
+      await waitFor(
+        client,
+        `!!document.querySelector('[data-testid="v4-canvas"][data-layer="surface"]')`,
+        'surface canvas',
+      )
       await sleep(500)
     },
   },

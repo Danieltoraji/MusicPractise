@@ -14,7 +14,7 @@ export interface V4TabProps {
   onChange: (next: LevelDocV4, tag?: string) => void
 }
 
-/** 可插槽区域的公共 props（流程/舞台/预览/AI 面板） */
+/** 可插槽区域的公共 props（流程/画布/预览/AI 面板） */
 export interface V4EditorSlotProps extends V4TabProps {
   /** 文档修订号（AI 冲突检测 / 调试面板可读；宿主同步递增） */
   revision: number

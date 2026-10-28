@@ -1,14 +1,13 @@
 /**
  * v4 编辑器「题型」Tab（docs/53 §13.3 题型）：
- * 题型列表 + 子页 元信息 / 表现（surface 组件列表：布局/初始 props/绑定）/ 状态参数（state/typeState/args）/
- * 行为（Behavior 图工作台插槽；W6 接入，缺省占位）。
+ * 题型列表 + 子页 元信息 / 表现（surface 题内画布：与 shell 画布同源 CanvasEditor，W13 docs/57）/
+ * 状态参数（state/typeState/args）/ 行为（Behavior 图工作台插槽）。
  *
  * 写路径全部走 docStateV4（结构共享 + 程序化 id）；本文件不直接构造 LevelDocV4。
  */
 import { useMemo, useState } from 'react'
 import type { Json } from '../../engine/expr'
-import { DATA_APPLY_COMMANDS } from '../../engine/level'
-import { allContracts } from '../../runtime/store'
+import { SURFACE_BINDING_ROOTS } from '../../engine/v4/expr'
 import {
   SCHEMA_LIMITS_V4,
   newUniqueLocalId,
@@ -18,7 +17,6 @@ import {
   type QuestionTypeDef,
   type StateFieldDef,
   type StateType,
-  type ViewDefV4,
 } from '../../engine/v4/model'
 import {
   V4_TAGS,
@@ -35,7 +33,9 @@ import {
   updateSurfaceView,
   updateType,
 } from './docStateV4'
-import { JsonEditModal, errText, type V4EditorBehaviorSlotProps, type V4TabProps } from './shared'
+import { buildSurfacePreviewEnv, type CanvasLayout } from './canvasPreview'
+import { CanvasEditor } from './CanvasEditor'
+import { errText, type V4EditorBehaviorSlotProps, type V4TabProps } from './shared'
 
 /** 行为图工作台插槽（W6 提供：GraphWorkbench behavior 模式） */
 export type BehaviorSlotProps = V4EditorBehaviorSlotProps
@@ -69,7 +69,6 @@ export function TypesTab({ doc, onChange, renderBehavior, revision = 0 }: TypesT
   const [selectedId, setSelectedId] = useState<string | null>(types[0]?.id ?? null)
   const [subTab, setSubTab] = useState<TypeSubTab>('meta')
   const [error, setError] = useState('')
-  const [propsEdit, setPropsEdit] = useState<{ componentId: string; value: Json } | null>(null)
   const activeType = types.find((t) => t.id === selectedId) ?? types[0]
 
   const guarded = (fn: () => void): void => {
@@ -121,7 +120,7 @@ export function TypesTab({ doc, onChange, renderBehavior, revision = 0 }: TypesT
         </div>
       </aside>
 
-      <div className="v4-main">
+      <div className={`v4-main${subTab === 'surface' ? ' v4-main-fill' : ''}`}>
         {!activeType ? (
           <div className="v4-empty" data-testid="v4-types-empty">
             <p>题型定义 surface 组件、行为图与状态 schema；先建一个题型。</p>
@@ -184,13 +183,7 @@ export function TypesTab({ doc, onChange, renderBehavior, revision = 0 }: TypesT
               />
             )}
             {subTab === 'surface' && (
-              <SurfacePane
-                doc={doc}
-                onChange={onChange}
-                type={activeType}
-                onError={setError}
-                onEditProps={(componentId, value) => setPropsEdit({ componentId, value })}
-              />
+              <SurfacePane key={activeType.id} doc={doc} onChange={onChange} type={activeType} />
             )}
             {subTab === 'state' && <StatePane doc={doc} onChange={onChange} type={activeType} />}
             {subTab === 'behavior' &&
@@ -205,23 +198,6 @@ export function TypesTab({ doc, onChange, renderBehavior, revision = 0 }: TypesT
           </>
         )}
       </div>
-
-      {propsEdit && activeType && (
-        <JsonEditModal
-          title={`编辑组件初始 props · ${propsEdit.componentId}`}
-          value={propsEdit.value}
-          hint="props 为组件挂载时的初始状态；绑定（bindings）会在运行态覆盖对应槽位。"
-          testId="v4-comp-props"
-          onApply={(value) => {
-            onChange(
-              updateComponent(doc, { kind: 'surface', typeId: activeType.id }, propsEdit.componentId, { props: value }),
-              V4_TAGS.component,
-            )
-            setPropsEdit(null)
-          }}
-          onClose={() => setPropsEdit(null)}
-        />
-      )}
     </div>
   )
 }
@@ -286,289 +262,101 @@ function MetaPane(props: {
 }
 
 // ---------------------------------------------------------------------------
-// 表现（surface 组件列表：布局 / 初始 props / 绑定）
+// 表现（surface 题内画布：与 shell 画布同源，W13 docs/57）
 // ---------------------------------------------------------------------------
 
 function SurfacePane(props: {
   doc: LevelDocV4
   onChange: (next: LevelDocV4, tag?: string) => void
   type: QuestionTypeDef
-  onError: (message: string) => void
-  onEditProps: (componentId: string, value: Json) => void
 }): React.ReactElement {
   const { doc, type, onChange } = props
   const layer = { kind: 'surface', typeId: type.id } as const
-  const contractTypes = useMemo(() => allContracts().map((c) => ({ type: c.type, label: c.displayName })), [])
-  const [newType, setNewType] = useState(contractTypes[0]?.type ?? 'label')
-  const components = type.surface.components
-  const views = type.surface.views ?? []
-  const initialView = type.surface.initialView ?? views[0]?.id
+  const surface = type.surface
+  const views = surface.views ?? []
+  const table = doc.content.tables[type.id]
+  const rows = table?.rows ?? []
+  const [previewRowId, setPreviewRowId] = useState<string | null>(null)
+  // 预览数据行：优先用户选择，其次第一条非草稿行；无行时 q.* 预览为空（绑定求值失败保留静态 props）
+  const previewRow = rows.find((row) => row.id === previewRowId) ?? rows.find((row) => row.draft !== true) ?? rows[0] ?? null
+  // 预览环境随文档/题型/预览行重建：编辑 q 对应列/state/args 后画布立即反映
+  const previewEnv = useMemo(() => buildSurfacePreviewEnv(doc, type, previewRow), [doc, type, previewRow])
 
-  const patch = (componentId: string, next: Partial<ComponentInstanceV4>, tag?: string): void => {
-    onChange(updateComponent(doc, layer, componentId, next), tag ?? V4_TAGS.component)
+  const addWithView = (componentType: string, viewId: string, layout: CanvasLayout): string => {
+    const result = addComponent(doc, layer, componentType, { view: viewId === '' ? undefined : viewId, layout })
+    onChange(result.doc, V4_TAGS.component)
+    return result.id
   }
 
-  const addComponentOfType = (): void => {
-    try {
-      const result = addComponent(doc, layer, newType)
-      onChange(result.doc)
-    } catch (err) {
-      props.onError(errText(err))
-    }
+  const patchComponent = (componentId: string, patch: Partial<ComponentInstanceV4>): void => {
+    onChange(updateComponent(doc, layer, componentId, patch), V4_TAGS.component)
   }
 
-  const addView = (): void => {
-    try {
-      const result = addSurfaceView(doc, type.id)
-      onChange(result.doc)
-    } catch (err) {
-      props.onError(errText(err))
-    }
-  }
-
-  return (
-    <section className="v4-card" data-testid="v4-type-surface">
-      <div className="v4-card-head">
-        <b>surface 组件（题目区域）</b>
-        <span className="muted">
-          {components.length}/{SCHEMA_LIMITS_V4.surfaceComponentsPerType} · 仅在题型调用期间挂载
-        </span>
-        <span className="v4-card-head-action">
-          <select value={newType} data-testid="v4-surface-new-type" onChange={(e) => setNewType(e.target.value)}>
-            {contractTypes.map((c) => (
-              <option key={c.type} value={c.type}>
-                {c.label}（{c.type}）
-              </option>
-            ))}
-          </select>
-          <button type="button" data-testid="v4-surface-add" onClick={addComponentOfType}>
-            + 组件
-          </button>
-        </span>
-      </div>
-
-      <div className="v4-subcard" data-testid="v4-type-views">
-        <div className="v4-subcard-head">
-          <b>题内视图</b>
-          <span className="muted">
-            {views.length}/{SCHEMA_LIMITS_V4.surfaceViewsPerType} · 只过滤渲染；同一题内切视图不重置组件状态，每次 ask 从初始视图开始
-          </span>
-          <button type="button" data-testid="v4-type-view-add" onClick={addView} disabled={views.length >= SCHEMA_LIMITS_V4.surfaceViewsPerType}>
-            + 视图
-          </button>
-        </div>
-        {views.length === 0 ? (
-          <p className="muted v4-type-view-empty">
-            还没有题内视图——加视图后可按「读题 → 作答 → 反馈」分组显示；不给组件选视图 = 所有视图可见。
-          </p>
-        ) : (
-          <div className="v4-type-view-list">
-            {views.map((view) => (
-              <div key={view.id} className="v4-type-view-row" data-testid={`v4-type-view-${view.id}`}>
-                <code className="v4-type-view-id">{view.id}</code>
-                <input
-                  className="v4-comp-name"
-                  defaultValue={view.name ?? ''}
-                  placeholder="视图显示名"
-                  maxLength={120}
-                  data-testid={`v4-type-view-name-${view.id}`}
-                  onBlur={(e) => {
-                    if (e.currentTarget.value !== (view.name ?? '')) {
-                      onChange(updateSurfaceView(doc, type.id, view.id, { name: e.currentTarget.value }))
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className={initialView === view.id ? 'active' : undefined}
-                  data-testid={`v4-type-view-initial-${view.id}`}
-                  title="每次 ask 从这个视图开始"
-                  onClick={() => onChange(setSurfaceInitialView(doc, type.id, view.id))}
-                >
-                  {initialView === view.id ? '✓ 初始视图' : '设为初始'}
-                </button>
-                <button
-                  type="button"
-                  className="ginsp-argdel"
-                  data-testid={`v4-type-view-remove-${view.id}`}
-                  title="删除视图（其组件改为所有视图可见）"
-                  onClick={() => onChange(removeSurfaceView(doc, type.id, view.id))}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {components.length === 0 && <p className="muted">还没有 surface 组件——加一个 label 显示题面。</p>}
-      {components.map((component) => (
-        <ComponentCard
-          key={component.id}
-          doc={doc}
-          onChange={onChange}
-          layer={layer}
-          component={component}
-          views={views}
-          onPatch={(next, tag) => patch(component.id, next, tag)}
-          onEditProps={() => props.onEditProps(component.id, component.props ?? null)}
-          onRemove={() => onChange(removeComponent(doc, layer, component.id))}
-        />
-      ))}
-    </section>
-  )
-}
-
-/** 单个 surface 组件：布局 / 视图归属 / 初始 props / 绑定（只读表达式） */
-function ComponentCard(props: {
-  doc: LevelDocV4
-  onChange: (next: LevelDocV4, tag?: string) => void
-  layer: { kind: 'surface'; typeId: string }
-  component: ComponentInstanceV4
-  views: ViewDefV4[]
-  onPatch: (next: Partial<ComponentInstanceV4>, tag?: string) => void
-  onEditProps: () => void
-  onRemove: () => void
-}): React.ReactElement {
-  const { component } = props
-  const layout = component.layout ?? { x: 0, y: 0, w: 120, h: 40 }
-  const slots = Object.keys(DATA_APPLY_COMMANDS[component.type] ?? {})
-  const bindings = component.bindings ?? {}
-  // 新增绑定先落到本地待编辑槽位（空表达式 = 尚未绑定，不写入文档），输入后即持久化
-  const [pendingSlots, setPendingSlots] = useState<string[]>([])
-  const usedSlots = new Set([...Object.keys(bindings), ...pendingSlots])
-  const visibleSlots = [...Object.keys(bindings), ...pendingSlots.filter((slot) => !(slot in bindings))]
-  const freeSlots = slots.filter((slot) => !usedSlots.has(slot))
-
-  const setLayout = (key: 'x' | 'y' | 'w' | 'h', raw: string): void => {
-    if (raw === '') return
-    const value = Number(raw)
-    if (!Number.isFinite(value)) return
-    props.onPatch({ layout: { ...layout, [key]: Math.trunc(value) } })
-  }
-
-  const setBinding = (slot: string, expr: string): void => {
-    const next = { ...bindings }
-    if (expr.trim() === '') delete next[slot]
-    else next[slot] = expr
-    props.onPatch({ bindings: Object.keys(next).length > 0 ? next : undefined })
-  }
-
-  const removeBinding = (slot: string): void => {
-    setBinding(slot, '')
-    setPendingSlots((current) => current.filter((pending) => pending !== slot))
+  /** 预览行显示名：首个文本列（无文本列时取首个非结构化列），草稿行标注 */
+  const rowLabel = (rowId: string): string => {
+    const row = rows.find((candidate) => candidate.id === rowId)
+    if (!row) return rowId
+    const textColumn =
+      table?.columns.find((column) => column.type === 'text') ??
+      table?.columns.find((column) => column.type !== 'list' && column.type !== 'json' && column.type !== 'notes')
+    const raw = textColumn ? row[textColumn.key] : undefined
+    const label = typeof raw === 'string' || typeof raw === 'number' ? String(raw) : rowId
+    return row.draft === true ? `（草稿）${label}` : label
   }
 
   return (
-    <div className="v4-comp" data-testid={`v4-surface-comp-${component.id}`}>
-      <div className="v4-comp-head">
-        <b>{component.type}</b>
-        <code>{component.id}</code>
-        <input
-          className="v4-comp-name"
-          defaultValue={component.name ?? ''}
-          placeholder="显示名"
-          maxLength={120}
-          data-testid={`v4-comp-name-${component.id}`}
-          onBlur={(e) => {
-            if (e.currentTarget.value !== (component.name ?? '')) props.onPatch({ name: e.currentTarget.value })
-          }}
-        />
-        <label className="v4-comp-visible">
-          <input
-            type="checkbox"
-            checked={component.visible !== false}
-            data-testid={`v4-comp-visible-${component.id}`}
-            onChange={(e) => props.onPatch({ visible: e.target.checked })}
-          />
-          可见
-        </label>
-        <button
-          type="button"
-          className="ginsp-argdel"
-          title="删除组件"
-          data-testid={`v4-comp-remove-${component.id}`}
-          onClick={props.onRemove}
-        >
-          ×
-        </button>
-      </div>
-      <div className="v4-comp-layout">
-        {(['x', 'y', 'w', 'h'] as const).map((key) => (
-          <label key={key}>
-            <span>{key.toUpperCase()}</span>
-            <input
-              type="number"
-              className="v4-num"
-              value={String(layout[key])}
-              data-testid={`v4-comp-${key}-${component.id}`}
-              onChange={(e) => setLayout(key, e.target.value)}
-            />
-          </label>
-        ))}
-        <span className="muted">800×470 坐标系</span>
-      </div>
-      {props.views.length > 0 && (
-        <div className="v4-comp-view">
-          <span>视图归属</span>
-          <select
-            value={component.view ?? ''}
-            data-testid={`v4-comp-view-${component.id}`}
-            onChange={(e) => props.onPatch({ view: e.target.value === '' ? undefined : e.target.value })}
-          >
-            <option value="">全部视图（常驻）</option>
-            {props.views.map((view) => (
-              <option key={view.id} value={view.id}>
-                {view.name ?? view.id}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      <div className="v4-comp-props">
-        <span>初始 props</span>
-        <code className="v4-props-preview">{component.props === undefined ? '（未设置）' : JSON.stringify(component.props)}</code>
-        <button type="button" data-testid={`v4-comp-props-${component.id}`} onClick={props.onEditProps}>
-          编辑 JSON
-        </button>
-      </div>
-      <div className="v4-comp-bindings">
-        <span>
-          绑定（只读投影 · {slots.length === 0 ? '该组件类型不支持绑定' : `槽位 ${slots.join(' / ')}`}）
-        </span>
-        {visibleSlots.map((slot) => (
-          <div className="v4-binding-row" key={slot}>
-            <code className="v4-binding-slot">{slot}</code>
-            <input
-              value={bindings[slot] ?? ''}
-              className="v4-binding-expr"
-              placeholder="只读表达式，如 q.prompt"
-              data-testid={`v4-binding-expr-${component.id}-${slot}`}
-              onChange={(e) => setBinding(slot, e.target.value)}
-            />
-            <button
-              type="button"
-              className="ginsp-argdel"
-              title="移除绑定"
-              data-testid={`v4-binding-remove-${component.id}-${slot}`}
-              onClick={() => removeBinding(slot)}
-            >
-              ×
-            </button>
-          </div>
-        ))}
-        {freeSlots.length > 0 && (
-          <button
-            type="button"
-            data-testid={`v4-binding-add-${component.id}`}
-            onClick={() => setPendingSlots((current) => [...current, freeSlots[0]])}
-            title="新增绑定槽位"
-          >
-            + 绑定 {freeSlots[0]}
-          </button>
-        )}
-      </div>
+    <div className="v4-type-surface" data-testid="v4-type-surface">
+      <CanvasEditor
+        layer="surface"
+        title={`题内画布（surface）· ${type.name}`}
+        subtitle={`组件 ${surface.components.length}/${SCHEMA_LIMITS_V4.surfaceComponentsPerType} · 视图 ${views.length}/${SCHEMA_LIMITS_V4.surfaceViewsPerType} · 仅在题型调用期间挂载，每次 ask 从初始视图开始`}
+        components={surface.components}
+        views={views}
+        initialView={surface.initialView}
+        componentsLimit={SCHEMA_LIMITS_V4.surfaceComponentsPerType}
+        viewsLimit={SCHEMA_LIMITS_V4.surfaceViewsPerType}
+        minViews={0}
+        allowAllViews
+        bindingRoots={SURFACE_BINDING_ROOTS}
+        bindingHint="可用 q / q.state / t / args / v / run"
+        previewEnv={previewEnv}
+        headerExtra={
+          rows.length === 0 ? (
+            <span className="muted" data-testid="v4-canvas-preview-row-empty">
+              无数据行，q.* 预览为空
+            </span>
+          ) : (
+            <label className="v4-canvas-rowpick">
+              预览行
+              <select
+                value={previewRow?.id ?? ''}
+                data-testid="v4-canvas-preview-row"
+                onChange={(event) => setPreviewRowId(event.currentTarget.value)}
+              >
+                {rows.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {rowLabel(row.id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        }
+        onAddComponent={addWithView}
+        onUpdateComponent={patchComponent}
+        onRemoveComponent={(componentId) => onChange(removeComponent(doc, layer, componentId), V4_TAGS.component)}
+        onAddView={() => {
+          const result = addSurfaceView(doc, type.id)
+          onChange(result.doc, V4_TAGS.component)
+          return result.id
+        }}
+        onRenameView={(viewId, name) => onChange(updateSurfaceView(doc, type.id, viewId, { name }), V4_TAGS.component)}
+        onRemoveView={(viewId) => {
+          const next = removeSurfaceView(doc, type.id, viewId)
+          if (next !== doc) onChange(next, V4_TAGS.component)
+        }}
+        onSetInitialView={(viewId) => onChange(setSurfaceInitialView(doc, type.id, viewId), V4_TAGS.component)}
+      />
     </div>
   )
 }

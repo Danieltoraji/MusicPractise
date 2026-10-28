@@ -22,12 +22,11 @@ describe('文档一致性（v4）', () => {
     const labels = [...V4_SHELL.matchAll(/\{ id: '(content|flow|types|shell|preview|json)', label: '([^']+)' \}/g)].map(
       (m) => m[2],
     )
-    expect(labels).toEqual(['内容', '流程', '题型', '舞台', '预览', 'JSON'])
+    expect(labels).toEqual(['内容', '流程', '题型', '画布', '预览', 'JSON'])
     expect(README).toContain(`v4 编辑器六 Tab = ${labels.join(' / ')}`)
     expect(AGENTS).toContain(`v4 编辑器六 Tab = ${labels.join('/')}`)
-    // 旧 v3 五 Tab 名称不得再作为当前编辑器 Tab 描述出现
-    const readmeTabLine = README.split('\n').find((line) => line.includes('v4 编辑器六 Tab')) ?? ''
-    expect(readmeTabLine).not.toContain('画布')
+    // W13：编辑器 Tab 恢复「画布」（内部 id shell；运行时播放面仍叫舞台）
+    expect(README).toContain('画布=shell')
   })
 
   it('图工作台持久化键 graph-theme 与文档一致', () => {

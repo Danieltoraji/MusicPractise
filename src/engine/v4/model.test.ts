@@ -10,11 +10,13 @@ import {
   getRowIndex,
   getTable,
   getType,
+  initStateObject,
   isV4LocalId,
   newLocalId,
   newUniqueLocalId,
   normalizeLevelDocV4,
   normalizeQuestionResult,
+  questionContentOfRow,
 } from './model'
 import { minimalLevelDoc, twoTypeLevelDoc } from './fixtures'
 
@@ -175,6 +177,35 @@ describe('v4 model：只读查询与克隆', () => {
     copy.content.tables.choice.rows[0].prompt = '改题'
     expect(doc.content.types[0].name).toBe('听音选择')
     expect(doc.content.tables.choice.rows[0].prompt).toBe('听一听，这是什么音？')
+  })
+})
+
+describe('v4 model：运行时/编辑器共用的状态初值与题目投影（W13）', () => {
+  it('initStateObject 按字段深拷贝初值；undefined 字段表 → 空对象', () => {
+    const fields = [
+      { key: 'score', type: 'number' as const, init: 0 },
+      { key: 'tags', type: 'json' as const, init: { list: [1, 2] } },
+    ]
+    const state = initStateObject(fields)
+    expect(state).toEqual({ score: 0, tags: { list: [1, 2] } })
+    // 深拷贝：改投影不影响字段定义
+    ;(state.tags as { list: number[] }).list.push(3)
+    expect(fields[1].init).toEqual({ list: [1, 2] })
+    expect(initStateObject(undefined)).toEqual({})
+  })
+
+  it('questionContentOfRow 排除平台元数据并补 q.id；内容列原样保留', () => {
+    const q = questionContentOfRow({
+      id: 'row_01',
+      draft: true,
+      phase: 2,
+      order: 3,
+      prompt: '题面',
+      options: ['Do', 'Re'],
+      scoring: 10,
+    })
+    expect(q).toEqual({ prompt: '题面', options: ['Do', 'Re'], scoring: 10, id: 'row_01' })
+    expect(questionContentOfRow({ id: 'row_02' })).toEqual({ id: 'row_02' })
   })
 })
 

@@ -42,7 +42,7 @@ export interface EditorPageV4Props {
   /** 路由 id；`new` = 从零建 v4 关 */
   id: string
   /**
-   * W6/W7 可插槽区域（流程 / 行为 / 舞台 / 预览 / AI 面板）。
+   * W6/W7 可插槽区域（流程 / 行为 / 画布 / 预览 / AI 面板）。
    * 过渡期集成由路由/Lead 传入；不传时各 Tab 显示占位说明。
    */
   slots?: V4EditorSlots

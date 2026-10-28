@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * W7.2 / W7.3 预览调试与舞台编辑测试（docs/52 §4 W7；docs/53 §13.3）：
+ * W7.2 / W7.3 预览调试与画布编辑测试（docs/52 §4 W7；docs/53 §13.3；W13 画布同源 docs/57）：
  *
- * ① ShellTab（舞台）：视图新增/重命名/设初始/删除；组件画布新增/布局数字编辑/拖拽/
+ * ① ShellTab（画布）：视图新增/重命名/设初始/删除；共享画布新增/布局数字编辑/拖拽/
  *    绑定（槽位 + 实时表达式校验）/props JSON；全部经 onChange 且 tag='shell'，
  *    并且只替换 doc→content→shell 分支（结构共享：其它分支引用不变）。
  * ② PreviewTab（预览）：自建会话+调试控制器——开始后 LevelStageV4 舞台/题型帧挂载、
@@ -89,7 +89,6 @@ function click(el: Element | null): void {
 
 const nativeInputValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
 const nativeTextareaValue = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
-const nativeSelectValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!
 
 /** 受控 input：native setter + input 事件（React value tracker 放行） */
 function typeInput(input: HTMLInputElement, value: string): void {
@@ -103,13 +102,6 @@ function typeTextarea(textarea: HTMLTextAreaElement, value: string): void {
   act(() => {
     nativeTextareaValue.call(textarea, value)
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-}
-
-function chooseSelect(select: HTMLSelectElement, value: string): void {
-  act(() => {
-    nativeSelectValue.call(select, value)
-    select.dispatchEvent(new Event('change', { bubbles: true }))
   })
 }
 
@@ -203,7 +195,7 @@ function waitDoc(): LevelDocV4 {
 }
 
 // ---------------------------------------------------------------------------
-// ShellTab · 舞台编辑
+// ShellTab · 画布编辑
 // ---------------------------------------------------------------------------
 
 interface ShellHarness {
@@ -239,7 +231,7 @@ function mountShell(initial: LevelDocV4): ShellHarness {
   }
 }
 
-describe('ShellTab（舞台：视图 / 组件画布 / 属性 / 绑定）', () => {
+describe('ShellTab（画布：视图 / 组件画布 / 属性 / 绑定）', () => {
   it('视图管理：新增/重命名/设初始/删除，全部 tag=shell 且不触碰其它分支引用', () => {
     const initial = minimalLevelDoc()
     const harness = mountShell(initial)
@@ -247,14 +239,15 @@ describe('ShellTab（舞台：视图 / 组件画布 / 属性 / 绑定）', () =>
     try {
       const shell = harness.current().content.shell
       expect(byTestId(container, 'v4-shell-tab')).toBeTruthy()
-      expect(byTestId(container, 'v4-shell-palette')).toBeTruthy()
-      expect(byTestId(container, 'v4-shell-views')).toBeTruthy()
-      expect(byTestId(container, 'v4-shell-canvas')).toBeTruthy()
-      expect(byTestId(container, 'v4-shell-component-scoreLabel')).toBeTruthy()
-      expect(byTestId(container, `v4-shell-view-initial-${shell.views[0].id}`).hasAttribute('disabled')).toBe(true)
+      expect(byTestId(container, 'v4-canvas').getAttribute('data-layer')).toBe('shell')
+      expect(byTestId(container, 'v4-canvas-palette')).toBeTruthy()
+      expect(byTestId(container, 'v4-canvas-views')).toBeTruthy()
+      expect(byTestId(container, 'v4-canvas-stage')).toBeTruthy()
+      expect(byTestId(container, 'v4-canvas-box-scoreLabel')).toBeTruthy()
+      expect(byTestId(container, `v4-canvas-view-initial-${shell.views[0].id}`).hasAttribute('disabled')).toBe(true)
 
       // 新增视图：views+1，切到新视图（空视图提示）
-      click(byTestId(container, 'v4-shell-view-add'))
+      click(byTestId(container, 'v4-canvas-view-add'))
       harness.sync()
       const afterAddView = harness.current()
       expect(afterAddView.content.shell.views).toHaveLength(2)
@@ -264,29 +257,29 @@ describe('ShellTab（舞台：视图 / 组件画布 / 属性 / 绑定）', () =>
       expect(afterAddView.content.flow).toBe(initial.content.flow)
       expect(afterAddView.meta).toBe(initial.meta)
       const newViewId = afterAddView.content.shell.views[1].id
-      expect(byTestId(container, `v4-shell-view-${newViewId}`)).toBeTruthy()
-      expect(byTestId(container, 'v4-shell-empty')).toBeTruthy()
+      expect(byTestId(container, `v4-canvas-view-${newViewId}`)).toBeTruthy()
+      expect(byTestId(container, 'v4-canvas-empty')).toBeTruthy()
 
       // 重命名（逐键 tag=shell）
-      typeInput(byTestId(container, `v4-shell-view-name-${newViewId}`) as HTMLInputElement, '第二视图')
+      typeInput(byTestId(container, `v4-canvas-view-name-${newViewId}`) as HTMLInputElement, '第二视图')
       harness.sync()
       expect(harness.current().content.shell.views[1].name).toBe('第二视图')
       expect(harness.tags().at(-1)).toBe('shell')
 
       // 设为初始视图
-      click(byTestId(container, `v4-shell-view-initial-${newViewId}`))
+      click(byTestId(container, `v4-canvas-view-initial-${newViewId}`))
       harness.sync()
       expect(harness.current().content.shell.initialView).toBe(newViewId)
-      expect(byTestId(container, `v4-shell-view-initial-${newViewId}`).hasAttribute('disabled')).toBe(true)
+      expect(byTestId(container, `v4-canvas-view-initial-${newViewId}`).hasAttribute('disabled')).toBe(true)
 
       // 删除视图（级联清 initialView，回落到首视图）
-      click(byTestId(container, `v4-shell-view-remove-${newViewId}`))
+      click(byTestId(container, `v4-canvas-view-remove-${newViewId}`))
       harness.sync()
       const afterRemove = harness.current()
       expect(afterRemove.content.shell.views).toHaveLength(1)
       expect(afterRemove.content.shell.initialView).toBeUndefined()
       expect(harness.tags().at(-1)).toBe('shell')
-      expect(byTestId(container, 'v4-shell-component-scoreLabel')).toBeTruthy()
+      expect(byTestId(container, 'v4-canvas-box-scoreLabel')).toBeTruthy()
       // 文档纯度：初始文档未被原地修改
       expect(initial.content.shell.views).toHaveLength(1)
       expect(initial.content.shell.components).toHaveLength(1)
@@ -302,9 +295,8 @@ describe('ShellTab（舞台：视图 / 组件画布 / 属性 / 绑定）', () =>
     try {
       const beforeAdd = harness.current()
 
-      // 组件库类型选择 → 新增（归入当前视图）
-      chooseSelect(byTestId(container, 'v4-shell-new-type') as HTMLSelectElement, 'label')
-      click(byTestId(container, 'v4-shell-add-component'))
+      // 组件面板列表 → 一键新增（归入当前视图，默认格位在画布内）
+      click(byTestId(container, 'v4-canvas-add-label'))
       harness.sync()
       const afterAdd = harness.current()
       expect(afterAdd.content.shell.components).toHaveLength(2)
@@ -318,12 +310,13 @@ describe('ShellTab（舞台：视图 / 组件画布 / 属性 / 绑定）', () =>
       const added = afterAdd.content.shell.components[1]
       expect(added.type).toBe('label')
       expect(added.view).toBe('main')
+      expect(added.layout?.y).toBeLessThan(470)
       // 新组件自动选中 → 属性检查器出现
-      expect(byTestId(container, 'v4-shell-inspector')).toBeTruthy()
-      expect(byTestId(container, `v4-shell-component-${added.id}`).getAttribute('data-selected')).toBe('true')
+      expect(byTestId(container, 'v4-canvas-inspector')).toBeTruthy()
+      expect(byTestId(container, `v4-canvas-box-${added.id}`).getAttribute('data-selected')).toBe('true')
 
       // 数字布局：x 精确编辑（tag=shell；其它分支仍共享）
-      typeInput(byTestId(container, `v4-shell-layout-x-${added.id}`) as HTMLInputElement, '300')
+      typeInput(byTestId(container, 'v4-canvas-layout-x') as HTMLInputElement, '300')
       harness.sync()
       const afterLayout = harness.current()
       const laidOut = afterLayout.content.shell.components[1]
@@ -333,8 +326,8 @@ describe('ShellTab（舞台：视图 / 组件画布 / 属性 / 绑定）', () =>
       expect(afterLayout.content.flow).toBe(beforeAdd.content.flow)
 
       // 绑定：新增槽位 → 输入只读表达式 → 写入 bindings（根校验通过）
-      click(byTestId(container, `v4-shell-binding-add-${added.id}`))
-      typeInput(byTestId(container, `v4-shell-binding-expr-${added.id}-text`) as HTMLInputElement, 'v.score + 1')
+      click(byTestId(container, 'v4-canvas-binding-add'))
+      typeInput(byTestId(container, 'v4-canvas-binding-expr-text') as HTMLInputElement, 'v.score + 1')
       harness.sync()
       const afterBinding = harness.current()
       expect(afterBinding.content.shell.components[1].bindings?.text).toBe('v.score + 1')
@@ -342,28 +335,28 @@ describe('ShellTab（舞台：视图 / 组件画布 / 属性 / 绑定）', () =>
       expect(afterBinding.content.flow).toBe(beforeAdd.content.flow)
 
       // 实时校验：非法表达式显示错误（不静默吞掉）
-      typeInput(byTestId(container, `v4-shell-binding-expr-${added.id}-text`) as HTMLInputElement, 'v.')
+      typeInput(byTestId(container, 'v4-canvas-binding-expr-text') as HTMLInputElement, 'v.')
       harness.sync()
-      const errorEl = byTestId(container, `v4-shell-binding-error-${added.id}-text`)
+      const errorEl = byTestId(container, 'v4-canvas-binding-error-text')
       expect(text(errorEl).length).toBeGreaterThan(0)
       // 修正后错误消失
-      typeInput(byTestId(container, `v4-shell-binding-expr-${added.id}-text`) as HTMLInputElement, 'v.score')
+      typeInput(byTestId(container, 'v4-canvas-binding-expr-text') as HTMLInputElement, 'v.score')
       harness.sync()
-      expect(maybeTestId(container, `v4-shell-binding-error-${added.id}-text`)).toBeNull()
+      expect(maybeTestId(container, 'v4-canvas-binding-error-text')).toBeNull()
 
       // props JSON 编辑弹窗
-      click(byTestId(container, `v4-shell-props-edit-${added.id}`))
-      typeTextarea(byTestId(container, 'v4-shell-props-text') as HTMLTextAreaElement, '{"text":"舞台标签"}')
-      click(byTestId(container, 'v4-shell-props-apply'))
+      click(byTestId(container, 'v4-canvas-props-edit'))
+      typeTextarea(byTestId(container, 'v4-canvas-props-text') as HTMLTextAreaElement, '{"text":"画布标签"}')
+      click(byTestId(container, 'v4-canvas-props-apply'))
       harness.sync()
-      expect(harness.current().content.shell.components[1].props).toEqual({ text: '舞台标签' })
+      expect(harness.current().content.shell.components[1].props).toEqual({ text: '画布标签' })
       expect(harness.tags().at(-1)).toBe('shell')
 
       // 拖拽平移：pointerdown→move→up 落点一次 commit，只有一个新文档（撤销合并前提）
       const beforeDrag = harness.current()
       const beforeDragCount = harness.changes().length
       const layoutBefore = beforeDrag.content.shell.components[1].layout!
-      const box = byTestId(container, `v4-shell-component-${added.id}`)
+      const box = byTestId(container, `v4-canvas-box-${added.id}`)
       act(() => {
         box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 5, clientX: 100, clientY: 100 }))
         box.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 5, clientX: 160, clientY: 130 }))
@@ -379,12 +372,12 @@ describe('ShellTab（舞台：视图 / 组件画布 / 属性 / 绑定）', () =>
 
       // 删除组件
       const afterDragCount = harness.changes().length
-      click(byTestId(container, `v4-shell-remove-${added.id}`))
+      click(byTestId(container, 'v4-canvas-remove'))
       harness.sync()
       expect(harness.current().content.shell.components).toHaveLength(1)
       expect(harness.changes().length).toBe(afterDragCount + 1)
       expect(harness.tags().at(-1)).toBe('shell')
-      expect(maybeTestId(container, 'v4-shell-inspector')).toBeNull()
+      expect(maybeTestId(container, 'v4-canvas-inspector')).toBeNull()
       // 全流程 tag 恒为 shell（撤销栈按 shell 连续合并）
       expect(new Set(harness.tags())).toEqual(new Set(['shell']))
     } finally {

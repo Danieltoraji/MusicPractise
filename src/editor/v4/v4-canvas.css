@@ -1,0 +1,197 @@
+/**
+ * v4 编辑器共享画布增量样式（W13，docs/57）。
+ *
+ * 纪律（与 v4-editor.css / v4-preview.css 同源）：
+ * - **只写增量**：三栏骨架（`.editor-canvas-layout` / `.palette` / `.inspector`）、
+ *   画布网格与选中框（`.editor-canvas` / `.editor-box*` / `.box-resize` / `.box-label`）、
+ *   视图药丸（`.views-chip`）全部复用 src/index.css 既有规则，因此 ≤1280/≤900 响应式
+ *   断点无需重复实现（媒体查询仍只在 index.css 文件尾）。
+ * - 只新增 `.v4-canvas-*` 与「画布根填充」类；颜色/间距/字号/圆角走设计令牌，无裸色。
+ * - 画布缩放由内联 transform 决定；本文件只管布局、视口与面板观感。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 画布根：嵌在 Tab 高度链里时吃满剩余空间                              */
+/* ------------------------------------------------------------------ */
+
+.v4-shell-tab {
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.v4-type-surface {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.v4-canvas-workbench {
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.v4-canvas-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* 工具栏 / 视图条                                                     */
+/* ------------------------------------------------------------------ */
+
+.v4-canvas-toolbar {
+  margin-bottom: 0;
+  flex-wrap: wrap;
+}
+
+.v4-canvas-scale {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* surface 预览数据行选择器（工具栏右侧附加） */
+.v4-canvas-rowpick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-0);
+}
+
+.v4-canvas-rowpick select {
+  max-width: 220px;
+  min-width: 0;
+}
+
+.v4-canvas-views {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.v4-canvas-views .v4-canvas-hint {
+  flex: 1 1 240px;
+}
+
+.v4-canvas-view-name {
+  width: 104px;
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: var(--fs-0);
+}
+
+/* ------------------------------------------------------------------ */
+/* 画布视口：宽度 fit 缩放；frame 提供缩放后的布局尺寸                  */
+/* ------------------------------------------------------------------ */
+
+.v4-canvas-viewport {
+  flex: 1 1 auto;
+  min-height: 240px;
+  overflow: auto;
+  position: relative;
+  display: flex;
+}
+
+.v4-canvas-frame {
+  margin: auto;
+  position: relative;
+  flex: none;
+}
+
+/* 800×470 设计画布：尺寸/transform 由内联 style 决定（fit-scale） */
+.v4-canvas-stage {
+  transform-origin: 0 0;
+  flex: none;
+  box-sizing: border-box;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.v4-canvas-empty {
+  padding: var(--sp-4);
+  font-size: var(--fs-0);
+}
+
+/* ------------------------------------------------------------------ */
+/* 组件面板：分组快捷添加 + 搜索 + 本视图组件清单                       */
+/* ------------------------------------------------------------------ */
+
+.v4-canvas-palette {
+  overflow: auto;
+}
+
+.v4-canvas-search {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: var(--fs-0);
+}
+
+.v4-canvas-palette-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.v4-canvas-palette-cat {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-0);
+  color: var(--muted);
+}
+
+.v4-canvas-palette-group button {
+  padding: 4px 8px;
+  font-size: var(--fs-0);
+}
+
+.v4-canvas-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--sp-1);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-0);
+}
+
+.v4-canvas-item {
+  width: 100%;
+  text-align: left;
+  padding: 3px 6px;
+  font-size: var(--fs-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v4-canvas-item.is-selected {
+  background: var(--accent-soft);
+}
+
+.v4-canvas-hint {
+  font-size: var(--fs-0);
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ */
+/* 属性检查器补充（骨架/宽度/输入宽度复用 .editor-canvas-layout 规则） */
+/* ------------------------------------------------------------------ */
+
+.v4-canvas-inspector code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-0);
+}
+
+.v4-canvas-inspector .v4-comp-props,
+.v4-canvas-inspector .v4-comp-bindings {
+  align-items: flex-start;
+}

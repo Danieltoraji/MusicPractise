@@ -735,6 +735,31 @@ export function countRows(doc: LevelDocV4): number {
   return allRows(doc).length
 }
 
+// ---------------------------------------------------------------------------
+// 运行时/编辑器共用的纯函数（W13）：状态初值与题目内容投影只此一份，避免两处口径漂移
+// ---------------------------------------------------------------------------
+
+/** 状态字段 → 初值对象（flow.vars / t / q.state / behavior.locals 共用，深拷贝初值） */
+export function initStateObject(fields: { key: string; init: Json }[] | undefined): Record<string, Json> {
+  const out: Record<string, Json> = {}
+  for (const field of fields ?? []) out[field.key] = cloneJson(field.init)
+  return out
+}
+
+/**
+ * 题目行 → 调用期 q 内容投影（docs/53 §4）：平台元数据（id/draft/phase/order）不进入 q，
+ * 其余内容列原样带上，并补 `q.id`。session 的 mountFrame 与编辑器预览共用此口径。
+ */
+export function questionContentOfRow(row: QuestionRow): Record<string, Json> {
+  const out: Record<string, Json> = {}
+  for (const [key, value] of Object.entries(row)) {
+    if (key === 'id' || key === 'draft' || key === 'phase' || key === 'order') continue
+    if (value !== undefined) out[key] = value
+  }
+  out.id = row.id
+  return out
+}
+
 /** 深拷贝文档（撤销栈/编辑器/测试共用；文档恒为纯 JSON） */
 export function cloneLevelDocV4(doc: LevelDocV4): LevelDocV4 {
   return cloneJson(doc)

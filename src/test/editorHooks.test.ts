@@ -54,8 +54,9 @@ describe('G14 编辑器 hook class 集中登记（v4）', () => {
     const shell = source('../editor/v4/V4EditorShell.tsx')
     expect(shell).toContain('EDITOR_HOOKS.editorBody')
 
-    const shellTab = source('../editor/v4/ShellTab.tsx')
-    expect(shellTab).toContain('EDITOR_HOOKS.editorCanvas')
+    // W13 起画布实现收口到共享 CanvasEditor（shell/surface 同一组件）
+    const canvasEditor = source('../editor/v4/CanvasEditor.tsx')
+    expect(canvasEditor).toContain('EDITOR_HOOKS.editorCanvas')
 
     const graph = source('../editor/v4/graph/GraphWorkbench.tsx')
     expect(graph).toContain('EDITOR_HOOKS.graphToggle')

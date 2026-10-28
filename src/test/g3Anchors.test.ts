@@ -19,6 +19,7 @@ const INSPECTOR = source('../editor/v4/graph/NodeInspector.tsx')
 const CONTENT_TAB = source('../editor/v4/ContentTab.tsx')
 const AI_PANEL = source('../editor/v4/AiPanelV4.tsx')
 const SHELL_TAB = source('../editor/v4/ShellTab.tsx')
+const CANVAS_EDITOR = source('../editor/v4/CanvasEditor.tsx')
 const PREVIEW_TAB = source('../editor/v4/PreviewTab.tsx')
 const MODAL = source('../editor/Modal.tsx')
 
@@ -69,12 +70,34 @@ describe('G3 关键交互锚点契约（v4）', () => {
     expect(GRAPH_CARD).toContain('data-node-kind')
   })
 
-  it('ContentTab / ShellTab / PreviewTab / AiPanel 锚点保留', () => {
+  it('ContentTab / 共享画布 / PreviewTab / AiPanel 锚点保留', () => {
     for (const prefix of ['v4-tgrid-row-', 'v4-type-select-']) dynamicAnchor(CONTENT_TAB, prefix)
     expect(CONTENT_TAB).toContain(`v4-tgrid-cell-`)
     staticAnchors(CONTENT_TAB, 'v4-tgrid-add-row')
     staticAnchors(SHELL_TAB, 'v4-shell-tab')
-    dynamicAnchor(SHELL_TAB, 'v4-shell-component-')
+    for (const id of [
+      'v4-canvas',
+      'v4-canvas-palette',
+      'v4-canvas-search',
+      'v4-canvas-views',
+      'v4-canvas-viewport',
+      'v4-canvas-stage',
+      'v4-canvas-inspector',
+      'v4-canvas-empty',
+      'v4-canvas-error',
+      'v4-canvas-scale',
+    ]) {
+      staticAnchors(CANVAS_EDITOR, id)
+    }
+    for (const prefix of [
+      'v4-canvas-add-',
+      'v4-canvas-box-',
+      'v4-canvas-view-',
+      'v4-canvas-item-',
+      'v4-canvas-binding-',
+    ]) {
+      dynamicAnchor(CANVAS_EDITOR, prefix)
+    }
     staticAnchors(PREVIEW_TAB, 'v4-preview-tab')
     staticAnchors(PREVIEW_TAB, 'v4-preview-debug')
     for (const id of ['v4-ai', 'v4-ai-input', 'v4-ai-send', 'v4-ai-stop', 'v4-ai-error', 'v4-ai-capbar']) {

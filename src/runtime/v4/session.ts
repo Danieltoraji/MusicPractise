@@ -24,10 +24,13 @@ import {
   getRow,
   getTable,
   getType,
+  initStateObject,
+  questionContentOfRow,
   type ComponentInstanceV4,
   type DeckItem,
   type LevelDocV4,
   type QuestionResult,
+  type QuestionRow,
   type QuestionTypeDef,
   type RunResult,
 } from '../../engine/v4/model'
@@ -204,12 +207,6 @@ interface ShellWaiter {
 
 function isObjectJson(value: unknown): value is Record<string, Json> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function initStateObject(fields: { key: string; init: Json }[] | undefined): Record<string, Json> {
-  const out: Record<string, Json> = {}
-  for (const field of fields ?? []) out[field.key] = cloneJson(field.init)
-  return out
 }
 
 function argTypeMatches(value: Json, type: 'number' | 'boolean' | 'string' | 'json'): boolean {
@@ -697,18 +694,13 @@ export class V4Session {
   private mountSurface(
     callId: number,
     type: QuestionTypeDef,
-    row: { id: string; [k: string]: Json | undefined },
+    row: QuestionRow,
     args: Record<string, Json>,
   ): SurfaceFrame {
     const store = new ComponentStore()
     const qState = this.questionStates.get(questionKey(type.id, row.id)) as Record<string, Json>
     const t = this.typeStates.get(type.id) as Record<string, Json>
-    const qContent: Record<string, Json> = {}
-    for (const [key, value] of Object.entries(row)) {
-      if (key === 'id' || key === 'draft' || key === 'phase' || key === 'order') continue
-      if (value !== undefined) qContent[key] = value
-    }
-    qContent.id = row.id
+    const qContent = questionContentOfRow(row)
     const surfaceViews = type.surface.views
     const view =
       surfaceViews !== undefined && surfaceViews.length > 0

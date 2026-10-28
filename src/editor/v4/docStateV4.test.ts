@@ -375,7 +375,7 @@ describe('docStateV4 · 行', () => {
   })
 })
 
-describe('docStateV4 · 舞台（视图/组件）', () => {
+describe('docStateV4 · 画布（视图/组件）', () => {
   it('addView/updateView/removeView：id 去重、级联删组件、悬空组件归首视图、至少保留一个', () => {
     const doc = sampleDoc()
     const added = addView(doc, '第二视图')
