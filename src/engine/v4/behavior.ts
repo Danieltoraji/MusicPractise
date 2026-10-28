@@ -71,7 +71,6 @@ interface QueuedEvent {
 
 export class BehaviorRunner {
   private readonly index: GraphIndex<BehaviorNode>
-  private readonly frame: WalkFrame = { loopState: new Map() }
   private readonly budget: StepBudget
   private readonly maxTasks: number
   private readonly maxEvents: number
@@ -206,6 +205,9 @@ export class BehaviorRunner {
     if (entry === null) return // handler 无后续节点：空处理器
     const eventValue: Json = { name: queued.event, payload: queued.payload }
     const env = this.makeTaskEnv(eventValue)
+    // 每个任务独立 WalkFrame（v4.2）：repeat/foreach 的循环游标不跨并发任务共享；
+    // 同一事件的多个任务（含 timer 重复触发）各自完整地遍历自己的数组。
+    const frame: WalkFrame = { loopState: new Map() }
     await runChain({
       entry,
       index: this.index,
@@ -214,7 +216,7 @@ export class BehaviorRunner {
       exec: async (node) => {
         if (this.finished) throw new StoppedError()
         await this.host.gate?.(node)
-        const shared = await execSharedNode(node, this.frame, env, this.cancel)
+        const shared = await execSharedNode(node, frame, env, this.cancel)
         if (shared !== null) return shared
         switch (node.kind) {
           case 'return': {

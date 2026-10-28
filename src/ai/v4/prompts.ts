@@ -48,7 +48,7 @@ content = { shell, types[], tables{题型id → {columns, rows}}, manifest?, run
 - tables：每种题型一张实例表，**一行 = 一道题**；行 id 稳定（增删/重排不变），draft 行不进自动题单，phase/order 影响题单排序
 - manifest：显式题单 entries[{type,row,args?}]；缺省 = 自动题单（run.order=manifest|shuffle、count、seed、shuffleWithinPhase）
 - flow：关卡主流程 main（节点 kind：start/assign/ask/foreach/branch/loop/call/setView/wait/waitShell/finish/restart/comment）
-- behavior：题型行为（一次 ask 调用的异步函数；on start / on 组件.事件 / internal.* 事件、assign/call/branch/loop/wait/setView/emit/return）
+- behavior：题型行为（一次 ask 调用的异步函数；on start / on 组件.事件 / internal.* 事件、assign/call/branch/loop/foreach/wait/setView/emit/return）
 - 全局时钟：run.elapsedMs 可被 shell/surface 绑定实时显示（session 100ms 刷新），也可在行为事件中读取；finish 定格
 - 题库与流程解耦：改数据（加题/改行/改题单）不需要动 flow；只有改调度/计分/结算才改 flow
 

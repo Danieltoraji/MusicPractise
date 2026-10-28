@@ -589,6 +589,7 @@
             "emit",
             "branch",
             "loop",
+            "foreach",
             "wait",
             "comment",
             "setView"

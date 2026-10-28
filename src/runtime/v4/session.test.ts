@@ -364,6 +364,38 @@ describe('v4 session：watchdog / 取消 / 调试', () => {
   })
 })
 
+describe('v4 session：behavior foreach（v4.2）', () => {
+  it('单题内遍历 q.options 累积 local/state；每行 q.state 独立', async () => {
+    const doc = minimalLevelDoc()
+    doc.content.types[0].state = [
+      { key: 'answered', type: 'boolean', init: false },
+      { key: 'joined', type: 'string', init: '' },
+    ]
+    doc.content.types[0].behavior = behavior(
+      [
+        { id: 'b_start', kind: 'on', event: 'start' },
+        { id: 'b_fe', kind: 'foreach', items: 'q.options', itemVar: 'opt' },
+        { id: 'b_join', kind: 'assign', target: 'q.state.joined', value: { expr: 'q.state.joined + local.opt' } },
+        { id: 'b_ret', kind: 'return', result: "{ status: 'answered', scoreDelta: 0, payload: q.state.joined }" },
+      ],
+      [
+        out('b_start', 'b_fe'),
+        out('b_fe', 'b_join', 'true'),
+        out('b_join', 'b_fe'),
+        out('b_fe', 'b_ret', 'false'),
+      ],
+    )
+    doc.content.flow = askAllFlow()
+    const h = makeHost()
+    const session = track(new V4Session(doc, h.host))
+    session.start()
+    await waitFor(() => session.getSnapshot().result !== null, '结算')
+    expect(session.questionResults).toHaveLength(2)
+    expect(session.questionResults[0].result.payload).toBe('DoReMi')
+    expect(session.questionResults[1].result.payload).toBe('SolLa')
+  })
+})
+
 function waitThenReturnByEventFixture(): BehaviorProgram {
   return behavior(
     [

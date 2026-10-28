@@ -455,9 +455,9 @@ function InspectorBody(props: NodeInspectorProps & { node: AnyGraphNode }): Reac
             label="遍历表达式"
             value={node.items}
             layer={layer}
-            hint="如 run.questions（数组）"
+            hint={flow ? '如 run.questions（数组）' : '如 q.options / local.notes（数组）'}
             testId="v4-graph-field-items"
-            onCommit={(items) => onPatch({ items: items ?? 'run.questions' })}
+            onCommit={(items) => onPatch({ items: items ?? (flow ? 'run.questions' : 'q.options') })}
           />
           <IdInput
             label="元素变量"

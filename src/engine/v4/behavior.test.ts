@@ -378,3 +378,54 @@ describe('v4 behavior：取消 / 预算 / 事件上限 / 任务错误', () => {
     await expect(promise).resolves.toEqual({ kind: 'return', result: { status: 'answered', correct: true } })
   })
 })
+
+describe('v4 behavior：foreach（v4.2 共享节点）', () => {
+  it('遍历数组写 local → body 回边推进 → false 出口 return', async () => {
+    const { host, state } = makeHost()
+    state.qState.sum = 0
+    const runner = new BehaviorRunner(
+      program(
+        [
+          { id: 'b_on', kind: 'on', event: 'start' },
+          { id: 'b_fe', kind: 'foreach', items: '[1, 2, 3]', itemVar: 'item', indexVar: 'i' },
+          { id: 'b_add', kind: 'assign', target: 'q.state.sum', value: { expr: 'q.state.sum + local.item' } },
+          { id: 'b_ret', kind: 'return', result: "{ status: 'answered', payload: q.state.sum }" },
+        ],
+        [out('b_on', 'b_fe'), out('b_fe', 'b_add', 'true'), out('b_add', 'b_fe'), out('b_fe', 'b_ret', 'false')],
+      ),
+      host,
+      { cancel: new CancelToken() },
+    )
+    const outcome = await runner.run()
+    expect(outcome.kind).toBe('return')
+    if (outcome.kind === 'return') expect(outcome.result.payload).toBe(6)
+    expect(state.qState.sum).toBe(6)
+    // 循环结束后 local 保留最后一次迭代值（item/index 由运行时 setLocal 写入）
+    expect(state.local.item).toBe(3)
+    expect(state.local.i).toBe(2)
+  })
+
+  it('并发任务各自独立遍历（同一 handler 被两次 start 触发，不共享循环游标）', async () => {
+    const { host, state } = makeHost()
+    const runner = new BehaviorRunner(
+      program(
+        [
+          { id: 'b_on', kind: 'on', event: 'start' },
+          { id: 'b_fe', kind: 'foreach', items: '[1, 2]', itemVar: 'item' },
+          { id: 'b_cmd', kind: 'call', target: 'counter', method: 'add', arg: '{ v: local.item }' },
+          { id: 'b_wait', kind: 'wait', ms: '20' },
+          { id: 'b_ret', kind: 'return', result: "{ status: 'answered' }" },
+        ],
+        [out('b_on', 'b_fe'), out('b_fe', 'b_cmd', 'true'), out('b_cmd', 'b_wait'), out('b_wait', 'b_fe'), out('b_fe', 'b_ret', 'false')],
+      ),
+      host,
+      { cancel: new CancelToken() },
+    )
+    const promise = runner.run()
+    // 在事件泵启动前再排一个 start：两个任务会在循环体内并发等待
+    runner.dispatch('start', {})
+    await promise
+    expect(state.commands).toHaveLength(4)
+    expect(state.commands.map((command) => (command.arg as { v: number }).v).sort()).toEqual([1, 1, 2, 2])
+  })
+})

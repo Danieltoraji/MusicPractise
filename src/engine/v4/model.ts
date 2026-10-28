@@ -299,6 +299,7 @@ export type BehaviorNode =
   | EmitNode
   | BranchNode
   | LoopNode
+  | ForeachNode
   | WaitNode
   | SetViewNode
   | CommentNode

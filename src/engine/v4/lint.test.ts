@@ -165,6 +165,17 @@ describe('v4 lint：组件契约（命令/查询/事件）', () => {
     expectNoIssue(good, 'V4_UNKNOWN_METHOD')
   })
 
+  it('behavior foreach：itemVar/indexVar 是隐式 local；items 表达式做路径校验', () => {
+    const ok = minimalLevelDoc()
+    pushBehavior(ok, { id: 'b_fe', kind: 'foreach', items: 'q.options', itemVar: 'note', indexVar: 'i' })
+    pushBehavior(ok, { id: 'b_ret2', kind: 'return', result: "{ status: 'answered', message: local.note, payload: local.i }" })
+    expectNoIssue(ok, 'V4_EXPR_PATH')
+
+    const badItems = minimalLevelDoc()
+    pushBehavior(badItems, { id: 'b_fe', kind: 'foreach', items: 'q.ghost', itemVar: 'note' })
+    expectIssue(badItems, 'V4_EXPR_PATH')
+  })
+
   it('waitShell/on 组件事件必须在契约中', () => {
     const waitBad = minimalLevelDoc()
     pushFlow(waitBad, { id: 'f_wait', kind: 'waitShell', event: 'scoreLabel.nope' })

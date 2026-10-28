@@ -92,6 +92,17 @@ function collectFlowImplicitLocals(program: FlowProgram): Set<string> {
   return locals
 }
 
+/** behavior 隐式局部变量：foreach 的 itemVar/indexVar（运行时由 setLocal 写入，不需 locals 声明） */
+function collectBehaviorImplicitLocals(program: BehaviorProgram): Set<string> {
+  const locals = new Set<string>()
+  for (const node of program.nodes) {
+    if (node.kind !== 'foreach') continue
+    locals.add(node.itemVar)
+    if (node.indexVar) locals.add(node.indexVar)
+  }
+  return locals
+}
+
 /** 路径静态校验：根已由 checkV4Expr 校验，这里查字段是否存在 */
 function checkPathParts(parts: string[], scope: ExprScopeInfo): string | null {
   const [root, ...rest] = parts
@@ -491,6 +502,9 @@ function lintBehaviorProgram(
         checkExpr(lint, scope, node.cond, `行为节点「${node.id}」cond`, extra)
         checkExpr(lint, scope, node.times, `行为节点「${node.id}」times`, extra)
         break
+      case 'foreach':
+        checkExpr(lint, scope, node.items, `行为节点「${node.id}」items`, extra)
+        break
       case 'wait':
         checkExpr(lint, scope, node.ms, `行为节点「${node.id}」ms`, extra)
         break
@@ -558,7 +572,10 @@ export function lintLevelDocV4(doc: LevelDocV4, ctx: V4LintCtx = {}): V4Issue[] 
       true,
     )
     scope.vars = new Set(flowVars)
-    scope.locals = new Set((type.behavior.locals ?? []).map((f) => f.key))
+    scope.locals = new Set([
+      ...(type.behavior.locals ?? []).map((f) => f.key),
+      ...collectBehaviorImplicitLocals(type.behavior),
+    ])
     scope.qColumns = new Set((table?.columns ?? []).map((c) => c.key))
     scope.qState = new Set((type.state ?? []).map((f) => f.key))
     scope.typeState = new Set((type.typeState ?? []).map((f) => f.key))

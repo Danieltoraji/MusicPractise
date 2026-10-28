@@ -575,7 +575,6 @@ function generateBehaviorChain(
         throw new Error(`注释节点「${node.id}」不能接线（注释不参与执行），伪代码无法表达`)
       case 'start':
       case 'ask':
-      case 'foreach':
       case 'waitShell':
       case 'finish':
       case 'restart':
@@ -600,7 +599,8 @@ function generateBehaviorChain(
         cur = join ?? undefined
         break
       }
-      case 'loop': {
+      case 'loop':
+      case 'foreach': {
         const body = idx.truePort.get(node.id)
         if (body === undefined) throw new Error(`循环节点「${node.id}」没有循环体（true 出口未接线），伪代码无法表达`)
         const exit = idx.falsePort.get(node.id)
@@ -1466,7 +1466,7 @@ function graphNodeKey(layer: Layer, node: FlowNode | BehaviorNode): string {
   if (layer === 'behavior' && (node.kind === 'start' || node.kind === 'ask')) {
     return `#invalid:${node.kind}`
   }
-  if (layer === 'behavior' && (node.kind === 'foreach' || node.kind === 'waitShell' || node.kind === 'finish' || node.kind === 'restart')) {
+  if (layer === 'behavior' && (node.kind === 'waitShell' || node.kind === 'finish' || node.kind === 'restart')) {
     return `#invalid:${node.kind}`
   }
   return nodeScriptText(node)

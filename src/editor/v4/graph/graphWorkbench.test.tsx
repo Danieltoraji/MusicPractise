@@ -376,6 +376,31 @@ describe('v4 GraphWorkbench · behavior 层', () => {
     }
   })
 
+  it('behavior foreach（v4.2）：调色板插入默认遍历 list 列；检查器可编辑 items', () => {
+    const doc = sampleDoc()
+    const harness = mountSlot('behavior', doc, 'choice')
+    try {
+      expect(hasTestId(harness.container, 'palette-item-behavior-foreach')).toBe(true)
+      click(byTestId(harness.container, 'palette-item-behavior-foreach'))
+      expect(harness.tags()).toEqual(['behavior'])
+      const behavior = harness.current().content.types.find((type) => type.id === 'choice')!.behavior
+      const node = behavior.nodes.at(-1)!
+      expect(node.kind).toBe('foreach')
+      expect(node).toMatchObject({ items: 'q.options', itemVar: 'item', indexVar: 'index' })
+
+      harness.rerender()
+      click(byTestId(harness.container, `graph-card-${node.id}`))
+      const items = byTestId(harness.container, 'v4-graph-field-items') as HTMLInputElement
+      expect(items.value).toBe('q.options')
+      typeInput(items, 'q.targetNotes')
+      blurInput(items)
+      const updated = harness.current().content.types.find((type) => type.id === 'choice')!.behavior
+      expect((updated.nodes.find((candidate) => candidate.id === node.id) as { items: string }).items).toBe('q.targetNotes')
+    } finally {
+      harness.unmount()
+    }
+  })
+
   it('行为检查器：on 事件下拉切换 / return 返回值编辑（tag=behavior）', () => {
     const harness = mountSlot('behavior', sampleDoc(), 'choice')
     try {

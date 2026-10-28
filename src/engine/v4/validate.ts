@@ -455,7 +455,7 @@ const FLOW_KINDS = new Set([
   'restart',
   'comment',
 ])
-const BEHAVIOR_KINDS = new Set(['on', 'return', 'assign', 'call', 'emit', 'branch', 'loop', 'wait', 'setView', 'comment'])
+const BEHAVIOR_KINDS = new Set(['on', 'return', 'assign', 'call', 'emit', 'branch', 'loop', 'foreach', 'wait', 'setView', 'comment'])
 
 interface GraphCtx {
   flow: boolean

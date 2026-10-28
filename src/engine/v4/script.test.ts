@@ -301,6 +301,30 @@ describe('v4 伪代码 · behavior 往返恒等', () => {
     expect(generateBehaviorScript(reparsed)).toBe(text)
     expect(reparsed.nodes.some((node) => node.kind === 'setView' && node.view === 'answer')).toBe(true)
   })
+
+  it('v4.2 共享节点 foreach：behavior 可生成/解析/往返（items + local 变量）', () => {
+    const program: BehaviorProgram = {
+      logicVersion: LOGIC_VERSION_V4,
+      kind: 'behavior',
+      nodes: [
+        { id: 'b1', kind: 'on', event: 'start' },
+        { id: 'b_fe', kind: 'foreach', items: '[1, 2, 3]', itemVar: 'item', indexVar: 'i' },
+        { id: 'b_add', kind: 'assign', target: 'q.state.sum', value: { expr: 'q.state.sum + local.item' } },
+        { id: 'b_ret', kind: 'return', result: "{ status: 'answered', payload: local.i }" },
+      ],
+      edges: [
+        { id: 'e1', from: 'b1', to: 'b_fe' },
+        { id: 'e2', from: 'b_fe', to: 'b_add', port: 'true' },
+        { id: 'e3', from: 'b_add', to: 'b_fe' },
+        { id: 'e4', from: 'b_fe', to: 'b_ret', port: 'false' },
+      ],
+    }
+    const text = generateBehaviorScript(program)
+    expect(text).toContain('foreach item, i in [1, 2, 3] {')
+    const reparsed = parseBehaviorScript(text)
+    expect(generateBehaviorScript(reparsed)).toBe(text)
+    expect(reparsed.nodes.some((node) => node.kind === 'foreach' && node.itemVar === 'item')).toBe(true)
+  })
 })
 
 describe('v4 伪代码 · 锚点合并（二次编辑保留 id/x/y）', () => {

@@ -97,6 +97,14 @@ describe('v4 level JSON Schema', () => {
     bothReject(tooManyViews)
   })
 
+  it('v4.2 behavior foreach 被双校验器一致接受（共享节点）', () => {
+    const doc = minimalLevelDoc()
+    doc.content.types[0].behavior.nodes.push({ id: 'b_fe', kind: 'foreach', items: 'q.options', itemVar: 'item' })
+    expect(ajvOk(doc)).toBe(true)
+    expect(cfworkerOk(doc)).toBe(true)
+    expect(loadLevelDocV4(doc).ok).toBe(true)
+  })
+
   it('cfworker 错误信息带中文位置（v4 路径格式化）', () => {
     const doc = minimalLevelDoc()
     doc.content.tables.choice.rows[0].phase = 0

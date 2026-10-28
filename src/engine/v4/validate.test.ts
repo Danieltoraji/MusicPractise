@@ -316,6 +316,26 @@ describe('v4 validate：Behavior 图结构', () => {
     expectError(badEmit, 'V4_NODE', /internal\./)
   })
 
+  it('behavior foreach（v4.2）：字段合法则通过；itemVar/indexVar/items 非法被拒', () => {
+    const ok = minimalLevelDoc()
+    ok.content.types[0].behavior.nodes.push({
+      id: 'b_fe',
+      kind: 'foreach',
+      items: 'q.options',
+      itemVar: 'item',
+      indexVar: 'i',
+    })
+    expect(validateLevelDocV4(ok).errors).toEqual([])
+
+    const badItem = minimalLevelDoc()
+    badItem.content.types[0].behavior.nodes.push({ id: 'b_fe', kind: 'foreach', items: 'q.options', itemVar: 'bad.var' })
+    expectError(badItem, 'V4_NODE', /itemVar/)
+
+    const missing = minimalLevelDoc()
+    missing.content.types[0].behavior.nodes.push({ id: 'b_fe', kind: 'foreach', itemVar: 'item' } as never)
+    expectError(missing, 'V4_NODE', /items/)
+  })
+
   it('behavior 局部变量重复 / 初值类型不符', () => {
     const dup = minimalLevelDoc()
     dup.content.types[0].behavior.locals = [

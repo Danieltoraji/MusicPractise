@@ -198,6 +198,14 @@ function firstView(doc: LevelDocV4): string {
   return doc.content.shell.views[0]?.id ?? 'main'
 }
 
+/** behavior foreach 默认遍历表达式：优先取该题型表里的 list/json/notes 列（数组），无则空数组字面量 */
+function defaultBehaviorItems(doc: LevelDocV4, typeId: string | undefined): string {
+  if (typeId === undefined) return '[]'
+  const columns = doc.content.tables[typeId]?.columns ?? []
+  const column = columns.find((item) => item.type === 'list' || item.type === 'json' || item.type === 'notes')
+  return column ? `q.${column.key}` : '[]'
+}
+
 export function defaultFlowAssignTarget(program: FlowProgram): string {
   const declared = program.vars ?? []
   return declared.length > 0 ? `v.${declared[0].key}` : 'v.score'
@@ -422,11 +430,17 @@ export function buildBehaviorPalette(
     {
       id: 'control',
       label: '控制流',
-      hint: '分支 / 循环（真出口走体，假出口走后续）',
+      hint: '分支 / 循环 / 遍历（真出口走体，假出口走后续）',
       items: [
         { key: 'behavior-branch', label: '条件分支 if', desc: '条件为真走「真」出口，否则走「假」出口', make: (pos) => ({ kind: 'branch', cond: 'true', ...at(pos) }) },
         { key: 'behavior-repeat', label: '固定次数循环 repeat', desc: '重复执行循环体 N 次', make: (pos) => ({ kind: 'loop', mode: 'repeat', times: '2', ...at(pos) }) },
         { key: 'behavior-while', label: '条件循环 while', desc: '条件为真时重复执行循环体', make: (pos) => ({ kind: 'loop', mode: 'while', cond: 'false', ...at(pos) }) },
+        {
+          key: 'behavior-foreach',
+          label: '遍历 foreach',
+          desc: '顺序遍历数组，每次迭代把元素/下标写入 local（如逐音比较、逐项判分）',
+          make: (pos) => ({ kind: 'foreach', items: defaultBehaviorItems(doc, typeId), itemVar: 'item', indexVar: 'index', ...at(pos) }),
+        },
       ],
     },
     {
